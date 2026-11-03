@@ -208,6 +208,25 @@ describe("buildNextmeDay", () => {
     expect(x?.original).toMatchObject({ action: null, speech: "hello there" });
   });
 
+  it("falls back to speech when action and action_brief are both null", () => {
+    const files = (rec: string, name: string) => {
+      const t = fixtureFiles(rec, name);
+      if (rec === REC_A && name === "raw_caption") {
+        const row = {
+          recording_id: REC_A, seg_id: "S000011", start: "2026-04-15 09:31:00", end: "2026-04-15 09:31:00",
+          approx_time: false, action: null, action_brief: null, objects: [], environment: "No change.",
+          text_visible: [], speech: "spoken words", details: "Speech event.",
+        };
+        return t + JSON.stringify(row) + "\n";
+      }
+      return t;
+    };
+    const { annotations } = build(files);
+    const x = annotations.get(REC_A)?.find((a) => a.id === `nextme800:${REC_A}:raw:S000011`);
+    expect(x?.text).toBe("spoken words");
+    expect(x?.original).toMatchObject({ action: null, action_brief: null, speech: "spoken words" });
+  });
+
   it("fails clearly when day has no recordings", () => {
     expect(() => buildNextmeDay("2026-05-01", parseRecordingsCsv(csv()), fixtureFiles, newReport())).toThrow(
       /2026-05-01/,

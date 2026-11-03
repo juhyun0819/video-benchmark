@@ -48,9 +48,11 @@ const RawRow = z
     start: z.string(),
     end: z.string(),
     approx_time: z.boolean(),
-    // Speech-only events (about 1% of rows in the real data) have action: null.
+    // Speech-only events (about 1% of rows in the real data) have action: null; text falls back
+    // to action_brief, then speech.
     action: z.string().nullable(),
     action_brief: z.string().nullable().optional(),
+    speech: z.string().nullable(),
   })
   .passthrough();
 
@@ -104,7 +106,7 @@ function readRows(recId: string, files: (recId: string, name: string) => string,
   };
 
   for (const r of readJsonl(files(recId, "raw_caption"), `${recId}/raw_caption.jsonl`, RawRow)) {
-    accept("raw", r.seg_id, r.action ?? r.action_brief ?? "", r.start, r.end, r);
+    accept("raw", r.seg_id, r.action ?? r.action_brief ?? r.speech ?? "", r.start, r.end, r);
   }
   for (const level of LEVELS) {
     for (const r of readJsonl(files(recId, level), `${recId}/${level}.jsonl`, LevelRow)) {

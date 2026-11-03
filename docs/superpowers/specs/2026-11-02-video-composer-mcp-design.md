@@ -444,6 +444,7 @@ S2  (비어 있음)
 - 시각: `start`, `end`는 문자열 `YYYY-MM-DD HH:MM:SS` (HKT, 초 단위, 타임존 표기 없음)다. 날짜가 들어 있어 자정을 넘기는 녹화에서도 날짜가 바뀐다. 모든 파일에서 `start <= end`이고 `start` 오름차순으로 정렬돼 있다.
 - `raw_caption.jsonl` 필드(전 행 동일): `recording_id`(str), `seg_id`(str, `S` + 6자리 숫자 `S000000`), `start`, `end`, `approx_time`(bool), `action`(str), `action_brief`(str), `objects`(list of str), `environment`(str), `text_visible`(list), `speech`(str 또는 null), `details`(str).
 - `L1`~`L5.jsonl` 필드(전 파일 동일): `recording_id`(str), `id`(str, `L<n>_` + 5자리 숫자 `L1_00000`, 레벨 n 접두), `start`, `end`, `text`(str). 파일 안에서 `id`는 유일하고 `recording_id`는 디렉터리 이름과 같다.
+- **`raw_caption.jsonl`의 `action`은 null일 수 있다**(음성 전용 행; 확인한 녹화의 1967행 중 17행). 이때 raw 주석의 `text`는 `action` → `action_brief` → `speech` → 빈 문자열 순서로 고르고, `original`에는 행을 그대로 둔다.
 - **`approx_time`은 `raw_caption.jsonl`에만 있고 L1~L5에는 없다.** 확인한 녹화에서는 전부 `false`였다. §6.2의 "`approx_time: true`는 `original`에 보존" 규칙은 raw 레벨에만 해당한다.
 - 구간 관계: `L1` 행 수·시각이 `raw_caption`과 같고(`L1.text`는 `raw.action_brief`와 거의 같다), 위 레벨일수록 구간이 길다(한 녹화에서 L1 1967 / L2 171 / L3 13 / L4 4 / L5 2행). `raw_caption`과 `L1`~`L5` 여섯 파일 각각의 가장 이른 `start`와 가장 늦은 `end`는 확인한 10개 녹화 모두에서 `L1`의 것과 같았다(여섯 파일 모두 직접 확인했다).
 - 구간은 서로 이어 붙지 않는다. L1은 이웃 구간 사이에 빈틈(약 2/3)과 겹침(14/1966)이 있고, 길이 0초(`start == end`)인 행이 있다(L1 78개, L2 2개). **L4도 이웃 사이에 빈틈이 생길 수 있다**(한 녹화에서 3쌍 중 1쌍). 시간 정규화·타일링 코드는 이를 전제로 해야 한다. 단 L4의 첫 `start`는 L1의 첫 `start`와 같아서 "녹화 시작부터 첫 L4 시작까지" 블록(§6.2)은 확인한 녹화에서 비어 있다.
