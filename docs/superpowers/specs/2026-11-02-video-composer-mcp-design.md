@@ -54,7 +54,7 @@
 | 미디어 | 약 1fps JPG, 녹화별 TAR `raw/YYYY-MM-DD/YYYY-MM-DD_HHMM-HHMM.tar`, 프레임 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg` | MP4 30fps | canonical 30fps |
 | 시간 기준 | 벽시계 문자열 `YYYY-MM-DD HH:MM:SS` (HKT) | 영상 기준 초(float) | 영상 기준 초 + 프레임 번호 |
 | 캡션 | `raw_caption.jsonl`(30초 창 기반 구간 캡션), `L1~L5.jsonl`(계층 활동, 구간) | `HD_EPIC_Narrations.pkl`: `narration`, `start_timestamp`, `end_timestamp` 등 | `narration.json`: `narration_pass_1.narrations[]`(시점형 `timestamp_sec`), `summaries[]`(구간형 `start_sec`/`end_sec`) |
-| 상위 구조 | L1(~5s) ⊂ L2(~1m) ⊂ L3(~7m) ⊂ L4(~24m) ⊂ L5(~39m), 부모가 자식 구간을 덮음 | recipe, high-level activity (`high-level/`) | 영상 단위 `scenarios` (`ego4d.json`) |
+| 상위 구조 | L1(~5s) ⊂ L2(~1m) ⊂ L3(~7m) ⊂ L4(~24m) ⊂ L5(~39m), 부모가 자식 구간을 덮음 | recipe, high-level activity (`high-level/activities/`) | 영상 단위 `scenarios` (`ego4d.json`) |
 | 접근 | HF gated (`HF_TOKEN`), CC BY-NC 4.0 | GitHub `hd-epic/hd-epic-annotations` | Ego4D 라이선스 + 공식 CLI |
 
 ## 4. 아키텍처
@@ -215,7 +215,7 @@ npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 ### 6.3 HD-EPIC 어댑터 (요리)
 
 - `scripts/convert_hdepic.py`가 `HD_EPIC_Narrations.pkl`을 JSONL로 한 번 변환한다.
-- 이벤트 후보는 `high-level/`의 high-level activity 구간이고, category는 `cooking`이다. summary는 `high_level_activity_label`에 레시피 이름이 있으면 덧붙인다.
+- 이벤트 후보는 `high-level/activities/PXX_recipe_timestamps.csv`의 high-level activity 구간이고, category는 `cooking`이다. summary는 `high_level_activity_label`에 레시피 이름이 있으면 덧붙인다.
 - 후보 구간에 들어가는 narration을 `level: "narration"` 구간형 주석으로 만든다.
 
 ### 6.4 Ego4D 어댑터 (산책·이동·취미 등)
@@ -377,15 +377,15 @@ S2  (비어 있음)
 
 **항목 2 — high-level 구간 정보: 있다 (후보 단위는 `activities` CSV).**
 
-- 파일은 `high-level/`이 아니라 `high-level/activities/P01_recipe_timestamps.csv` ~ `P09_recipe_timestamps.csv`(참가자 9명, 총 1490행, 149개 video)다. 문서의 경로를 `high-level/activities/`로 읽는다.
+- 파일은 `high-level/`이 아니라 `high-level/activities/P01_recipe_timestamps.csv` ~ `P09_recipe_timestamps.csv`(참가자 9명, 총 1490행, 149개 video)다. 올바른 경로는 `high-level/activities/PXX_recipe_timestamps.csv`이고, 이 스펙의 다른 곳(§3, §6.3)도 같은 경로로 맞췄다.
 - 헤더: `video_id,recipe_id,high_level_activity_label,start_time,end_time`.
 - 시간 형식은 **초 단위 float 문자열**이다(`HH:MM:SS` 아님). 소수 첫째 자리까지이고 video 시작 기준이다. 146개 video는 첫 행이 `0`에서 시작한다.
 - `video_id`는 `P01-20240202-110250` 형태로 pkl의 `video_id`와 같은 키다.
-- `recipe_id`는 비어 있을 수 있다(1490행 중 612행, 배경 활동). 값은 `R<n>` 하나이거나 `R<n>, R<m>`처럼 쉼표로 이어진 여러 개다. `complete_recipes.json`의 키(`P01_R01`)와 맞추려면 `participant + "_" + recipe_id`로 만들고, 쉼표 값은 분리해야 한다.
+- `recipe_id`는 비어 있을 수 있다(1490행 중 612행, 배경 활동). 값은 0 패딩된 `R01` 형태 하나이거나, 여러 레시피에 걸친 행 1개(`P01` 파일)에서 CSV 따옴표로 감싼 쉼표 목록(`"R08, R07"` 형태, 정렬되어 있지 않음)이다. 쉼표가 필드 안에 들어 있으므로 반드시 CSV 파서로 읽고, 줄을 `,`로 단순 분할하지 않는다. `complete_recipes.json`의 키(`P01_R01`)는 `<participant>_<recipe_id>`로 `recipe_id`를 그대로 이어 붙여 만들고(`P01` + `_` + `R01`), 쉼표 목록은 `, `로 나눈 뒤 각각 같은 방식으로 조회한다.
 - `high_level_activity_label`은 자유 문장이다(빈 값 1행).
 - **파싱 시 주의(어댑터에 반영):**
-  - `end_time`이 숫자가 아니라 리터럴 `end`인 행이 148개다. 147개 video의 **마지막 행**이고, 1개는 중간 행이다. "video 끝까지"로 해석하고, 길이는 같은 video의 pkl `end_timestamp` 최댓값(147개 video에서 사용 가능)이나 영상 메타데이터로 채운다. 중간 행의 `end`는 다음 행 `start_time`으로 닫는 것을 우선 검토한다.
-  - 숫자형 행 중 `start_time >= end_time`인 행이 7개, 같은 video 안에서 `start_time`이 정렬되지 않은 video가 있다. 연속한 행 1340쌍 중 1319쌍은 맞닿고, 13쌍은 겹치고, 8쌍은 사이가 벌어진다. 정렬과 검증을 하고 위반 행은 경고로 건너뛴다.
+  - `end_time`이 숫자가 아니라 리터럴 `end`인 행이 148개다. 147개 video의 **마지막 행**이고, 1개는 중간 행이다. "video 끝까지"를 뜻한다. **결정:** `end_time`이 `end`이면 end는 같은 video의 narration `end_timestamp` 최댓값으로 채운다(147개 video에서 narration이 있다). 그 video에 narration이 없으면 구간을 `open_end` 사유로 건너뛴다. 중간 행의 `end`도 같은 규칙을 따른다.
+  - 숫자형 행 중 `start_time >= end_time`인 행이 7개, 같은 video 안에서 `start_time`이 정렬되지 않은 video가 있다. 연속한 행 1340쌍 중 1319쌍은 맞닿고, 13쌍은 겹치고, 8쌍은 사이가 벌어진다. **결정:** `start >= end`인 행은 `end_before_start` 사유로 건너뛴다. 나머지는 video별로 `start_time` 순서로 정렬해서 쓴다.
   - video 집합이 pkl과 완전히 같지는 않다. CSV 149개, pkl 156개, 교집합 148개이며 CSV에만 1개, pkl에만 8개가 있다.
 - 폴백(§11.2의 step 구간, 영상 전체)은 쓰지 않아도 된다.
 
@@ -394,7 +394,7 @@ S2  (비어 있음)
 - 최상위는 dict이고 69개 레시피다. 키는 `P01_R01` 형태다. 값의 필드는 `participant`, `name`, `type`, `source`, `steps`, `captures`다.
 - `steps`는 `{ "P01_R01_S01": "<문자열>" }` dict이다. step 항목 자체에는 시간이 없다.
 - **시간은 `captures[]` 안에 있다.** `captures`는 리스트이고 각 항목의 필드는 `videos`(list), `ingredients`(dict), `step_times`(dict), `prep_times`(dict)다.
-  - `step_times`는 `{ "<step_id>": [ {"video": <video_id>, "start": <float 초>, "end": <float 초>}, ... ] }`이다. 키는 `steps`의 step id와 모두 일치하고(504개 중 불일치 0), 80개 capture 전부에 값이 있다. 같은 step이 여러 구간으로 나뉘거나 여러 video에 걸칠 수 있어 값이 리스트다.
+  - `step_times`는 `{ "<step_id>": [ {"video": <video_id>, "start": <float 초>, "end": <float 초>}, ... ] }`이다. 키는 `steps`의 step id와 모두 일치하고(capture별 `step_times` 키 합계 504개 중 불일치 0, recipes의 step id 총 457개), 80개 capture 전부에 값이 있다. 같은 step이 여러 구간으로 나뉘거나 여러 video에 걸칠 수 있어 값이 리스트다.
   - `prep_times`도 같은 구조(`video`, `start`, `end`)이고 step id를 키로 쓴다.
   - `ingredients[<id>]`의 `weigh`와 `add`도 같은 `{video, start, end}` 리스트다. 그 밖의 필드는 `name`, `amount`, `amount_unit`, `calories`, `carbs`, `fat`, `protein`이고 값은 모두 문자열이다.
 - 따라서 step 단위 하위 구간이 필요하면 `captures[].step_times`를 쓴다. 단위는 `activities` CSV와 같은 초 float이다.
@@ -403,6 +403,7 @@ S2  (비어 있음)
 
 - pkl은 `uv run --with pandas python ...`처럼 **기본 환경으로는 읽히지 않는다.** uv가 miniconda의 python(numpy 1.x)을 골라 `ModuleNotFoundError: No module named 'numpy._core.numeric'`로 실패했다. pkl이 numpy 2.x로 만들어졌기 때문이다.
 - 다음 명령은 읽힌다(`numpy 2.4.6`, `pandas 3.1.0`로 확인): `uv run --isolated --no-project --with pandas --with "numpy>=2" python ...`. 변환 스크립트도 이 호출을 쓴다.
+- 아래 pkl 사실은 2026-11-03에 `uv run --isolated --no-project --with pandas --with "numpy>=2" python`으로 pandas를 한 번 실행해 얻은 값이다. Task 8의 테스트가 이 값들을 다시 단언한다.
 - `pd.read_pickle`의 결과는 `DataFrame`이고 shape은 `(59454, 16)`, 인덱스는 `RangeIndex`다. 결측값 0, `unique_narration_id` 중복 0, 156개 video, 모든 행에서 `start_timestamp <= end_timestamp`이다.
 - dtypes:
 
@@ -415,7 +416,7 @@ S2  (비어 있음)
   | `verb_classes`, `noun_classes` | object (list of int) |
 
 - 시간 값은 초 float이다(`start_timestamp`는 0.0 ~ 4480.94 범위).
-- **공식 CSV/JSON 배포본은 없다.** 저장소에서 narration이 들어 있는 파일은 pkl뿐이다. `HD_EPIC_Narrations_erratum.csv`는 컬럼이 `erratum_narration_id` 하나인 정오표(56개 id, 모두 pkl에 존재)이고, `HD_EPIC_noun_classes.csv`와 `HD_EPIC_verb_classes.csv`는 클래스 사전이다. 그러므로 `scripts/convert_hdepic.py`로 pkl을 JSONL로 변환하는 설계(§6.3)를 유지하되, 위 numpy 2 호출을 쓰고 erratum id 처리 방식(제외 또는 표시)을 정한다.
+- **공식 CSV/JSON 배포본은 없다.** 저장소에서 narration이 들어 있는 파일은 pkl뿐이다. `HD_EPIC_Narrations_erratum.csv`는 컬럼이 `erratum_narration_id` 하나인 정오표(56개 id, 모두 pkl에 존재)이고, `HD_EPIC_noun_classes.csv`와 `HD_EPIC_verb_classes.csv`는 클래스 사전이다. 그러므로 `scripts/convert_hdepic.py`로 pkl을 JSONL로 변환하는 설계(§6.3)를 유지하고 위 numpy 2 호출을 쓴다. **결정:** `HD_EPIC_Narrations_erratum.csv`에 id가 있는 narration은 제외하고 건너뛴 수를 `erratum` 사유로 센다.
 
 ## 12. 향후 확장
 
