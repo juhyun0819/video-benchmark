@@ -1,0 +1,693 @@
+{
+  "schema_version": 1,
+  "composition_id": "c1",
+  "composition_revision": 2,
+  "created_at": "2026-11-03T00:00:00.000Z",
+  "duration": 1980,
+  "blocks": [
+    {
+      "block_id": "base:2026-04-15:0",
+      "role": "base",
+      "category": "base",
+      "summary": "Morning at home",
+      "composed_start": 0,
+      "composed_end": 600,
+      "source": {
+        "dataset": "nextme800",
+        "video_id": "rec-A",
+        "media": {
+          "kind": "frames",
+          "approx_fps": 1,
+          "tar": "frames/rec-A.tar"
+        }
+      },
+      "src_start": 0,
+      "src_end": 600
+    },
+    {
+      "block_id": "evt:r1",
+      "role": "event",
+      "category": "cooking",
+      "summary": "Cooking onions in a pan",
+      "composed_start": 600,
+      "composed_end": 660,
+      "source": {
+        "dataset": "hdepic",
+        "video_id": "P01-x",
+        "media": {
+          "kind": "video",
+          "fps": 30
+        }
+      },
+      "src_start": 10,
+      "src_end": 70
+    },
+    {
+      "block_id": "base:2026-04-15:1",
+      "role": "base",
+      "category": "base",
+      "summary": "Commute and arrival",
+      "composed_start": 660,
+      "composed_end": 1560,
+      "source": {
+        "dataset": "nextme800",
+        "video_id": "rec-A",
+        "media": {
+          "kind": "frames",
+          "approx_fps": 1,
+          "tar": "frames/rec-A.tar"
+        }
+      },
+      "src_start": 600,
+      "src_end": 1500
+    },
+    {
+      "block_id": "base:2026-04-15:2",
+      "role": "base",
+      "category": "base",
+      "summary": "Early afternoon desk work",
+      "composed_start": 1560,
+      "composed_end": 1860,
+      "source": {
+        "dataset": "nextme800",
+        "video_id": "rec-B",
+        "media": {
+          "kind": "frames",
+          "approx_fps": 1,
+          "tar": "frames/rec-B.tar"
+        }
+      },
+      "src_start": 0,
+      "src_end": 300
+    },
+    {
+      "block_id": "evt:r2",
+      "role": "event",
+      "category": "walking",
+      "summary": "Walking down a street",
+      "composed_start": 1860,
+      "composed_end": 1980,
+      "source": {
+        "dataset": "ego4d",
+        "video_id": "uid-1",
+        "media": {
+          "kind": "video",
+          "fps": 30
+        }
+      },
+      "src_start": 0,
+      "src_end": 120
+    }
+  ],
+  "tracks": {
+    "captions": [
+      {
+        "id": "base:2026-04-15:0:nm:rec-A:L4:0",
+        "block_id": "base:2026-04-15:0",
+        "level": "L4",
+        "time": {
+          "kind": "interval",
+          "start": 0,
+          "end": 600
+        },
+        "text": "morning routine at home",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:L4:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 0,
+            "end": 600
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:00:00",
+            "end": "2026-04-15 09:10:00"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "L4",
+            "start": "2026-04-15 09:00:00",
+            "end": "2026-04-15 09:10:00",
+            "text": "morning routine at home"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:0:nm:rec-A:raw:0",
+        "block_id": "base:2026-04-15:0",
+        "level": "raw",
+        "time": {
+          "kind": "interval",
+          "start": 30,
+          "end": 40
+        },
+        "text": "picks up a mug",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:raw:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 30,
+            "end": 40
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:00:30",
+            "end": "2026-04-15 09:00:40"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "raw",
+            "start": "2026-04-15 09:00:30",
+            "end": "2026-04-15 09:00:40",
+            "text": "picks up a mug"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:0:nm:rec-A:L1:0",
+        "block_id": "base:2026-04-15:0",
+        "level": "L1",
+        "time": {
+          "kind": "interval",
+          "start": 100,
+          "end": 160
+        },
+        "text": "makes coffee at the counter",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:L1:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 100,
+            "end": 160
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:01:40",
+            "end": "2026-04-15 09:02:40"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "L1",
+            "start": "2026-04-15 09:01:40",
+            "end": "2026-04-15 09:02:40",
+            "text": "makes coffee at the counter"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:0:nm:rec-A:L5:0",
+        "block_id": "base:2026-04-15:0",
+        "level": "L5",
+        "time": {
+          "kind": "interval",
+          "start": 540,
+          "end": 600
+        },
+        "text": "leaves home and starts walking to the station",
+        "clipped": {
+          "end": true
+        },
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:L5:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 540,
+            "end": 780
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:09:00",
+            "end": "2026-04-15 09:13:00"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "L5",
+            "start": "2026-04-15 09:09:00",
+            "end": "2026-04-15 09:13:00",
+            "text": "leaves home and starts walking to the station"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:0:nm:rec-A:raw:1",
+        "block_id": "base:2026-04-15:0",
+        "level": "raw",
+        "time": {
+          "kind": "interval",
+          "start": 590,
+          "end": 600
+        },
+        "text": "opens the door",
+        "clipped": {
+          "end": true
+        },
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:raw:1",
+          "src_time": {
+            "kind": "interval",
+            "start": 590,
+            "end": 610
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:09:50",
+            "end": "2026-04-15 09:10:10"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "raw",
+            "start": "2026-04-15 09:09:50",
+            "end": "2026-04-15 09:10:10",
+            "text": "opens the door"
+          }
+        }
+      },
+      {
+        "id": "evt:r1:hd:P01-x:0",
+        "block_id": "evt:r1",
+        "level": "narration",
+        "time": {
+          "kind": "interval",
+          "start": 600,
+          "end": 605
+        },
+        "text": "take the pan from the shelf",
+        "clipped": {
+          "start": true
+        },
+        "provenance": {
+          "dataset": "hdepic",
+          "video_id": "P01-x",
+          "orig_id": "hd:P01-x:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 5,
+            "end": 15
+          },
+          "original": {
+            "narration_id": "P01-x_0",
+            "start_timestamp": 5,
+            "end_timestamp": 15,
+            "text": "take the pan from the shelf"
+          }
+        }
+      },
+      {
+        "id": "evt:r1:hd:P01-x:1",
+        "block_id": "evt:r1",
+        "level": "narration",
+        "time": {
+          "kind": "interval",
+          "start": 610,
+          "end": 618
+        },
+        "text": "chop the onion",
+        "provenance": {
+          "dataset": "hdepic",
+          "video_id": "P01-x",
+          "orig_id": "hd:P01-x:1",
+          "src_time": {
+            "kind": "interval",
+            "start": 20,
+            "end": 28
+          },
+          "original": {
+            "narration_id": "P01-x_1",
+            "start_timestamp": 20,
+            "end_timestamp": 28,
+            "text": "chop the onion"
+          }
+        }
+      },
+      {
+        "id": "evt:r1:hd:P01-x:2",
+        "block_id": "evt:r1",
+        "level": "narration",
+        "time": {
+          "kind": "interval",
+          "start": 630,
+          "end": 645
+        },
+        "text": "fry the onion in the pan",
+        "provenance": {
+          "dataset": "hdepic",
+          "video_id": "P01-x",
+          "orig_id": "hd:P01-x:2",
+          "src_time": {
+            "kind": "interval",
+            "start": 40,
+            "end": 55
+          },
+          "original": {
+            "narration_id": "P01-x_2",
+            "start_timestamp": 40,
+            "end_timestamp": 55,
+            "text": "fry the onion in the pan"
+          }
+        }
+      },
+      {
+        "id": "evt:r1:hd:P01-x:3",
+        "block_id": "evt:r1",
+        "level": "narration",
+        "time": {
+          "kind": "interval",
+          "start": 650,
+          "end": 660
+        },
+        "text": "plate the food",
+        "provenance": {
+          "dataset": "hdepic",
+          "video_id": "P01-x",
+          "orig_id": "hd:P01-x:3",
+          "src_time": {
+            "kind": "interval",
+            "start": 60,
+            "end": 70
+          },
+          "original": {
+            "narration_id": "P01-x_3",
+            "start_timestamp": 60,
+            "end_timestamp": 70,
+            "text": "plate the food"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:1:nm:rec-A:L5:0",
+        "block_id": "base:2026-04-15:1",
+        "level": "L5",
+        "time": {
+          "kind": "interval",
+          "start": 660,
+          "end": 840
+        },
+        "text": "leaves home and starts walking to the station",
+        "clipped": {
+          "start": true
+        },
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:L5:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 540,
+            "end": 780
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:09:00",
+            "end": "2026-04-15 09:13:00"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "L5",
+            "start": "2026-04-15 09:09:00",
+            "end": "2026-04-15 09:13:00",
+            "text": "leaves home and starts walking to the station"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:1:nm:rec-A:L4:1",
+        "block_id": "base:2026-04-15:1",
+        "level": "L4",
+        "time": {
+          "kind": "interval",
+          "start": 660,
+          "end": 1560
+        },
+        "text": "commute and arrival",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:L4:1",
+          "src_time": {
+            "kind": "interval",
+            "start": 600,
+            "end": 1500
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:10:00",
+            "end": "2026-04-15 09:25:00"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "L4",
+            "start": "2026-04-15 09:10:00",
+            "end": "2026-04-15 09:25:00",
+            "text": "commute and arrival"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:1:nm:rec-A:raw:1",
+        "block_id": "base:2026-04-15:1",
+        "level": "raw",
+        "time": {
+          "kind": "interval",
+          "start": 660,
+          "end": 670
+        },
+        "text": "opens the door",
+        "clipped": {
+          "start": true
+        },
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-A",
+          "orig_id": "nm:rec-A:raw:1",
+          "src_time": {
+            "kind": "interval",
+            "start": 590,
+            "end": 610
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 09:09:50",
+            "end": "2026-04-15 09:10:10"
+          },
+          "original": {
+            "recording_id": "rec-A",
+            "level": "raw",
+            "start": "2026-04-15 09:09:50",
+            "end": "2026-04-15 09:10:10",
+            "text": "opens the door"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:2:nm:rec-B:L5:0",
+        "block_id": "base:2026-04-15:2",
+        "level": "L5",
+        "time": {
+          "kind": "interval",
+          "start": 1560,
+          "end": 1860
+        },
+        "text": "early afternoon desk work",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-B",
+          "orig_id": "nm:rec-B:L5:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 0,
+            "end": 300
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 13:00:00",
+            "end": "2026-04-15 13:05:00"
+          },
+          "original": {
+            "recording_id": "rec-B",
+            "level": "L5",
+            "start": "2026-04-15 13:00:00",
+            "end": "2026-04-15 13:05:00",
+            "text": "early afternoon desk work"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:2:nm:rec-B:raw:0",
+        "block_id": "base:2026-04-15:2",
+        "level": "raw",
+        "time": {
+          "kind": "interval",
+          "start": 1570,
+          "end": 1580
+        },
+        "text": "sits at the desk",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-B",
+          "orig_id": "nm:rec-B:raw:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 10,
+            "end": 20
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 13:00:10",
+            "end": "2026-04-15 13:00:20"
+          },
+          "original": {
+            "recording_id": "rec-B",
+            "level": "raw",
+            "start": "2026-04-15 13:00:10",
+            "end": "2026-04-15 13:00:20",
+            "text": "sits at the desk"
+          }
+        }
+      },
+      {
+        "id": "base:2026-04-15:2:nm:rec-B:L1:0",
+        "block_id": "base:2026-04-15:2",
+        "level": "L1",
+        "time": {
+          "kind": "interval",
+          "start": 1620,
+          "end": 1760
+        },
+        "text": "reads documents",
+        "provenance": {
+          "dataset": "nextme800",
+          "video_id": "rec-B",
+          "orig_id": "nm:rec-B:L1:0",
+          "src_time": {
+            "kind": "interval",
+            "start": 60,
+            "end": 200
+          },
+          "orig_time_string": {
+            "start": "2026-04-15 13:01:00",
+            "end": "2026-04-15 13:03:20"
+          },
+          "original": {
+            "recording_id": "rec-B",
+            "level": "L1",
+            "start": "2026-04-15 13:01:00",
+            "end": "2026-04-15 13:03:20",
+            "text": "reads documents"
+          }
+        }
+      },
+      {
+        "id": "evt:r2:ego:uid-1:sum",
+        "block_id": "evt:r2",
+        "level": "summary",
+        "time": {
+          "kind": "interval",
+          "start": 1860,
+          "end": 1980
+        },
+        "text": "The camera wearer walks down a street.",
+        "provenance": {
+          "dataset": "ego4d",
+          "video_id": "uid-1",
+          "orig_id": "ego:uid-1:sum",
+          "src_time": {
+            "kind": "interval",
+            "start": 0,
+            "end": 120
+          },
+          "original": {
+            "start_time": 0,
+            "end_time": 120,
+            "text": "The camera wearer walks down a street."
+          }
+        }
+      },
+      {
+        "id": "evt:r2:ego:uid-1:0",
+        "block_id": "evt:r2",
+        "level": "narration",
+        "time": {
+          "kind": "point",
+          "t": 1865
+        },
+        "text": "#C walks along the road",
+        "provenance": {
+          "dataset": "ego4d",
+          "video_id": "uid-1",
+          "orig_id": "ego:uid-1:0",
+          "src_time": {
+            "kind": "point",
+            "t": 5
+          },
+          "original": {
+            "narration_timestamp_sec": 5,
+            "text": "#C walks along the road"
+          }
+        }
+      },
+      {
+        "id": "evt:r2:ego:uid-1:1",
+        "block_id": "evt:r2",
+        "level": "narration",
+        "time": {
+          "kind": "point",
+          "t": 1890
+        },
+        "text": "#C looks at a shop window",
+        "provenance": {
+          "dataset": "ego4d",
+          "video_id": "uid-1",
+          "orig_id": "ego:uid-1:1",
+          "src_time": {
+            "kind": "point",
+            "t": 30
+          },
+          "original": {
+            "narration_timestamp_sec": 30,
+            "text": "#C looks at a shop window"
+          }
+        }
+      },
+      {
+        "id": "evt:r2:ego:uid-1:2",
+        "block_id": "evt:r2",
+        "level": "narration",
+        "time": {
+          "kind": "point",
+          "t": 1950
+        },
+        "text": "#C crosses the street",
+        "provenance": {
+          "dataset": "ego4d",
+          "video_id": "uid-1",
+          "orig_id": "ego:uid-1:2",
+          "src_time": {
+            "kind": "point",
+            "t": 90
+          },
+          "original": {
+            "narration_timestamp_sec": 90,
+            "text": "#C crosses the street"
+          }
+        }
+      }
+    ]
+  },
+  "licenses": [
+    {
+      "dataset": "nextme800",
+      "license": "CC BY-NC 4.0",
+      "note": "Research/evaluation only; gated (mmm8383/NextMe-800)"
+    },
+    {
+      "dataset": "hdepic",
+      "license": "HD-EPIC dataset terms",
+      "note": "https://hd-epic.github.io/site/"
+    },
+    {
+      "dataset": "ego4d",
+      "license": "Ego4D License Agreement",
+      "note": "https://ego4d-data.org/"
+    }
+  ]
+}
