@@ -86,7 +86,7 @@ data/                 .gitignore. 카탈로그·컴포지션·export 저장
 ### 5.1 시간 정규화
 
 - `src_t`는 원본 영상(녹화) 시작 기준 초(float)다.
-- NextMe의 벽시계 시각(HKT)은 `src_t = wallclock − recording_start`로 바꾼다. `recording_start`는 `raw/recordings.csv`에서 얻는다. 원래 문자열은 provenance에 보존한다.
+- NextMe의 벽시계 시각(HKT)은 `src_t = wallclock − recording_start`로 바꾼다. `recording_start`는 `L1.jsonl`의 첫 `start`다(`recordings.csv`의 `start`는 `HH:MM` 분 단위라 부정확하다. §11 확인 결과 참고). 원래 문자열은 provenance에 보존한다.
 - HD-EPIC과 Ego4D는 초 값을 그대로 쓴다.
 - manifest는 fps를 강제하지 않는다. 시각은 초로만 적고, 샘플링은 다운스트림 렌더러가 미디어 설명자를 보고 결정한다.
 
@@ -202,7 +202,7 @@ npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 ### 6.2 NextMe-800 어댑터 (base)
 
 - 입력은 HF Hub에서 받는다(`HF_TOKEN` 필요).
-  - `raw/recordings.csv`
+  - `raw/recordings.csv` (컬럼은 §11 확인 결과의 `RECORDINGS_COLUMNS`)
   - `captions/1_nextme/<recording_id>/`의 `raw_caption.jsonl`과 `L1.jsonl`~`L5.jsonl`
 - 지정한 날짜만 받는다.
 - 하루의 녹화들을 시간순으로 놓고, **녹화마다 L4 시작 지점을 경계로 빈틈없이 타일링**한다.
@@ -373,7 +373,7 @@ S2  (비어 있음)
 
 ### 확인 결과 (2026-11-03) — HD-EPIC
 
-`hd-epic/hd-epic-annotations`를 `--depth 1`로 clone해서 확인했다(커밋 대상 아님, `data/raw/hd-epic-annotations`). NextMe 항목(§11.1)은 `HF_TOKEN`이 준비된 뒤 따로 기록한다.
+`hd-epic/hd-epic-annotations`를 `--depth 1`로 clone해서 확인했다(커밋 대상 아님, `data/raw/hd-epic-annotations`). NextMe 항목(§11.1)은 아래 "확인 결과 — NextMe-800"에 기록했다.
 
 **항목 2 — high-level 구간 정보: 있다 (후보 단위는 `activities` CSV).**
 
@@ -417,6 +417,52 @@ S2  (비어 있음)
 
 - 시간 값은 초 float이다(`start_timestamp`는 0.0 ~ 4480.94 범위).
 - **공식 CSV/JSON 배포본은 없다.** 저장소에서 narration이 들어 있는 파일은 pkl뿐이다. `HD_EPIC_Narrations_erratum.csv`는 컬럼이 `erratum_narration_id` 하나인 정오표(56개 id, 모두 pkl에 존재)이고, `HD_EPIC_noun_classes.csv`와 `HD_EPIC_verb_classes.csv`는 클래스 사전이다. 그러므로 `scripts/convert_hdepic.py`로 pkl을 JSONL로 변환하는 설계(§6.3)를 유지하고 위 numpy 2 호출을 쓴다. **결정:** `HD_EPIC_Narrations_erratum.csv`에 id가 있는 narration은 제외하고 건너뛴 수를 `erratum` 사유로 센다.
+
+### 확인 결과 (2026-11-03) — NextMe-800
+
+캐시된 `HF_TOKEN`(gated 접근 승인됨)으로 `raw/recordings.csv`는 전체(527행)를, 캡션은 녹화 1개(`2026-04-15_1323-1709`)의 `raw_caption.jsonl`과 `L1`~`L5.jsonl`을 받아 필드 이름·타입·형식만 확인했다(`data/samples/`, 커밋 대상 아님). 시작·종료 시각 관계는 다른 9개 녹화(자정 넘김 2개, 길이 0분 1개 포함)로 추가 확인했다. 접근 확인 결과 `raw/recordings.csv`는 `HTTP/2 200`이다.
+
+**항목 1 — 파일 위치: 스펙 §6.2와 일치한다.**
+
+- HF 저장소 최상위는 `assets/`, `captions/`, `nextact/`, `prompts/`, `raw/`, `.gitattributes`, `README.md`다. `captions/` 아래에 `1_nextme/`와 `2_egolife/`가 있고, 우리는 `captions/1_nextme/`만 쓴다.
+- `captions/1_nextme/<recording_id>/`는 녹화마다 하나씩(527개, `recordings.csv` 행 수와 같다) 있고, 안에 정확히 6개 파일이 있다: `raw_caption.jsonl`, `L1.jsonl`, `L2.jsonl`, `L3.jsonl`, `L4.jsonl`, `L5.jsonl`. 즉 L1~L5는 녹화별로 따로 있다.
+- 미디어 TAR는 `raw/<YYYY-MM-DD>/<recording_id>.tar`다. TAR 안의 최상위 디렉터리 이름이 `tar_root_dir` 값과 같다(앞부분 헤더를 Range 요청으로 읽어 확인했다).
+
+**항목 1 — `raw/recordings.csv`**
+
+- 헤더(순서 그대로, 21개): `recording_id,date,start,end,duration_min,n_frames,n_eye_images,has_gaze_csv,has_audio,has_transcript,frame_clock,tar_path,tar_bytes,tar_root_dir,previous_recording_id,n_caption_segments,n_L1,n_L2,n_L3,n_L4,n_L5`
+- 행 527개, `recording_id` 중복 없음, 빈 값 없음. 모든 값은 CSV 문자열이다(숫자 변환은 어댑터가 한다).
+- `recording_id`: `YYYY-MM-DD_HHMM-HHMM` (시작일_시작HHMM-종료HHMM). 접두 `YYYY-MM-DD`가 `date` 컬럼과 항상 같다. 따라서 **날짜(day)는 `date` 컬럼(= `recording_id`의 앞 10자)**이고, `npm run ingest -- nextme --days`는 이 값으로 거른다.
+- `start`, `end`: 시각 문자열 `HH:MM`이다. **분 단위 정밀도이고 날짜가 없다.** 타임존 컬럼은 `frame_clock`이며 527행 모두 `HKT`다. `end`가 `start`보다 작으면 자정을 넘긴 녹화다(527개 중 4개). 이때 종료일은 `date`의 다음 날이다.
+- `duration_min`: 분 단위 정수 문자열(0 ~ 438). `(end - start) mod 24h`에서 0분 또는 1분 모자란 값이다. 길이 0분인 녹화도 있다(캡션 5개 안팎).
+- `tar_path`: HF 저장소 안의 TAR 경로 `raw/<YYYY-MM-DD>/<recording_id>.tar`. `tar_root_dir`: TAR 최상위 디렉터리 이름(`M-D_hkt<HHMM>-<HHMM>_<duration>m_<uuid>` 형태, 월·일에 0 채움 없음). `tar_bytes`: 바이트 수.
+- `previous_recording_id`: 같은 날의 앞 녹화 id이며, 첫 녹화는 자기 자신의 id다(475행이 자기 자신).
+- `n_caption_segments`와 `n_L1`~`n_L5`는 캡션 행 수다. 확인한 녹화 1개에서는 `n_caption_segments`가 `raw_caption.jsonl` 행 수와 같았지만, 전체 527행 중 `n_caption_segments == n_L1`인 행은 278개뿐이라 둘의 의미는 확정하지 못했다(예: 730 vs 715). 확인한 10개 녹화에서 `n_L1`과 `n_L4`는 실제 `L1.jsonl`·`L4.jsonl` 행 수와 같았고, 527행 모두 `n_L4`는 1 이상이다. 이 컬럼들은 검증용으로만 쓰고 의존하지 않는다.
+
+**항목 1 — 캡션 파일 필드 (모두 JSON Lines, UTF-8)**
+
+- 시각: `start`, `end`는 문자열 `YYYY-MM-DD HH:MM:SS` (HKT, 초 단위, 타임존 표기 없음)다. 날짜가 들어 있어 자정을 넘기는 녹화에서도 날짜가 바뀐다. 모든 파일에서 `start <= end`이고 `start` 오름차순으로 정렬돼 있다.
+- `raw_caption.jsonl` 필드(전 행 동일): `recording_id`(str), `seg_id`(str, `S` + 6자리 숫자 `S000000`), `start`, `end`, `approx_time`(bool), `action`(str), `action_brief`(str), `objects`(list of str), `environment`(str), `text_visible`(list), `speech`(str 또는 null), `details`(str).
+- `L1`~`L5.jsonl` 필드(전 파일 동일): `recording_id`(str), `id`(str, `L<n>_` + 5자리 숫자 `L1_00000`, 레벨 n 접두), `start`, `end`, `text`(str). 파일 안에서 `id`는 유일하고 `recording_id`는 디렉터리 이름과 같다.
+- **`approx_time`은 `raw_caption.jsonl`에만 있고 L1~L5에는 없다.** 확인한 녹화에서는 전부 `false`였다. §6.2의 "`approx_time: true`는 `original`에 보존" 규칙은 raw 레벨에만 해당한다.
+- 구간 관계: `L1` 행 수·시각이 `raw_caption`과 같고(`L1.text`는 `raw.action_brief`와 거의 같다), 위 레벨일수록 구간이 길다(한 녹화에서 L1 1967 / L2 171 / L3 13 / L4 4 / L5 2행). 모든 레벨의 첫 `start`와 마지막 `end`는 `L1`의 것과 같았다(확인한 10개 녹화 모두 `L4` 기준).
+- 구간은 서로 이어 붙지 않는다. L1은 이웃 구간 사이에 빈틈(약 2/3)과 겹침(14/1966)이 있고, 길이 0초(`start == end`)인 행이 있다(L1 78개, L2 2개). **L4도 이웃 사이에 빈틈이 생길 수 있다**(한 녹화에서 3쌍 중 1쌍). 시간 정규화·타일링 코드는 이를 전제로 해야 한다. 단 L4의 첫 `start`는 L1의 첫 `start`와 같아서 "녹화 시작부터 첫 L4 시작까지" 블록(§6.2)은 확인한 녹화에서 비어 있다.
+
+**스펙 §5.1 정정 — `recording_start`는 `recordings.csv`만으로는 정확하지 않다.**
+
+- 스펙은 `recording_start`를 `raw/recordings.csv`에서 얻는다고 했지만, 그 `start`는 `HH:MM`(분 단위)이다. 캡션의 첫 `start`는 초가 있고 CSV 시각보다 1~59초 뒤다(확인한 10개 모두, 예: CSV `HH:MM`에 대해 첫 캡션 `HH:MM:SS`). 마지막 `end`도 CSV `end`보다 최대 약 1분 늦다.
+- 정정: `src_t`의 기준 시각(`recording_start`)과 녹화 끝은 `L1.jsonl`의 첫 `start`와 마지막 `end`로 잡는다. `recordings.csv`는 날짜(`date`), 정렬 순서, TAR 위치, 개수 검증에만 쓴다. 이 값이 TAR 첫 프레임의 시각과 정확히 일치하는지는 아직 확인하지 못했다(TAR이 수십 GB이고 프레임 파일명을 훑어야 한다). 미디어 렌더 단계에서 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg`로 최종 정렬해야 한다.
+
+**어댑터가 그대로 쓸 컬럼 이름**
+
+```
+RECORDINGS_COLUMNS = { recording_id: "recording_id", start: "start", end_or_duration: "end", tar: "tar_path" }
+```
+
+- 추가로 쓸 컬럼: `date`(일 필터, `YYYY-MM-DD`), `duration_min`(보조 검증용 정수 분), `tar_root_dir`(TAR 내부 디렉터리), `frame_clock`(`HKT` 확인용).
+- `start`/`end`는 `HH:MM` 문자열이므로 **권위 있는 시각이 아니다**(위 정정 참고). 시각 기준으로는 캡션 `L1`의 첫 `start`/마지막 `end`를 쓴다.
+
+**§6.2와 어긋난 점 요약:** (1) 파일 위치와 이름은 일치한다. (2) `recordings.csv`의 시각이 분 단위여서 `recording_start` 출처를 `L1`로 정정했다. (3) `approx_time`은 raw에만 있다. (4) L4/L1은 빈틈·겹침·0초 구간이 있을 수 있다.
 
 ## 12. 향후 확장
 
