@@ -80,6 +80,27 @@ describe("composition ops", () => {
     expect(new Set(refIds(c, 0)).size).toBe(2);
   });
 
+  it("retries genId on ref_id collision", () => {
+    const { catalog, comp } = setup();
+    const c = insertEvent(comp, catalog, { slot: 0, candidateId: COOK }, () => "dup");
+    const ids = ["dup", "fresh"];
+    const d = insertEvent(c, catalog, { slot: 2, candidateId: WALK }, () => ids.shift()!);
+    expect(d.slots[2]).toEqual([{ ref_id: "fresh", candidate_id: WALK }]);
+  });
+
+  it("throws when genId keeps colliding", () => {
+    const { catalog, comp } = setup();
+    const c = insertEvent(comp, catalog, { slot: 0, candidateId: COOK }, () => "dup");
+    let calls = 0;
+    expect(() =>
+      insertEvent(c, catalog, { slot: 1, candidateId: WALK }, () => {
+        calls++;
+        return "dup";
+      }),
+    ).toThrow("ref_id generation collided 10 times");
+    expect(calls).toBe(10);
+  });
+
   it("rejects slot out of range", () => {
     const { catalog, comp } = setup();
     expectError(() => insertEvent(comp, catalog, { slot: 4, candidateId: COOK }, counter()), "SLOT_OUT_OF_RANGE", { slot: 4, max: 3 });

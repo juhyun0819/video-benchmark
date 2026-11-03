@@ -71,8 +71,19 @@ export function insertEvent(
     });
   }
 
+  const used = new Set(comp.slots.flatMap((s) => s.map((r) => r.ref_id)));
+  let refId: string | undefined;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const id = genId();
+    if (!used.has(id)) {
+      refId = id;
+      break;
+    }
+  }
+  if (refId === undefined) throw new Error("ref_id generation collided 10 times");
+
   const slots = cloneSlots(comp);
-  slots[args.slot]!.splice(position, 0, { ref_id: genId(), candidate_id: args.candidateId });
+  slots[args.slot]!.splice(position, 0, { ref_id: refId, candidate_id: args.candidateId });
   return { ...comp, revision: comp.revision + 1, slots };
 }
 
