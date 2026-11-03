@@ -254,10 +254,20 @@ function registerBrowseTools(server: McpServer, ctx: ToolContext): void {
   );
 }
 
-/** Resolves the timeline and returns the rendered timetable plus structured composition/timeline. */
+/**
+ * Resolves the timeline and returns the rendered timetable plus structured composition/timeline.
+ * Called after `save`: a resolve failure is reported with the saved revision so the caller knows the edit persisted.
+ */
 function timetableResult(comp: Composition, catalog: FsCatalog): CallToolResult {
-  const timeline = resolveTimeline(comp, catalog);
-  return ok(renderTimetable(comp, timeline), { composition: comp, timeline });
+  try {
+    const timeline = resolveTimeline(comp, catalog);
+    return ok(renderTimetable(comp, timeline), { composition: comp, timeline });
+  } catch (e) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: `${errorText(e)} (변경 사항은 rev ${comp.revision}으로 저장됨)` }],
+    };
+  }
 }
 
 function registerEditTools(server: McpServer, ctx: ToolContext): void {
@@ -309,7 +319,9 @@ function registerEditTools(server: McpServer, ctx: ToolContext): void {
     },
     guard(({ composition_id }: { composition_id: string }) => {
       const comp = ctx.store.load(composition_id);
-      return timetableResult(comp, ctx.catalog());
+      const catalog = ctx.catalog();
+      const timeline = resolveTimeline(comp, catalog);
+      return ok(renderTimetable(comp, timeline), { composition: comp, timeline });
     }),
   );
 

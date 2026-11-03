@@ -118,4 +118,39 @@ describe("edit tools", () => {
     expect(r.isError).toBe(true);
     expect(textOf(r)).toContain(`카탈로그에 없는 후보: ${IDS.cooking}`);
   });
+
+  /** composition with a walking ref (id2) in slot 0; walking then removed from the catalog. */
+  async function staleComposition(): Promise<{ id: string; refId: string }> {
+    const c = await session.call("create_composition", { day: "2026-04-15" });
+    const id = (c.structuredContent as { composition: { id: string } }).composition.id;
+    const ins = await session.call("insert_event", { composition_id: id, slot: 0, candidate_id: IDS.walking });
+    const refId = (ins.structuredContent as { composition: { slots: Array<Array<{ ref_id: string }>> } })
+      .composition.slots[0]![0]!.ref_id;
+    const file = join(dir, "catalog", "ego4d", "candidates.jsonl");
+    const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim() !== "");
+    const kept = lines.filter((l) => !l.includes(IDS.walking));
+    expect(kept.length).toBe(lines.length - 1);
+    writeFileSync(file, kept.join("\n") + (kept.length ? "\n" : ""));
+    return { id, refId };
+  }
+
+  it("editing an already-stale composition saves, then reports the saved revision with the resolve error", async () => {
+    const { id } = await staleComposition();
+    const r = await session.call("insert_event", { composition_id: id, slot: 1, candidate_id: IDS.cooking });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain(`카탈로그에 없는 후보: ${IDS.walking}`);
+    expect(textOf(r)).toContain(" (변경 사항은 rev 2으로 저장됨)");
+    expect(onDisk(id).revision).toBe(2);
+    expect(onDisk(id).slots[1]).toHaveLength(1);
+  });
+
+  it("remove_event on the stale ref repairs the composition and returns a normal timetable", async () => {
+    const { id, refId } = await staleComposition();
+    const r = await session.call("remove_event", { composition_id: id, ref_id: refId });
+    expect(r.isError).toBeFalsy();
+    expect(textOf(r)).toContain("rev 2 · 총 0:30:00");
+    expect(onDisk(id).revision).toBe(2);
+    const got = await session.call("get_composition", { composition_id: id });
+    expect(got.isError).toBeFalsy();
+  });
 });
