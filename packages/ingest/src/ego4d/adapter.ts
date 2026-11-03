@@ -1,0 +1,197 @@
+import { readFileSync, statSync } from "node:fs";
+import { z } from "zod";
+import { AnnotationSchema, BlockCandidateSchema, type Annotation, type BlockCandidate } from "@vb/core";
+import type { Categories, Category } from "../categories.js";
+import { bump, type IngestReport } from "../jsonl.js";
+
+/** Files larger than this are refused before reading (exit 1, naming the file). */
+export const MAX_JSON_BYTES = 512 * 1024 * 1024;
+
+/** ego4d.json: only the fields we rely on; everything else (duration_sec, ...) passes through. */
+export const Ego4dMetaSchema = z
+  .object({
+    videos: z.array(z.object({ video_uid: z.string(), scenarios: z.array(z.string()) }).passthrough()),
+  })
+  .passthrough();
+export type Ego4dMeta = z.infer<typeof Ego4dMetaSchema>;
+
+export const Ego4dNarrationSchema = z.object({ timestamp_sec: z.number(), narration_text: z.string() }).passthrough();
+export const Ego4dSummarySchema = z
+  .object({ start_sec: z.number(), end_sec: z.number(), summary_text: z.string() })
+  .passthrough();
+export type Ego4dNarration = z.infer<typeof Ego4dNarrationSchema>;
+export type Ego4dSummary = z.infer<typeof Ego4dSummarySchema>;
+
+/** narration.json: video_uid -> annotation passes. Only narration_pass_1 is used. */
+export const Ego4dNarrationsSchema = z.record(
+  z.string(),
+  z
+    .object({
+      narration_pass_1: z
+        .object({
+          narrations: z.array(Ego4dNarrationSchema),
+          summaries: z.array(Ego4dSummarySchema),
+        })
+        .passthrough()
+        .optional(),
+    })
+    .passthrough(),
+);
+export type Ego4dNarrations = z.infer<typeof Ego4dNarrationsSchema>;
+
+function parseWith<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, json: unknown, file: string): T {
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) {
+    const issue = parsed.error.issues
+      .map((iss) => `${iss.path.join(".") || "(root)"}: ${iss.message}`)
+      .join("; ");
+    throw new Error(`${file}: ${issue}`);
+  }
+  return parsed.data;
+}
+
+export const parseEgo4dMeta = (json: unknown, file: string): Ego4dMeta => parseWith(Ego4dMetaSchema, json, file);
+export const parseEgo4dNarrations = (json: unknown, file: string): Ego4dNarrations =>
+  parseWith(Ego4dNarrationsSchema, json, file);
+
+/** Read and JSON.parse a file, refusing anything over `maxBytes`. Errors name the file. */
+export function readJsonFile(path: string, maxBytes: number = MAX_JSON_BYTES): unknown {
+  const size = statSync(path).size;
+  if (size > maxBytes) {
+    throw new Error(`${path}: file is too large (${size} bytes; the limit is 512 MB)`);
+  }
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    throw new Error(`${path}: invalid JSON: ${(e as Error).message}`);
+  }
+}
+
+const cmpStr = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Scenario -> number of videos carrying it, sorted by count desc then name. */
+export function listScenarios(meta: Ego4dMeta): Array<{ scenario: string; videos: number }> {
+  const counts = new Map<string, number>();
+  for (const v of meta.videos) {
+    for (const s of new Set(v.scenarios)) counts.set(s, (counts.get(s) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([scenario, videos]) => ({ scenario, videos }))
+    .sort((a, b) => b.videos - a.videos || cmpStr(a.scenario, b.scenario));
+}
+
+function keywordMatches(cat: Category, text: string): boolean {
+  if (cat.keywords.length === 0) return true;
+  const lower = text.toLowerCase();
+  return cat.keywords.some((k) => lower.includes(k.toLowerCase()));
+}
+
+/**
+ * Build Ego4D event candidates and per-video annotations.
+ * - A video matches a category when its scenarios intersect the category's scenarios.
+ * - Each narration_pass_1 summary of a matching video becomes one candidate in the FIRST category
+ *   (config order) whose keywords are empty or appear in summary_text (case-insensitive).
+ * - Annotations (all pass-1 narrations as points, all valid summaries as intervals) are produced only
+ *   for videos that yield at least one candidate; remap filters by span later.
+ * Skip reasons: no_narration (a category-matching video without narration_pass_1), end_before_start and
+ * duplicate_span (candidate summaries), invalid_time (narrations of candidate videos).
+ */
+export function buildEgo4dCatalog(
+  meta: Ego4dMeta,
+  narrations: Ego4dNarrations,
+  categories: Categories | Category[],
+  report: IngestReport,
+): { candidates: BlockCandidate[]; annotations: Map<string, Annotation[]> } {
+  const cats = Array.isArray(categories) ? categories : categories.categories;
+  const candidates: BlockCandidate[] = [];
+  const annotations = new Map<string, Annotation[]>();
+
+  const videos = new Map(meta.videos.map((v) => [v.video_uid, v] as const));
+  for (const uid of [...videos.keys()].sort(cmpStr)) {
+    const scenarios = new Set(videos.get(uid)?.scenarios ?? []);
+    const matched = cats.filter((c) => c.scenarios.some((s) => scenarios.has(s)));
+    if (matched.length === 0) continue;
+
+    const pass1 = narrations[uid]?.narration_pass_1;
+    if (!pass1) {
+      bump(report.skipped, "no_narration");
+      continue;
+    }
+
+    const seen = new Set<string>();
+    let built = 0;
+    pass1.summaries.forEach((s) => {
+      const cat = matched.find((c) => keywordMatches(c, s.summary_text));
+      if (!cat) return;
+      if (!Number.isFinite(s.start_sec) || !Number.isFinite(s.end_sec)) {
+        bump(report.skipped, "invalid_time");
+        return;
+      }
+      if (s.end_sec <= s.start_sec) {
+        bump(report.skipped, "end_before_start");
+        return;
+      }
+      const id = `ego4d:${uid}:${s.start_sec.toFixed(3)}-${s.end_sec.toFixed(3)}`;
+      if (seen.has(id)) {
+        bump(report.skipped, "duplicate_span");
+        return;
+      }
+      seen.add(id);
+      candidates.push(
+        BlockCandidateSchema.parse({
+          id,
+          role: "event",
+          category: cat.id,
+          source: { dataset: "ego4d", video_id: uid, media: { kind: "video", fps: 30 } },
+          src_start: s.start_sec,
+          src_end: s.end_sec,
+          summary: s.summary_text,
+        }),
+      );
+      built++;
+    });
+    if (built === 0) continue;
+
+    const anns: Annotation[] = [];
+    let nNarr = 0;
+    pass1.narrations.forEach((n, i) => {
+      if (!Number.isFinite(n.timestamp_sec)) {
+        bump(report.skipped, "invalid_time");
+        return;
+      }
+      anns.push(
+        AnnotationSchema.parse({
+          id: `ego4d:${uid}:n:${i}`,
+          track: "captions",
+          level: "narration",
+          time: { kind: "point", t: n.timestamp_sec },
+          text: n.narration_text,
+          original: n,
+        }),
+      );
+      nNarr++;
+    });
+    let nSum = 0;
+    pass1.summaries.forEach((s, i) => {
+      // Invalid spans of matching summaries were already counted above; unrelated ones are dropped silently.
+      if (!Number.isFinite(s.start_sec) || !Number.isFinite(s.end_sec) || s.end_sec <= s.start_sec) return;
+      anns.push(
+        AnnotationSchema.parse({
+          id: `ego4d:${uid}:s:${i}`,
+          track: "captions",
+          level: "summary",
+          time: { kind: "interval", start: s.start_sec, end: s.end_sec },
+          text: s.summary_text,
+          original: s,
+        }),
+      );
+      nSum++;
+    });
+    annotations.set(uid, anns);
+    bump(report.ingested, "ego4d:narrations", nNarr);
+    bump(report.ingested, "ego4d:summaries", nSum);
+  }
+
+  bump(report.ingested, "ego4d:candidates", candidates.length);
+  return { candidates, annotations };
+}

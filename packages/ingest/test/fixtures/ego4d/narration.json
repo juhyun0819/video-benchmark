@@ -1,0 +1,42 @@
+{
+  "aaaaaaaa-0000-0000-0000-000000000001": {
+    "status": "complete",
+    "narration_pass_1": {
+      "narrations": [
+        { "timestamp_sec": 2.5, "timestamp_frame": 75, "narration_text": "#C C walks on the sidewalk", "annotation_uid": "n-a-0" },
+        { "timestamp_sec": 11.25, "timestamp_frame": 337, "narration_text": "#C C looks at the road", "annotation_uid": "n-a-1", "_unmapped_timestamp_sec": 11.3 },
+        { "timestamp_sec": 40.0, "timestamp_frame": 1200, "narration_text": "#C C crosses the street", "annotation_uid": "n-a-2" }
+      ],
+      "summaries": [
+        { "start_sec": 0.0, "end_sec": 30.0, "summary_text": "C walked along a quiet street.", "annotation_uid": "s-a-0" },
+        { "start_sec": 0.0, "end_sec": 30.0, "summary_text": "C walked along a quiet street (dup).", "annotation_uid": "s-a-1" },
+        { "start_sec": 50.0, "end_sec": 50.0, "summary_text": "C stood still.", "annotation_uid": "s-a-2" },
+        { "start_sec": 60.0, "end_sec": 90.5, "summary_text": "C crossed at a traffic light.", "annotation_uid": "s-a-3" }
+      ]
+    },
+    "narration_pass_2": {
+      "narrations": [
+        { "timestamp_sec": 5.0, "timestamp_frame": 150, "narration_text": "pass two must be ignored", "annotation_uid": "n-a-p2" }
+      ],
+      "summaries": []
+    }
+  },
+  "bbbbbbbb-0000-0000-0000-000000000002": {
+    "status": "complete",
+    "narration_pass_1": {
+      "narrations": [
+        { "timestamp_sec": 1.0, "timestamp_frame": 30, "narration_text": "#C C picks a LEGO brick", "annotation_uid": "n-b-0" },
+        { "timestamp_sec": 70.0, "timestamp_frame": 2100, "narration_text": "#C C zips the tent", "annotation_uid": "n-b-1" }
+      ],
+      "summaries": [
+        { "start_sec": 0.0, "end_sec": 45.0, "summary_text": "C assembled a LEGO set on the table.", "annotation_uid": "s-b-0" },
+        { "start_sec": 45.0, "end_sec": 60.0, "summary_text": "C played a card game.", "annotation_uid": "s-b-1" },
+        { "start_sec": 60.0, "end_sec": 120.0, "summary_text": "C pitched a Tent and stored the lego box.", "annotation_uid": "s-b-2" },
+        { "start_sec": 120.0, "end_sec": 150.0, "summary_text": "C folded the tent.", "annotation_uid": "s-b-3" }
+      ]
+    }
+  },
+  "cccccccc-0000-0000-0000-000000000003": {
+    "status": "pending"
+  }
+}

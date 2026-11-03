@@ -1,0 +1,8 @@
+{
+  "categories": [
+    { "id": "walking", "label": "산책·보행", "dataset": "ego4d", "scenarios": ["Walking on street"], "keywords": [] },
+    { "id": "transit", "label": "차량·대중교통 이동", "dataset": "ego4d", "scenarios": ["Car - commuting, road trip"], "keywords": [] },
+    { "id": "hobby_lego", "label": "취미: 레고", "dataset": "ego4d", "scenarios": ["Playing board games"], "keywords": ["lego"] },
+    { "id": "hobby_tent", "label": "취미: 텐트", "dataset": "ego4d", "scenarios": ["Camping"], "keywords": ["tent"] }
+  ]
+}

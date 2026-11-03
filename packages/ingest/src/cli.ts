@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import type { Annotation, BaseDay } from "@vb/core";
@@ -11,6 +11,14 @@ import {
   parseHighLevel,
   type HighLevelSegment,
 } from "./hdepic/adapter.js";
+import { loadCategories } from "./categories.js";
+import {
+  buildEgo4dCatalog,
+  listScenarios,
+  parseEgo4dMeta,
+  parseEgo4dNarrations,
+  readJsonFile,
+} from "./ego4d/adapter.js";
 import { bump, newReport, readJsonl, type IngestReport } from "./jsonl.js";
 import { buildNextmeDay, parseRecordingsCsv } from "./nextme/adapter.js";
 import { makeHfFetcher } from "./nextme/hf.js";
@@ -19,6 +27,8 @@ import { CatalogWriter, rebuildIndex } from "./writer.js";
 const USAGE = `Usage:
   npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
   npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--data <dir>]
+  npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
+  npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
 
 HD-EPIC narrations come from a one-off pkl conversion:
   uv run --isolated --no-project --with pandas --with "numpy>=2" \\
@@ -144,6 +154,31 @@ export function ingestHdepic(opts: IngestHdepicOptions): IngestReport {
   return report;
 }
 
+export interface IngestEgo4dOptions {
+  metadataPath: string;
+  narrationsPath: string;
+  categoriesPath: string;
+  dataDir: string;
+  now: Date;
+}
+
+/** Read the Ego4D metadata + narrations, build scenario/keyword candidates and narration annotations, write the catalog. */
+export function ingestEgo4d(opts: IngestEgo4dOptions): IngestReport {
+  const report = newReport();
+  const categories = loadCategories(opts.categoriesPath);
+  const meta = parseEgo4dMeta(readJsonFile(opts.metadataPath), opts.metadataPath);
+  const narrations = parseEgo4dNarrations(readJsonFile(opts.narrationsPath), opts.narrationsPath);
+
+  // Build everything first so a malformed input writes nothing.
+  const { candidates, annotations } = buildEgo4dCatalog(meta, narrations, categories, report);
+
+  const writer = new CatalogWriter(opts.dataDir);
+  writer.writeCandidates("ego4d", candidates);
+  for (const [videoUid, anns] of annotations) writer.writeAnnotations("ego4d", videoUid, anns);
+  rebuildIndex(opts.dataDir, opts.now);
+  return report;
+}
+
 export async function main(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
@@ -156,6 +191,9 @@ export async function main(
       data: { type: "string" },
       annotations: { type: "string" },
       narrations: { type: "string" },
+      metadata: { type: "string" },
+      categories: { type: "string" },
+      "list-scenarios": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -202,6 +240,31 @@ export async function main(
     const report = ingestHdepic({
       annotationsDir: values.annotations,
       narrationsPath: values.narrations,
+      dataDir,
+      now: new Date(),
+    });
+    console.log(JSON.stringify(report, null, 2));
+    return 0;
+  }
+
+  if (command === "ego4d") {
+    if (!values.metadata) {
+      console.error("ego4d: --metadata <ego4d.json> is required");
+      return 1;
+    }
+    if (values["list-scenarios"]) {
+      const meta = parseEgo4dMeta(readJsonFile(values.metadata), values.metadata);
+      for (const { scenario, videos } of listScenarios(meta)) console.log(`${scenario}\t${videos}`);
+      return 0;
+    }
+    if (!values.narrations) {
+      console.error("ego4d: --narrations <narration.json> is required (or use --list-scenarios)");
+      return 1;
+    }
+    const report = ingestEgo4d({
+      metadataPath: values.metadata,
+      narrationsPath: values.narrations,
+      categoriesPath: values.categories ?? resolve("config", "categories.json"),
       dataDir,
       now: new Date(),
     });
