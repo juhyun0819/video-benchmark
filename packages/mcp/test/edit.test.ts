@@ -100,7 +100,7 @@ describe("edit tools", () => {
   it("create_composition with unknown day is an error", async () => {
     const r = await session.call("create_composition", { day: "1999-01-01" });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain("BASE_DAY_NOT_FOUND");
+    expect(textOf(r)).toBe("base day 없음: 1999-01-01 — list_base_days로 확인");
   });
 
   it("get_composition on composition referencing removed candidate lists missing ids", async () => {

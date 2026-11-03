@@ -50,7 +50,19 @@ function errorText(e: unknown): string {
       case "SLOT_OUT_OF_RANGE":
         return `slot ${String(d["slot"])}은 범위 밖 (0..${String(d["max"])})`;
       case "CANDIDATE_NOT_FOUND":
-        return "candidate_id 없음 — list_event_candidates로 확인";
+        return `candidate_id 없음: ${String(d["candidateId"])} — list_event_candidates로 확인`;
+      case "POSITION_OUT_OF_RANGE":
+        return `position ${String(d["position"])}은 범위 밖 (0..${String(d["max"])})`;
+      case "NOT_EVENT":
+        return `이벤트 후보가 아님: ${String(d["candidateId"])}`;
+      case "REF_NOT_FOUND":
+        return `ref_id 없음: ${String(d["refId"])} — get_composition으로 확인`;
+      case "COMPOSITION_NOT_FOUND":
+        return `composition 없음: ${String(d["id"])} — list_compositions로 확인`;
+      case "BASE_DAY_NOT_FOUND":
+        return `base day 없음: ${String(d["day"])} — list_base_days로 확인`;
+      case "BASE_DAY_CHANGED":
+        return `base day ${String(d["day"])}의 블록 구성이 바뀜 (슬롯 ${String(d["actual"])}개, 현재 필요 ${String(d["expected"])}개) — 새 composition을 만드세요`;
       case "REVISION_MISMATCH":
         return `revision 불일치 (현재 ${String(d["current"])})`;
       case "MISSING_CANDIDATES": {

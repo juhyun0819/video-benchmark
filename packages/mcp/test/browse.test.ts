@@ -104,7 +104,7 @@ describe("browse tools", () => {
     expect(ok.isError).toBeFalsy();
     const bad = await session.call("get_candidate", { candidate_id: "nope" });
     expect(bad.isError).toBe(true);
-    expect(textOf(bad)).toBe("candidate_id 없음 — list_event_candidates로 확인");
+    expect(textOf(bad)).toBe("candidate_id 없음: nope — list_event_candidates로 확인");
   });
 
   it("missing catalog yields Korean ingest hint", async () => {
@@ -144,10 +144,17 @@ describe("toToolError", () => {
     const t = (e: unknown) => (toToolError(e).content[0] as { text: string }).text;
     expect(toToolError(new Error("x")).isError).toBe(true);
     expect(t(new CompositionError("SLOT_OUT_OF_RANGE", "m", { slot: 21, max: 20 }))).toBe("slot 21은 범위 밖 (0..20)");
-    expect(t(new CompositionError("CANDIDATE_NOT_FOUND", "m", { candidateId: "a" }))).toBe("candidate_id 없음 — list_event_candidates로 확인");
+    expect(t(new CompositionError("CANDIDATE_NOT_FOUND", "m", { candidateId: "a" }))).toBe("candidate_id 없음: a — list_event_candidates로 확인");
     expect(t(new CompositionError("REVISION_MISMATCH", "m", { expected: 1, current: 3 }))).toBe("revision 불일치 (현재 3)");
     expect(t(new CompositionError("MISSING_CANDIDATES", "m", { ids: ["a", "b"] }))).toBe("카탈로그에 없는 후보: a, b");
-    expect(t(new CompositionError("REF_NOT_FOUND", "boom", { refId: "r" }))).toBe("REF_NOT_FOUND: boom");
+    expect(t(new CompositionError("REF_NOT_FOUND", "boom", { refId: "r" }))).toBe("ref_id 없음: r — get_composition으로 확인");
+    expect(t(new CompositionError("NOT_EVENT", "m", { candidateId: "c" }))).toBe("이벤트 후보가 아님: c");
+    expect(t(new CompositionError("POSITION_OUT_OF_RANGE", "m", { position: 5, max: 2 }))).toBe("position 5은 범위 밖 (0..2)");
+    expect(t(new CompositionError("COMPOSITION_NOT_FOUND", "m", { id: "x1" }))).toBe("composition 없음: x1 — list_compositions로 확인");
+    expect(t(new CompositionError("BASE_DAY_NOT_FOUND", "m", { day: "d" }))).toBe("base day 없음: d — list_base_days로 확인");
+    expect(t(new CompositionError("BASE_DAY_CHANGED", "m", { day: "d", expected: 3, actual: 4 }))).toBe(
+      "base day d의 블록 구성이 바뀜 (슬롯 4개, 현재 필요 3개) — 새 composition을 만드세요",
+    );
     expect(t(new CatalogMissingError("x"))).toBe("카탈로그가 없습니다. 먼저 npm run ingest를 실행하세요");
   });
 });

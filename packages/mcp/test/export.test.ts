@@ -121,6 +121,27 @@ describe("export_manifest", () => {
     expect(existsSync(join(dir, "exports"))).toBe(false);
   });
 
+  it("base day that changed shape after composition creation: get_composition and export_manifest fail in Korean, export writes nothing", async () => {
+    const c = await session.call("create_composition", { day: "2026-04-15" });
+    const id = (c.structuredContent as { composition: { id: string } }).composition.id;
+
+    const file = join(dir, "catalog", "nextme800", "days", "2026-04-15.json");
+    const day = JSON.parse(readFileSync(file, "utf8")) as { blocks: unknown[] };
+    expect(day.blocks).toHaveLength(3);
+    day.blocks.pop();
+    writeFileSync(file, JSON.stringify(day));
+
+    const expected = "base day 2026-04-15의 블록 구성이 바뀜 (슬롯 4개, 현재 필요 3개) — 새 composition을 만드세요";
+    const g = await session.call("get_composition", { composition_id: id });
+    expect(g.isError).toBe(true);
+    expect(textOf(g)).toBe(expected);
+
+    const r = await session.call("export_manifest", { composition_id: id });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toBe(expected);
+    expect(existsSync(join(dir, "exports"))).toBe(false);
+  });
+
   it("unknown composition id is a tool error and writes nothing", async () => {
     const r = await session.call("export_manifest", { composition_id: "nope" });
     expect(r.isError).toBe(true);
