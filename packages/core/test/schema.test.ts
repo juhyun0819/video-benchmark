@@ -3,6 +3,7 @@ import {
   AnnotationSchema,
   BaseDaySchema,
   BlockCandidateSchema,
+  SourceRefSchema,
   CompositionSchema,
   CompositionError,
 } from "../src/index.js";
@@ -72,5 +73,20 @@ describe("core schemas", () => {
     expect(e.code).toBe("SLOT_OUT_OF_RANGE");
     expect(e.details).toEqual({ slot: 9 });
     expect(new CompositionError("NOT_EVENT", "x").details).toEqual({});
+  });
+
+  it("accepts optional start_wallclock on frames media", () => {
+    const base = { dataset: "nextme800", video_id: "r" } as const;
+    const withClock = SourceRefSchema.safeParse({
+      ...base,
+      media: { kind: "frames", approx_fps: 1, tar: "t.tar", start_wallclock: "2026-04-15 09:00:00" },
+    });
+    expect(withClock.success).toBe(true);
+    expect(withClock.data?.media).toMatchObject({ start_wallclock: "2026-04-15 09:00:00" });
+    const without = SourceRefSchema.safeParse({
+      ...base,
+      media: { kind: "frames", approx_fps: 1, tar: "t.tar" },
+    });
+    expect(without.success).toBe(true);
   });
 });

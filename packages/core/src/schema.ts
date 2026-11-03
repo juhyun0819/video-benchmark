@@ -7,7 +7,7 @@ export const SourceRefSchema = z.object({
   dataset: DatasetSchema,
   video_id: z.string(),
   media: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("frames"), approx_fps: z.literal(1), tar: z.string() }),
+    z.object({ kind: z.literal("frames"), approx_fps: z.literal(1), tar: z.string(), start_wallclock: z.string().optional() }),
     z.object({ kind: z.literal("video"), fps: z.number() }),
   ]),
 });

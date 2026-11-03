@@ -99,7 +99,7 @@ type SourceRef = {
   dataset: Dataset;
   video_id: string;              // NextMe recording_id | HD-EPIC video_id | Ego4D video_uid
   media:
-    | { kind: "frames"; approx_fps: 1; tar: string }   // NextMe
+    | { kind: "frames"; approx_fps: 1; tar: string; start_wallclock?: string }   // NextMe; start_wallclock = recording_start "YYYY-MM-DD HH:MM:SS" (HKT)
     | { kind: "video"; fps: number };                  // HD-EPIC, Ego4D
 };
 
