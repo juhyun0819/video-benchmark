@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { ManifestSchema } from "@vb/core";
 import { connect, FIXTURE_NOW, IDS, makeTempDir, textOf, writeFixtureCatalog } from "./helpers.js";
 
@@ -125,5 +125,17 @@ describe("export_manifest", () => {
     const r = await session.call("export_manifest", { composition_id: "nope" });
     expect(r.isError).toBe(true);
     expect(existsSync(join(dir, "exports"))).toBe(false);
+  });
+
+  it("returns an absolute path even when the server is created with a relative data dir", async () => {
+    await session.close();
+    session = await connect(relative(process.cwd(), dir), { genId: counter(), now: () => FIXTURE_NOW });
+    const id = await createWithBoth();
+    const r = await session.call("export_manifest", { composition_id: id });
+    expect(r.isError).toBeFalsy();
+    const path = (r.structuredContent as ExportResult).path;
+    expect(isAbsolute(path)).toBe(true);
+    expect(path).toBe(join(dir, "exports", `${id}-r2.manifest.json`));
+    expect(existsSync(path)).toBe(true);
   });
 });

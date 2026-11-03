@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -125,7 +126,9 @@ function previewOf(annotations: Annotation[], c: BlockCandidate, limit: number) 
     }));
 }
 
-export function createServer(dataDir: string, opts: ServerOptions = {}): McpServer {
+export function createServer(dataDirArg: string, opts: ServerOptions = {}): McpServer {
+  // Resolve once so every store/catalog path (and the export path returned to callers) is absolute.
+  const dataDir = resolve(dataDirArg);
   const ctx: ToolContext = {
     dataDir,
     now: opts.now ?? (() => new Date()),
