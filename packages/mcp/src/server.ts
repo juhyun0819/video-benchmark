@@ -2,8 +2,21 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { CompositionError, type Annotation, type BlockCandidate, type TimeSpan } from "@vb/core";
+import {
+  assertRevision,
+  CompositionError,
+  createComposition,
+  insertEvent,
+  moveEvent,
+  removeEvent,
+  resolveTimeline,
+  type Annotation,
+  type BlockCandidate,
+  type Composition,
+  type TimeSpan,
+} from "@vb/core";
 import { CatalogMissingError, FsCatalog } from "./fsCatalog.js";
+import { renderTimetable } from "./render.js";
 import { CompositionStore } from "./store.js";
 
 export type ServerOptions = {
@@ -120,6 +133,7 @@ export function createServer(dataDir: string, opts: ServerOptions = {}): McpServ
   };
   const server = new McpServer({ name: "video-composer", version: "0.0.0" });
   registerBrowseTools(server, ctx);
+  registerEditTools(server, ctx);
   return server;
 }
 
@@ -237,5 +251,152 @@ function registerBrowseTools(server: McpServer, ctx: ToolContext): void {
       ].join("\n");
       return ok(text, { candidate: candidateView(c), source: c.source, preview: rows });
     }),
+  );
+}
+
+/** Resolves the timeline and returns the rendered timetable plus structured composition/timeline. */
+function timetableResult(comp: Composition, catalog: FsCatalog): CallToolResult {
+  const timeline = resolveTimeline(comp, catalog);
+  return ok(renderTimetable(comp, timeline), { composition: comp, timeline });
+}
+
+function registerEditTools(server: McpServer, ctx: ToolContext): void {
+  const compositionId = z.string().describe("Composition id from create_composition / list_compositions");
+  const expectedRevision = z
+    .number()
+    .int()
+    .optional()
+    .describe("Reject the edit unless the composition is at this revision");
+
+  server.registerTool(
+    "create_composition",
+    {
+      description: "Create an empty composition on a base day.",
+      inputSchema: { day: z.string().describe("Base day, e.g. 2026-04-15"), name: z.string().optional() },
+    },
+    guard(({ day, name }: { day: string; name?: string | undefined }) => {
+      const catalog = ctx.catalog();
+      const baseDay = catalog.getBaseDay(day);
+      if (!baseDay) {
+        throw new CompositionError("BASE_DAY_NOT_FOUND", `Base day ${day} not found — list_base_days로 확인`, { day });
+      }
+      const comp = createComposition(baseDay, { genId: ctx.genId, ...(name !== undefined ? { name } : {}) });
+      ctx.store.save(comp);
+      return timetableResult(comp, catalog);
+    }),
+  );
+
+  server.registerTool(
+    "list_compositions",
+    { description: "List saved compositions with id, name, base day and revision." },
+    guard(() => {
+      const compositions = ctx.store.list();
+      const text =
+        compositions.length === 0
+          ? "(컴포지션 없음)"
+          : compositions
+              .map((c) => `${c.id}  ${c.base_day}  rev ${c.revision}${c.name !== undefined ? `  ${c.name}` : ""}`)
+              .join("\n");
+      return ok(text, { compositions });
+    }),
+  );
+
+  server.registerTool(
+    "get_composition",
+    {
+      description: "Show a composition's current timetable.",
+      inputSchema: { composition_id: compositionId },
+    },
+    guard(({ composition_id }: { composition_id: string }) => {
+      const comp = ctx.store.load(composition_id);
+      return timetableResult(comp, ctx.catalog());
+    }),
+  );
+
+  server.registerTool(
+    "insert_event",
+    {
+      description: "Insert an event candidate into a slot (appended unless position is given).",
+      inputSchema: {
+        composition_id: compositionId,
+        slot: z.number().int().describe("Slot index; slot i sits before base block i"),
+        candidate_id: z.string(),
+        position: z.number().int().optional().describe("Index within the slot"),
+        expected_revision: expectedRevision,
+      },
+    },
+    guard(
+      (a: {
+        composition_id: string;
+        slot: number;
+        candidate_id: string;
+        position?: number | undefined;
+        expected_revision?: number | undefined;
+      }) => {
+        const catalog = ctx.catalog();
+        const comp = ctx.store.load(a.composition_id);
+        assertRevision(comp, a.expected_revision);
+        const next = insertEvent(
+          comp,
+          catalog,
+          { slot: a.slot, candidateId: a.candidate_id, ...(a.position !== undefined ? { position: a.position } : {}) },
+          ctx.genId,
+        );
+        ctx.store.save(next);
+        return timetableResult(next, catalog);
+      },
+    ),
+  );
+
+  server.registerTool(
+    "move_event",
+    {
+      description: "Move an event (by ref_id) to another slot/position.",
+      inputSchema: {
+        composition_id: compositionId,
+        ref_id: z.string(),
+        to_slot: z.number().int(),
+        to_position: z.number().int().optional().describe("Index within the target slot"),
+        expected_revision: expectedRevision,
+      },
+    },
+    guard(
+      (a: {
+        composition_id: string;
+        ref_id: string;
+        to_slot: number;
+        to_position?: number | undefined;
+        expected_revision?: number | undefined;
+      }) => {
+        const catalog = ctx.catalog();
+        const comp = ctx.store.load(a.composition_id);
+        assertRevision(comp, a.expected_revision);
+        const next = moveEvent(comp, {
+          refId: a.ref_id,
+          toSlot: a.to_slot,
+          ...(a.to_position !== undefined ? { toPosition: a.to_position } : {}),
+        });
+        ctx.store.save(next);
+        return timetableResult(next, catalog);
+      },
+    ),
+  );
+
+  server.registerTool(
+    "remove_event",
+    {
+      description: "Remove an event (by ref_id) from the composition.",
+      inputSchema: { composition_id: compositionId, ref_id: z.string(), expected_revision: expectedRevision },
+    },
+    guard(
+      (a: { composition_id: string; ref_id: string; expected_revision?: number | undefined }) => {
+        const catalog = ctx.catalog();
+        const comp = ctx.store.load(a.composition_id);
+        assertRevision(comp, a.expected_revision);
+        const next = removeEvent(comp, { refId: a.ref_id });
+        ctx.store.save(next);
+        return timetableResult(next, catalog);
+      },
+    ),
   );
 }
