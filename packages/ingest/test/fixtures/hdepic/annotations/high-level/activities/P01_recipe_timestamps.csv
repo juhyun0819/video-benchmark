@@ -1,0 +1,12 @@
+video_id,recipe_id,high_level_activity_label,start_time,end_time
+P01-20990101-000001,R01,Make tea,0.0,48.0
+P01-20990101-000001,,Wipe the counter,48.0,103.0
+P01-20990101-000001,"R02, R01","Plate toast, serve tea together",103.0,end
+P01-20990101-000002,R02,Slice the bread,100.0,end
+P01-20990101-000002,,,0.0,100.0
+P01-20990101-000002,,Backwards segment,50.0,40.0
+P01-20990101-000002,R02,Toast the slices,300.0,end
+P01-20990101-000003,,Idle,0.0,end
+P01-20990101-000003,,Bad clock,abc,10.0
+P01-20990101-000004,R01,Shared span,10.0,20.0
+P01-20990101-000004,R02,Shared span,10.0,20.0

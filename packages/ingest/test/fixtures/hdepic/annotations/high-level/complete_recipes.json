@@ -1,0 +1,4 @@
+{
+  "P01_R01": { "participant": "P01", "name": "Test Tea", "type": "drink", "source": "synthetic", "steps": {}, "captures": [] },
+  "P01_R02": { "participant": "P01", "name": "Test Toast", "type": "snack", "source": "synthetic", "steps": {}, "captures": [] }
+}
