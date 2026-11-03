@@ -1,0 +1,19 @@
+{
+  "name": "video-benchmark",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "ingest": "tsx packages/ingest/src/cli.ts",
+    "mcp": "tsx packages/mcp/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

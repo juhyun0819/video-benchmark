@@ -1,0 +1,12 @@
+{
+  "name": "@vb/ingest",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@vb/core": "*",
+    "csv-parse": "^5",
+    "zod": "^3.25"
+  }
+}
