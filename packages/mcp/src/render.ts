@@ -14,7 +14,7 @@ function clock(sec: number): string {
 }
 
 /** `H:MM:SS`, floored to whole seconds. */
-function total(sec: number): string {
+export function total(sec: number): string {
   const [h, m, s] = parts(sec);
   return `${h}:${pad2(m)}:${pad2(s)}`;
 }

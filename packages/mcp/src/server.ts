@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   assertRevision,
+  buildManifest,
   CompositionError,
   createComposition,
   insertEvent,
@@ -13,10 +14,11 @@ import {
   type Annotation,
   type BlockCandidate,
   type Composition,
+  type Dataset,
   type TimeSpan,
 } from "@vb/core";
 import { CatalogMissingError, FsCatalog } from "./fsCatalog.js";
-import { renderTimetable } from "./render.js";
+import { renderTimetable, total as formatTotal } from "./render.js";
 import { CompositionStore } from "./store.js";
 
 export type ServerOptions = {
@@ -134,6 +136,7 @@ export function createServer(dataDir: string, opts: ServerOptions = {}): McpServ
   const server = new McpServer({ name: "video-composer", version: "0.0.0" });
   registerBrowseTools(server, ctx);
   registerEditTools(server, ctx);
+  registerExportTools(server, ctx);
   return server;
 }
 
@@ -410,5 +413,31 @@ function registerEditTools(server: McpServer, ctx: ToolContext): void {
         return timetableResult(next, catalog);
       },
     ),
+  );
+}
+
+function registerExportTools(server: McpServer, ctx: ToolContext): void {
+  server.registerTool(
+    "export_manifest",
+    {
+      description:
+        "Export the composition as a manifest file under data/exports/<id>-r<revision>.manifest.json. " +
+        "Fails (writing nothing) if any referenced candidate is missing from the catalog.",
+      inputSchema: { composition_id: z.string().describe("Composition id from create_composition / list_compositions") },
+    },
+    guard(({ composition_id }: { composition_id: string }) => {
+      const comp = ctx.store.load(composition_id);
+      const manifest = buildManifest(comp, ctx.catalog(), ctx.now());
+      const path = ctx.store.writeExport(manifest);
+      const captions_by_dataset: Record<Dataset, number> = { nextme800: 0, hdepic: 0, ego4d: 0 };
+      for (const c of manifest.tracks.captions) captions_by_dataset[c.provenance.dataset] += 1;
+      const blocks = manifest.blocks.length;
+      const text = [
+        `manifest 저장: ${path}`,
+        `총 ${formatTotal(manifest.duration)} · ${blocks}개 블록 · rev ${manifest.composition_revision}`,
+        `caption: nextme800 ${captions_by_dataset.nextme800} · hdepic ${captions_by_dataset.hdepic} · ego4d ${captions_by_dataset.ego4d}`,
+      ].join("\n");
+      return ok(text, { path, duration: manifest.duration, blocks, captions_by_dataset });
+    }),
   );
 }
