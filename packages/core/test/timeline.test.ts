@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  type BlockCandidate,
+  type Catalog,
   CompositionError,
   createComposition,
   insertEvent,
@@ -86,5 +88,41 @@ describe("resolveTimeline", () => {
       return;
     }
     throw new Error("expected BASE_DAY_NOT_FOUND");
+  });
+  describe("slot-count invariant", () => {
+    function catalogWithBlocks(blocks: BlockCandidate[]): Catalog {
+      const fx = makeFixtureCatalog();
+      const day = { ...fx.baseDay, blocks };
+      return { ...fx, getBaseDay: (d: string) => (d === day.day ? day : undefined) };
+    }
+
+    it("throws BASE_DAY_CHANGED when the base day now has fewer blocks", () => {
+      const fx = makeFixtureCatalog();
+      const comp = createComposition(fx.baseDay, { genId: () => "c1" }); // 4 slots
+      const shrunk = catalogWithBlocks(fx.baseDay.blocks.slice(0, 2)); // needs 3 slots
+      try {
+        resolveTimeline(comp, shrunk);
+      } catch (e) {
+        expect(e).toBeInstanceOf(CompositionError);
+        expect((e as CompositionError).code).toBe("BASE_DAY_CHANGED");
+        expect((e as CompositionError).details).toEqual({ day: "2026-04-15", expected: 3, actual: 4 });
+        return;
+      }
+      throw new Error("expected BASE_DAY_CHANGED");
+    });
+
+    it("throws BASE_DAY_CHANGED when the base day now has more blocks", () => {
+      const fx = makeFixtureCatalog();
+      const comp = createComposition(fx.baseDay, { genId: () => "c1" }); // 4 slots
+      const grown = catalogWithBlocks([...fx.baseDay.blocks, fx.baseDay.blocks[0]!]); // needs 5 slots
+      try {
+        resolveTimeline(comp, grown);
+      } catch (e) {
+        expect((e as CompositionError).code).toBe("BASE_DAY_CHANGED");
+        expect((e as CompositionError).details).toEqual({ day: "2026-04-15", expected: 5, actual: 4 });
+        return;
+      }
+      throw new Error("expected BASE_DAY_CHANGED");
+    });
   });
 });

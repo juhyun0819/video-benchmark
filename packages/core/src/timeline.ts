@@ -28,6 +28,13 @@ export function resolveTimeline(comp: Composition, catalog: Catalog): TimelineBl
       day: comp.base_day,
     });
   }
+  if (comp.slots.length !== baseDay.blocks.length + 1) {
+    throw new CompositionError(
+      "BASE_DAY_CHANGED",
+      `Base day ${comp.base_day} now has ${baseDay.blocks.length} blocks (needs ${baseDay.blocks.length + 1} slots) but the composition has ${comp.slots.length} slots`,
+      { day: comp.base_day, expected: baseDay.blocks.length + 1, actual: comp.slots.length },
+    );
+  }
 
   // Resolve every event first so all missing ids are reported at once.
   const resolved = new Map<string, BlockCandidate>();

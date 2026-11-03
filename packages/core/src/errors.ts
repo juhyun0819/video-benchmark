@@ -7,7 +7,8 @@ export type CompositionErrorCode =
   | "REF_NOT_FOUND"
   | "REVISION_MISMATCH"
   | "MISSING_CANDIDATES"
-  | "COMPOSITION_NOT_FOUND";
+  | "COMPOSITION_NOT_FOUND"
+  | "BASE_DAY_CHANGED";
 
 export class CompositionError extends Error {
   readonly code: CompositionErrorCode;
