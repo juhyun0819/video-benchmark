@@ -29,3 +29,7 @@ npm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+
+# Agent workspaces
+.claude/worktrees/
+.superpowers/
