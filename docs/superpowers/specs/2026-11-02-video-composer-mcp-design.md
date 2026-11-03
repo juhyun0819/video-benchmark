@@ -79,7 +79,7 @@ data/                 .gitignore. 카탈로그·컴포지션·export 저장
 - 언어·패키지: Node 20+, TypeScript, npm workspaces
 - 라이브러리: zod, `@modelcontextprotocol/sdk`
 - 테스트·개발: vitest, tsx
-- Python: `scripts/convert_hdepic.py`에만 쓴다(`uvx --with pandas`로 실행).
+- Python: `scripts/convert_hdepic.py`에만 쓴다(`uv run --isolated --no-project --with pandas --with "numpy>=2" python`으로 실행).
 
 ## 5. 데이터 모델 (core)
 
@@ -193,9 +193,9 @@ type Manifest = {
 ### 6.1 CLI
 
 ```
-npm run ingest -- nextme --days 2026-04-15[,2026-04-16...]
-npm run ingest -- hdepic --annotations <hd-epic-annotations 경로>
-npm run ingest -- ego4d  --metadata <ego4d.json> --narrations <narration.json>
+npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
+npm run ingest -- hdepic --annotations <hd-epic-annotations 경로> --narrations <converted.jsonl> [--data <dir>]
+npm run ingest -- ego4d  --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
 npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 ```
 
@@ -257,6 +257,7 @@ removeEvent(comp, refId): Composition
 불변식은 아래와 같고, 위반하면 오류를 던진다.
 - base 블록의 순서와 개수는 바뀌지 않는다.
 - `slots.length === baseDay.blocks.length + 1`
+  - 재수집 등으로 base day의 블록 수가 바뀌면 저장된 컴포지션과 어긋난다. `resolveTimeline`은 슬롯 수가 base day와 맞지 않는 컴포지션을 `BASE_DAY_CHANGED`로 거부한다.
 - 넣는 후보는 카탈로그에 있어야 하고 `role === "event"`여야 한다.
 - `ref_id`는 컴포지션 안에서 유일하다. 같은 후보를 여러 번 넣을 수 있다.
 - 컴포지션 `id`와 `ref_id`는 `crypto.randomUUID()` 앞 8자리로 만든다. 순수성을 위해 id 생성기는 인자로 주입한다.
@@ -384,7 +385,7 @@ S2  (비어 있음)
 - `recipe_id`는 비어 있을 수 있다(1490행 중 612행, 배경 활동). 값은 0 패딩된 `R01` 형태 하나이거나, 여러 레시피에 걸친 행 1개(`P01` 파일)에서 CSV 따옴표로 감싼 쉼표 목록(`"R08, R07"` 형태, 정렬되어 있지 않음)이다. 쉼표가 필드 안에 들어 있으므로 반드시 CSV 파서로 읽고, 줄을 `,`로 단순 분할하지 않는다. `complete_recipes.json`의 키(`P01_R01`)는 `<participant>_<recipe_id>`로 `recipe_id`를 그대로 이어 붙여 만들고(`P01` + `_` + `R01`), 쉼표 목록은 `, `로 나눈 뒤 각각 같은 방식으로 조회한다.
 - `high_level_activity_label`은 자유 문장이다(빈 값 1행).
 - **파싱 시 주의(어댑터에 반영):**
-  - `end_time`이 숫자가 아니라 리터럴 `end`인 행이 148개다. 147개 video의 **마지막 행**이고, 1개는 중간 행이다. "video 끝까지"를 뜻한다. **결정:** `end_time`이 `end`이면 end는 같은 video의 narration `end_timestamp` 최댓값으로 채운다(147개 video에서 narration이 있다). 그 video에 narration이 없으면 구간을 `open_end` 사유로 건너뛴다. 중간 행의 `end`도 같은 규칙을 따른다.
+  - `end_time`이 숫자가 아니라 리터럴 `end`인 행이 148개다. 147개 video의 **마지막 행**이고, 1개는 중간 행이다. "video 끝까지"를 뜻한다. **결정:** 중간 행의 리터럴 `end`는 같은 video에서 `start_time` 순으로 정렬했을 때 다음 행의 `start_time`을 end로 쓴다. narration `end_timestamp` 최댓값 규칙은 video의 마지막 행에만 적용한다(147개 video에서 narration이 있다). 마지막 행인데 그 video에 narration이 없으면 구간을 `open_end` 사유로 건너뛴다.
   - 숫자형 행 중 `start_time >= end_time`인 행이 7개, 같은 video 안에서 `start_time`이 정렬되지 않은 video가 있다. 연속한 행 1340쌍 중 1319쌍은 맞닿고, 13쌍은 겹치고, 8쌍은 사이가 벌어진다. **결정:** `start >= end`인 행은 `end_before_start` 사유로 건너뛴다. 나머지는 video별로 `start_time` 순서로 정렬해서 쓴다.
   - video 집합이 pkl과 완전히 같지는 않다. CSV 149개, pkl 156개, 교집합 148개이며 CSV에만 1개, pkl에만 8개가 있다.
 - 폴백(§11.2의 step 구간, 영상 전체)은 쓰지 않아도 된다.
@@ -403,7 +404,7 @@ S2  (비어 있음)
 
 - pkl은 `uv run --with pandas python ...`처럼 **기본 환경으로는 읽히지 않는다.** uv가 miniconda의 python(numpy 1.x)을 골라 `ModuleNotFoundError: No module named 'numpy._core.numeric'`로 실패했다. pkl이 numpy 2.x로 만들어졌기 때문이다.
 - 다음 명령은 읽힌다(`numpy 2.4.6`, `pandas 3.1.0`로 확인): `uv run --isolated --no-project --with pandas --with "numpy>=2" python ...`. 변환 스크립트도 이 호출을 쓴다.
-- 아래 pkl 사실은 2026-11-03에 `uv run --isolated --no-project --with pandas --with "numpy>=2" python`으로 pandas를 한 번 실행해 얻은 값이다. Task 8의 테스트가 이 값들을 다시 단언한다.
+- 아래 pkl 사실은 2026-11-03에 `uv run --isolated --no-project --with pandas --with "numpy>=2" python`으로 pandas를 한 번 실행해 얻은 값이다. Task 8의 테스트는 이 값들을 다시 단언하지 않고 합성 fixture를 쓴다.
 - `pd.read_pickle`의 결과는 `DataFrame`이고 shape은 `(59454, 16)`, 인덱스는 `RangeIndex`다. 결측값 0, `unique_narration_id` 중복 0, 156개 video, 모든 행에서 `start_timestamp <= end_timestamp`이다.
 - dtypes:
 
@@ -442,7 +443,7 @@ S2  (비어 있음)
 **항목 1 — 캡션 파일 필드 (모두 JSON Lines, UTF-8)**
 
 - 시각: `start`, `end`는 문자열 `YYYY-MM-DD HH:MM:SS` (HKT, 초 단위, 타임존 표기 없음)다. 날짜가 들어 있어 자정을 넘기는 녹화에서도 날짜가 바뀐다. 모든 파일에서 `start <= end`이고 `start` 오름차순으로 정렬돼 있다.
-- `raw_caption.jsonl` 필드(전 행 동일): `recording_id`(str), `seg_id`(str, `S` + 6자리 숫자 `S000000`), `start`, `end`, `approx_time`(bool), `action`(str), `action_brief`(str), `objects`(list of str), `environment`(str), `text_visible`(list), `speech`(str 또는 null), `details`(str).
+- `raw_caption.jsonl` 필드(전 행 동일): `recording_id`(str), `seg_id`(str, `S` + 6자리 숫자 `S000000`), `start`, `end`, `approx_time`(bool), `action`(str 또는 null), `action_brief`(str), `objects`(list of str), `environment`(str), `text_visible`(list), `speech`(str 또는 null), `details`(str).
 - `L1`~`L5.jsonl` 필드(전 파일 동일): `recording_id`(str), `id`(str, `L<n>_` + 5자리 숫자 `L1_00000`, 레벨 n 접두), `start`, `end`, `text`(str). 파일 안에서 `id`는 유일하고 `recording_id`는 디렉터리 이름과 같다.
 - **`raw_caption.jsonl`의 `action`은 null일 수 있다**(음성 전용 행; 확인한 녹화의 1967행 중 17행). 이때 raw 주석의 `text`는 `action` → `action_brief` → `speech` → 빈 문자열 순서로 고르고, `original`에는 행을 그대로 둔다.
 - **`approx_time`은 `raw_caption.jsonl`에만 있고 L1~L5에는 없다.** 확인한 녹화에서는 전부 `false`였다. §6.2의 "`approx_time: true`는 `original`에 보존" 규칙은 raw 레벨에만 해당한다.
