@@ -86,7 +86,7 @@ data/                 .gitignore. 카탈로그·컴포지션·export 저장
 ### 5.1 시간 정규화
 
 - `src_t`는 원본 영상(녹화) 시작 기준 초(float)다.
-- NextMe의 벽시계 시각(HKT)은 `src_t = wallclock − recording_start`로 바꾼다. `recording_start`는 `L1.jsonl`의 첫 `start`다(`recordings.csv`의 `start`는 `HH:MM` 분 단위라 부정확하다. §11 확인 결과 참고). 원래 문자열은 provenance에 보존한다.
+- NextMe의 벽시계 시각(HKT)은 `src_t = wallclock − recording_start`로 바꾼다. `recording_start`는 그 녹화의 `raw_caption.jsonl`과 `L1.jsonl`~`L5.jsonl` 여섯 파일 전체에서 가장 이른 `start`이고, 녹화 끝(`recording_end`)은 같은 여섯 파일에서 가장 늦은 `end`다(길이 = `recording_end − recording_start`). 샘플로 확인한 10개 녹화에서는 이 값이 `L1`의 첫 `start`/마지막 `end`와 같았다. `recordings.csv`의 `start`/`end`는 `HH:MM` 분 단위라 쓰지 않는다(§11 확인 결과 참고). 원래 문자열은 provenance에 보존한다.
 - HD-EPIC과 Ego4D는 초 값을 그대로 쓴다.
 - manifest는 fps를 강제하지 않는다. 시각은 초로만 적고, 샘플링은 다운스트림 렌더러가 미디어 설명자를 보고 결정한다.
 
@@ -210,7 +210,7 @@ npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
   - 녹화 경계는 항상 블록 경계다. 녹화 사이 공백은 블록 나열에서 자연스럽게 빠진다.
   - 60초 미만 블록은 같은 녹화의 앞 블록에 합친다. 녹화의 첫 블록이면 다음 블록에 합친다.
   - 블록 summary는 블록 시작과 겹치는 L4의 `text`다. 해당하는 L4가 없으면 `"(unlabeled)"`로 둔다.
-- 주석 레벨은 `raw`(raw_caption의 `action`을 text로 사용)와 `L1`~`L5`(`text`)다. `approx_time: true` 레코드는 `original`에 그대로 보존한다.
+- 주석 레벨은 `raw`(raw_caption의 `action`을 text로 사용)와 `L1`~`L5`(`text`)다. `approx_time: true` 레코드(raw_caption에만 존재)는 `original`에 그대로 보존한다.
 
 ### 6.3 HD-EPIC 어댑터 (요리)
 
@@ -445,13 +445,13 @@ S2  (비어 있음)
 - `raw_caption.jsonl` 필드(전 행 동일): `recording_id`(str), `seg_id`(str, `S` + 6자리 숫자 `S000000`), `start`, `end`, `approx_time`(bool), `action`(str), `action_brief`(str), `objects`(list of str), `environment`(str), `text_visible`(list), `speech`(str 또는 null), `details`(str).
 - `L1`~`L5.jsonl` 필드(전 파일 동일): `recording_id`(str), `id`(str, `L<n>_` + 5자리 숫자 `L1_00000`, 레벨 n 접두), `start`, `end`, `text`(str). 파일 안에서 `id`는 유일하고 `recording_id`는 디렉터리 이름과 같다.
 - **`approx_time`은 `raw_caption.jsonl`에만 있고 L1~L5에는 없다.** 확인한 녹화에서는 전부 `false`였다. §6.2의 "`approx_time: true`는 `original`에 보존" 규칙은 raw 레벨에만 해당한다.
-- 구간 관계: `L1` 행 수·시각이 `raw_caption`과 같고(`L1.text`는 `raw.action_brief`와 거의 같다), 위 레벨일수록 구간이 길다(한 녹화에서 L1 1967 / L2 171 / L3 13 / L4 4 / L5 2행). 모든 레벨의 첫 `start`와 마지막 `end`는 `L1`의 것과 같았다(확인한 10개 녹화 모두 `L4` 기준).
+- 구간 관계: `L1` 행 수·시각이 `raw_caption`과 같고(`L1.text`는 `raw.action_brief`와 거의 같다), 위 레벨일수록 구간이 길다(한 녹화에서 L1 1967 / L2 171 / L3 13 / L4 4 / L5 2행). `raw_caption`과 `L1`~`L5` 여섯 파일 각각의 가장 이른 `start`와 가장 늦은 `end`는 확인한 10개 녹화 모두에서 `L1`의 것과 같았다(여섯 파일 모두 직접 확인했다).
 - 구간은 서로 이어 붙지 않는다. L1은 이웃 구간 사이에 빈틈(약 2/3)과 겹침(14/1966)이 있고, 길이 0초(`start == end`)인 행이 있다(L1 78개, L2 2개). **L4도 이웃 사이에 빈틈이 생길 수 있다**(한 녹화에서 3쌍 중 1쌍). 시간 정규화·타일링 코드는 이를 전제로 해야 한다. 단 L4의 첫 `start`는 L1의 첫 `start`와 같아서 "녹화 시작부터 첫 L4 시작까지" 블록(§6.2)은 확인한 녹화에서 비어 있다.
 
 **스펙 §5.1 정정 — `recording_start`는 `recordings.csv`만으로는 정확하지 않다.**
 
 - 스펙은 `recording_start`를 `raw/recordings.csv`에서 얻는다고 했지만, 그 `start`는 `HH:MM`(분 단위)이다. 캡션의 첫 `start`는 초가 있고 CSV 시각보다 1~59초 뒤다(확인한 10개 모두, 예: CSV `HH:MM`에 대해 첫 캡션 `HH:MM:SS`). 마지막 `end`도 CSV `end`보다 최대 약 1분 늦다.
-- 정정: `src_t`의 기준 시각(`recording_start`)과 녹화 끝은 `L1.jsonl`의 첫 `start`와 마지막 `end`로 잡는다. `recordings.csv`는 날짜(`date`), 정렬 순서, TAR 위치, 개수 검증에만 쓴다. 이 값이 TAR 첫 프레임의 시각과 정확히 일치하는지는 아직 확인하지 못했다(TAR이 수십 GB이고 프레임 파일명을 훑어야 한다). 미디어 렌더 단계에서 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg`로 최종 정렬해야 한다.
+- 정정(확정 규칙): `recording_start` = 그 녹화의 `raw_caption.jsonl`과 `L1.jsonl`~`L5.jsonl` 여섯 파일 전체에서 가장 이른 `start`, `recording_end` = 같은 여섯 파일에서 가장 늦은 `end`, 길이 = `recording_end − recording_start`. 샘플 10개 녹화에서는 이 값이 `L1`의 첫 `start`/마지막 `end`와 같았다. `recordings.csv`는 날짜(`date`), 정렬 순서, TAR 위치, 개수 검증에만 쓴다. 이 값이 TAR 첫 프레임의 시각과 정확히 일치하는지는 아직 확인하지 못했다(TAR이 수십 GB이고 프레임 파일명을 훑어야 한다). 미디어 렌더 단계에서 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg`로 최종 정렬해야 한다.
 
 **어댑터가 그대로 쓸 컬럼 이름**
 
@@ -460,9 +460,9 @@ RECORDINGS_COLUMNS = { recording_id: "recording_id", start: "start", end_or_dura
 ```
 
 - 추가로 쓸 컬럼: `date`(일 필터, `YYYY-MM-DD`), `duration_min`(보조 검증용 정수 분), `tar_root_dir`(TAR 내부 디렉터리), `frame_clock`(`HKT` 확인용).
-- `start`/`end`는 `HH:MM` 문자열이므로 **권위 있는 시각이 아니다**(위 정정 참고). 시각 기준으로는 캡션 `L1`의 첫 `start`/마지막 `end`를 쓴다.
+- `start`/`end`는 `HH:MM` 문자열이므로 **권위 있는 시각이 아니다**(위 정정 참고). 시각 기준으로는 위 확정 규칙(여섯 캡션 파일의 가장 이른 `start`/가장 늦은 `end`)을 쓴다.
 
-**§6.2와 어긋난 점 요약:** (1) 파일 위치와 이름은 일치한다. (2) `recordings.csv`의 시각이 분 단위여서 `recording_start` 출처를 `L1`로 정정했다. (3) `approx_time`은 raw에만 있다. (4) L4/L1은 빈틈·겹침·0초 구간이 있을 수 있다.
+**§6.2와 어긋난 점 요약:** (1) 파일 위치와 이름은 일치한다. (2) `recordings.csv`의 시각이 분 단위여서 `recording_start`/`recording_end` 출처를 여섯 캡션 파일의 최소 `start`/최대 `end`로 정정했다. (3) `approx_time`은 raw에만 있다. (4) L4/L1은 빈틈·겹침·0초 구간이 있을 수 있다.
 
 ## 12. 향후 확장
 
