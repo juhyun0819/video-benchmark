@@ -75,11 +75,27 @@ npm run ingest -- hdepic \
 
 ### Ego4D (산책·이동·취미 등 이벤트)
 
-Ego4D는 라이선스 승인 후 공식 Ego4D CLI로 annotations를 내려받는다. 필요한 파일은 메타데이터(`ego4d.json`)와 narration(`narration.json`)이다. 받는 방법과 경로는 공식 문서를 따른다.
+Ego4D는 라이선스 승인 후 공식 [Ego4D CLI](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/cli/README.md)로 annotations를 내려받는다. Ego-Exo4D(`egoexo`)는 쓰지 않는다. 필요한 파일은 메타데이터(`ego4d.json`)와 narration(`narration.json`)이고, 영상은 받지 않는다.
 
-```bash
-npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json>
-```
+1. 라이선스 승인 메일의 AWS access key와 secret key를 `~/.aws/credentials`의 `[ego4d]` 프로필에 채운다. 키는 14일 뒤 만료되며, ego4ddataset.com에서 같은 이메일로 다시 서명하면 재발급된다.
+
+   ```ini
+   [ego4d]
+   aws_access_key_id = <access key>
+   aws_secret_access_key = <secret key>
+   ```
+
+2. 다운로드 스크립트를 실행한다. CLI는 `uvx`로 그때그때 받아 실행하므로 따로 설치하지 않아도 된다. 다운로드 용량을 확인하는 프롬프트가 뜬다.
+
+   ```bash
+   scripts/download_ego4d.sh            # 기본 출력 경로: data/raw/ego4d
+   ```
+
+3. 받은 파일로 ingest한다.
+
+   ```bash
+   npm run ingest -- ego4d --metadata data/raw/ego4d/v2/ego4d.json --narrations data/raw/ego4d/v2/annotations/narration.json
+   ```
 
 카테고리 정의는 `config/categories.json`이다. 이 파일의 `scenarios` 값은 임시값이다. 실제 메타데이터에 있는 scenario 이름과 맞는지 먼저 확인하고, 다르면 파일을 고친다. 메타데이터에 있는 scenario와 video 수는 아래 명령으로 볼 수 있다.
 
