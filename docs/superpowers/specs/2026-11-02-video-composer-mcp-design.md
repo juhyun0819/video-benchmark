@@ -51,7 +51,7 @@
 
 | | NextMe-800 (base) | HD-EPIC (요리) | Ego4D (기타) |
 |---|---|---|---|
-| 미디어 | 약 1fps JPG, 녹화별 TAR `raw/YYYY-MM-DD/YYYY-MM-DD_HHMM-HHMM.tar`, 프레임 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg` | MP4 30fps | canonical 30fps |
+| 미디어 | 약 1fps JPG, 녹화별 TAR `raw/YYYY-MM-DD/YYYY-MM-DD_HHMM-HHMM.tar`, 프레임 파일명 `..._HH-MM-SS_TZ__frame_NNNNN.jpg` | MP4 30fps | canonical 30fps (영상별 값은 `video_metadata.fps`) |
 | 시간 기준 | 벽시계 문자열 `YYYY-MM-DD HH:MM:SS` (HKT) | 영상 기준 초(float) | 영상 기준 초 + 프레임 번호 |
 | 캡션 | `raw_caption.jsonl`(30초 창 기반 구간 캡션), `L1~L5.jsonl`(계층 활동, 구간) | `HD_EPIC_Narrations.pkl`: `narration`, `start_timestamp`, `end_timestamp` 등 | `narration.json`: `narration_pass_1.narrations[]`(시점형 `timestamp_sec`), `summaries[]`(구간형 `start_sec`/`end_sec`) |
 | 상위 구조 | L1(~5s) ⊂ L2(~1m) ⊂ L3(~7m) ⊂ L4(~24m) ⊂ L5(~39m), 부모가 자식 구간을 덮음 | recipe, high-level activity (`high-level/activities/`) | 영상 단위 `scenarios` (`ego4d.json`) |
@@ -223,6 +223,11 @@ npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 - 입력은 사용자가 공식 CLI로 받은 `ego4d.json`과 `narration.json`의 로컬 경로다.
 - `config/categories.json`의 매핑(카테고리 → scenario 목록 + summary 키워드)에 맞는 영상을 고른다. 그 영상의 `narration_pass_1.summaries[]` 각 구간이 이벤트 후보이고, summary는 `summary_text`다.
 - 후보 구간에 들어가는 narration을 `level: "narration"` **시점형** 주석으로 만들고, 구간화하지 않는다. summary 자체도 `level: "summary"` 구간형 주석으로 넣는다.
+- `ego4d.json`의 영상 필드([형식 문서](https://ego4d-data.org/docs/data/metadata/))를 이렇게 쓴다.
+  - 후보의 `media.fps`는 `video_metadata.fps`다. 값이 없거나 양수가 아니면 30이다.
+  - 후보 끝이 `duration_sec`을 넘으면 `duration_sec`으로 자르고, id도 자른 끝으로 만든다. 시작이 `duration_sec` 이상이면 `beyond_duration`으로 건너뛴다.
+  - `redacted_intervals`와 겹치는 후보(경계만 맞닿는 것은 제외)는 benchmark 정답 품질을 위해 `redacted`로 건너뛴다.
+  - caption 주석은 원본 그대로 두고 자르지 않는다. export 때 블록 구간으로 거른다.
 - `--list-scenarios`로 실제 scenario 값과 영상 수를 출력해 매핑 작성을 돕는다.
 
 ### 6.5 카탈로그 레이아웃

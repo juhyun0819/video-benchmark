@@ -172,6 +172,66 @@ describe("buildEgo4dCatalog", () => {
   });
 });
 
+describe("buildEgo4dCatalog with ego4d.json video fields", () => {
+  const WALK = ["Walking on street"];
+  const summaries = (...spans: Array<[number, number]>) => ({
+    v: {
+      narration_pass_1: {
+        narrations: [{ timestamp_sec: 1, narration_text: "#C C walks" }],
+        summaries: spans.map(([start_sec, end_sec], i) => ({ start_sec, end_sec, summary_text: `walk ${i}` })),
+      },
+    },
+  });
+  function buildOne(video: Record<string, unknown>, spans: Array<[number, number]>) {
+    const m = parseEgo4dMeta({ videos: [{ video_uid: "v", scenarios: WALK, ...video }] }, "m.json");
+    const report = newReport();
+    const out = buildEgo4dCatalog(m, parseEgo4dNarrations(summaries(...spans), "n.json"), categories(), report);
+    return { ...out, report };
+  }
+
+  it("takes media fps from video_metadata.fps", () => {
+    const { candidates } = buildOne({ video_metadata: { fps: 29.97, num_frames: 8991 } }, [[0, 10]]);
+    expect(candidates[0]?.source.media).toEqual({ kind: "video", fps: 29.97 });
+  });
+
+  it("falls back to fps 30 when video_metadata or its fps is missing", () => {
+    expect(buildOne({}, [[0, 10]]).candidates[0]?.source.media).toEqual({ kind: "video", fps: 30 });
+    expect(buildOne({ video_metadata: {} }, [[0, 10]]).candidates[0]?.source.media).toEqual({ kind: "video", fps: 30 });
+  });
+
+  it("names the key path when video_metadata.fps is not a number", () => {
+    expect(() =>
+      parseEgo4dMeta({ videos: [{ video_uid: "v", scenarios: WALK, video_metadata: { fps: "30" } }] }, "m.json"),
+    ).toThrow(/m\.json: videos\.0\.video_metadata\.fps/);
+  });
+
+  it("clips a summary end that runs past duration_sec, and the id uses the clipped end", () => {
+    const { candidates, report } = buildOne({ duration_sec: 100 }, [[90, 100.4]]);
+    expect(candidates.map((c) => [c.id, c.src_start, c.src_end])).toEqual([["ego4d:v:90.000-100.000", 90, 100]]);
+    expect(report.skipped).toEqual({});
+  });
+
+  it("skips a summary starting at or after duration_sec as beyond_duration", () => {
+    const { candidates, annotations, report } = buildOne({ duration_sec: 100 }, [[100, 120], [150, 160]]);
+    expect(candidates).toEqual([]);
+    expect(report.skipped).toEqual({ beyond_duration: 2 });
+    expect(annotations.has("v")).toBe(false);
+  });
+
+  it("skips a summary overlapping a redacted interval as redacted, keeping ones that only touch it", () => {
+    const { candidates, report } = buildOne(
+      { has_redacted_regions: true, redacted_intervals: [{ start_sec: 20, end_sec: 30, start_frame: 600, end_frame: 900 }] },
+      [[0, 20], [15, 25], [25, 40], [30, 50]],
+    );
+    expect(candidates.map((c) => [c.src_start, c.src_end])).toEqual([[0, 20], [30, 50]]);
+    expect(report.skipped).toEqual({ redacted: 2 });
+  });
+
+  it("treats null redacted_intervals as no redaction", () => {
+    expect(buildOne({ redacted_intervals: null }, [[0, 10]]).candidates).toHaveLength(1);
+  });
+});
+
 describe("parse errors", () => {
   it("names the file and key path on a narration shape mismatch", () => {
     const bad = { [V1]: { narration_pass_1: { narrations: [{ timestamp_sec: "x", narration_text: "t" }], summaries: [] } } };

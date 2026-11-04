@@ -7,10 +7,29 @@ import { bump, type IngestReport } from "../jsonl.js";
 /** Files larger than this are refused before reading (exit 1, naming the file). */
 export const MAX_JSON_BYTES = 512 * 1024 * 1024;
 
-/** ego4d.json: only the fields we rely on; everything else (duration_sec, ...) passes through. */
+/** Used when ego4d.json carries no positive video_metadata.fps for a video. */
+export const DEFAULT_FPS = 30;
+
+/**
+ * ego4d.json (https://ego4d-data.org/docs/data/metadata/): only the fields we rely on; everything else
+ * (split_*, video_components, clips, ...) passes through.
+ */
 export const Ego4dMetaSchema = z
   .object({
-    videos: z.array(z.object({ video_uid: z.string(), scenarios: z.array(z.string()) }).passthrough()),
+    videos: z.array(
+      z
+        .object({
+          video_uid: z.string(),
+          scenarios: z.array(z.string()),
+          duration_sec: z.number().optional(),
+          video_metadata: z.object({ fps: z.number().optional() }).passthrough().optional(),
+          redacted_intervals: z
+            .array(z.object({ start_sec: z.number(), end_sec: z.number() }).passthrough())
+            .nullable()
+            .optional(),
+        })
+        .passthrough(),
+    ),
   })
   .passthrough();
 export type Ego4dMeta = z.infer<typeof Ego4dMetaSchema>;
@@ -93,8 +112,11 @@ function keywordMatches(cat: Category, text: string): boolean {
  *   (config order) whose keywords are empty or appear in summary_text (case-insensitive).
  * - Annotations (all pass-1 narrations as points, all valid summaries as intervals) are produced only
  *   for videos that yield at least one candidate; remap filters by span later.
- * Skip reasons: no_narration (a category-matching video without narration_pass_1), end_before_start and
- * duplicate_span (candidate summaries), invalid_time (narrations of candidate videos).
+ * - Candidate media fps is the video's video_metadata.fps (DEFAULT_FPS when absent). A candidate end past
+ *   duration_sec is clipped to it; a candidate overlapping a redacted interval is dropped.
+ * Skip reasons: no_narration (a category-matching video without narration_pass_1), end_before_start,
+ * beyond_duration (starts at or after duration_sec), redacted and duplicate_span (candidate summaries),
+ * invalid_time (narrations of candidate videos).
  */
 export function buildEgo4dCatalog(
   meta: Ego4dMeta,
@@ -108,9 +130,16 @@ export function buildEgo4dCatalog(
 
   const videos = new Map(meta.videos.map((v) => [v.video_uid, v] as const));
   for (const uid of [...videos.keys()].sort(cmpStr)) {
-    const scenarios = new Set(videos.get(uid)?.scenarios ?? []);
+    const video = videos.get(uid);
+    const scenarios = new Set(video?.scenarios ?? []);
     const matched = cats.filter((c) => c.scenarios.some((s) => scenarios.has(s)));
     if (matched.length === 0) continue;
+
+    const rawFps = video?.video_metadata?.fps;
+    const fps = rawFps !== undefined && Number.isFinite(rawFps) && rawFps > 0 ? rawFps : DEFAULT_FPS;
+    const duration = video?.duration_sec;
+    const hasDuration = duration !== undefined && Number.isFinite(duration) && duration > 0;
+    const redacted = video?.redacted_intervals ?? [];
 
     const pass1 = narrations[uid]?.narration_pass_1;
     if (!pass1) {
@@ -131,7 +160,17 @@ export function buildEgo4dCatalog(
         bump(report.skipped, "end_before_start");
         return;
       }
-      const id = `ego4d:${uid}:${s.start_sec.toFixed(3)}-${s.end_sec.toFixed(3)}`;
+      if (hasDuration && s.start_sec >= duration) {
+        bump(report.skipped, "beyond_duration");
+        return;
+      }
+      const start = s.start_sec;
+      const end = hasDuration ? Math.min(s.end_sec, duration) : s.end_sec;
+      if (redacted.some((r) => start < r.end_sec && end > r.start_sec)) {
+        bump(report.skipped, "redacted");
+        return;
+      }
+      const id = `ego4d:${uid}:${start.toFixed(3)}-${end.toFixed(3)}`;
       if (seen.has(id)) {
         bump(report.skipped, "duplicate_span");
         return;
@@ -142,9 +181,9 @@ export function buildEgo4dCatalog(
           id,
           role: "event",
           category: cat.id,
-          source: { dataset: "ego4d", video_id: uid, media: { kind: "video", fps: 30 } },
-          src_start: s.start_sec,
-          src_end: s.end_sec,
+          source: { dataset: "ego4d", video_id: uid, media: { kind: "video", fps } },
+          src_start: start,
+          src_end: end,
           summary: s.summary_text,
         }),
       );
