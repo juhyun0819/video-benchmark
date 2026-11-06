@@ -55,7 +55,7 @@
 | 시간 기준 | 벽시계 문자열 `YYYY-MM-DD HH:MM:SS` (HKT) | 영상 기준 초(float) | 영상 기준 초 + 프레임 번호 |
 | 캡션 | `raw_caption.jsonl`(30초 창 기반 구간 캡션), `L1~L5.jsonl`(계층 활동, 구간) | `HD_EPIC_Narrations.pkl`: `narration`, `start_timestamp`, `end_timestamp` 등 | `narration.json`: `narration_pass_1.narrations[]`(시점형 `timestamp_sec`), `summaries[]`(구간형 `start_sec`/`end_sec`) |
 | 상위 구조 | L1(~5s) ⊂ L2(~1m) ⊂ L3(~7m) ⊂ L4(~24m) ⊂ L5(~39m), 부모가 자식 구간을 덮음 | recipe, high-level activity (`high-level/activities/`) | 영상 단위 `scenarios` (`ego4d.json`) |
-| 접근 | HF gated (`HF_TOKEN`), CC BY-NC 4.0 | GitHub `hd-epic/hd-epic-annotations` | Ego4D 라이선스 + 공식 CLI |
+| 접근 | HF gated (`HF_TOKEN`), CC BY-NC 4.0 | GitHub `hd-epic/hd-epic-annotations` | Lab22 라이선스 + `lab22` CLI (`LAB22_API_KEY`) |
 
 ## 4. 아키텍처
 
@@ -220,7 +220,7 @@ npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 
 ### 6.4 Ego4D 어댑터 (산책·이동·취미 등)
 
-- 입력은 사용자가 공식 CLI로 받은 `ego4d.json`과 `narration.json`의 로컬 경로다.
+- 입력은 사용자가 `lab22` CLI로 받은 `ego4d.json`과 `narration.json`의 로컬 경로다.
 - `config/categories.json`의 매핑(카테고리 → scenario 목록 + summary 키워드)에 맞는 영상을 고른다. 그 영상의 `narration_pass_1.summaries[]` 각 구간이 이벤트 후보이고, summary는 `summary_text`다.
 - 후보 구간에 들어가는 narration을 `level: "narration"` **시점형** 주석으로 만들고, 구간화하지 않는다. summary 자체도 `level: "summary"` 구간형 주석으로 넣는다.
 - `ego4d.json`의 영상 필드([형식 문서](https://ego4d-data.org/docs/data/metadata/))를 이렇게 쓴다.

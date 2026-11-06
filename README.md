@@ -75,20 +75,18 @@ npm run ingest -- hdepic \
 
 ### Ego4D (산책·이동·취미 등 이벤트)
 
-Ego4D는 라이선스 승인 후 공식 [Ego4D CLI](https://github.com/facebookresearch/Ego4d/blob/main/ego4d/cli/README.md)로 annotations를 내려받는다. Ego-Exo4D(`egoexo`)는 쓰지 않는다. 필요한 파일은 메타데이터(`ego4d.json`)와 narration(`narration.json`)이고, 영상은 받지 않는다.
+Ego4D와 Ego-Exo4D 접근은 [Lab22](https://lab22.ai)로 옮겨졌다. 라이선스 승인 후 [Lab22 CLI](https://lab22.ai/docs/cli)로 annotations를 내려받는다. Ego4D에 필요한 파일은 메타데이터(`ego4d.json`)와 narration(`narration.json`)이고, 영상은 받지 않는다.
 
-1. 라이선스 승인 메일의 AWS access key와 secret key를 `~/.aws/credentials`의 `[ego4d]` 프로필에 채운다. 키는 14일 뒤 만료되며, ego4ddataset.com에서 같은 이메일로 다시 서명하면 재발급된다.
-
-   ```ini
-   [ego4d]
-   aws_access_key_id = <access key>
-   aws_secret_access_key = <secret key>
-   ```
-
-2. 다운로드 스크립트를 실행한다. CLI는 `uvx`로 그때그때 받아 실행하므로 따로 설치하지 않아도 된다. 다운로드 용량을 확인하는 프롬프트가 뜬다.
+1. Lab22의 API Keys 페이지에서 키를 만들어 `~/.config/lab22/env`에 넣는다. 파일 권한은 600으로 두고, 저장소에는 넣지 않는다. 환경 변수 `LAB22_API_KEY`가 이미 있으면 그 값을 쓴다.
 
    ```bash
-   scripts/download_ego4d.sh            # 기본 출력 경로: data/raw/ego4d
+   export LAB22_API_KEY='<API 키>'
+   ```
+
+2. 다운로드 스크립트를 실행한다. CLI는 `uvx`로 그때그때 받아 실행하므로 따로 설치하지 않아도 된다.
+
+   ```bash
+   scripts/download_lab22.sh ego4d      # 기본 출력 경로: data/raw/ego4d
    ```
 
 3. 받은 파일로 ingest한다.
@@ -104,6 +102,14 @@ npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
 ```
 
 다른 카테고리 파일을 쓰려면 `--categories <path>`를 준다(기본값은 `config/categories.json`).
+
+### Ego-Exo4D (다운로드만)
+
+Ego-Exo4D는 같은 키로 메타데이터와 annotations만 받을 수 있다. 아직 ingest 어댑터는 없다.
+
+```bash
+scripts/download_lab22.sh egoexo     # 기본 출력 경로: data/raw/egoexo
+```
 
 ingest가 끝나면 `data/catalog/` 아래에 카탈로그와 인덱스가 만들어지고, 건너뛴 항목의 사유별 개수가 JSON 리포트로 출력된다.
 
