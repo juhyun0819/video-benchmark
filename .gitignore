@@ -33,3 +33,6 @@ npm-debug.log*
 # Agent workspaces
 .claude/worktrees/
 .superpowers/
+
+# Hugging Face download state
+.cache/

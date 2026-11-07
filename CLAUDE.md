@@ -11,7 +11,8 @@
 ## 데이터 규칙
 
 - `data/`는 NextMe-800, HD-EPIC, Ego-Exo4D, Ego4D에서 파생된 라이선스 데이터다. 커밋하거나 공개하지 않는다.
-- 공개 저장소에 올리지 않는다. Hugging Face `zzu819/videomem`은 공개 저장소다.
+- 공개 저장소에 올리지 않는다. 서버 간 동기화는 비공개 저장소 `zzu819/videomem`과 `scripts/sync_data.py`로 한다. 이 스크립트는 저장소가 비공개가 아니면 올리지 않는다.
+- 동기화 대상은 `catalog`, `compositions`, `exports`, `renders`뿐이다. 원본 미디어와 `raw`는 올리지 않고 각 출처에서 받는다.
 - 테스트 fixture는 합성 데이터만 쓴다.
 - 토큰과 키 값은 출력하거나 기록하지 않는다. 있는지만 확인한다.
 - Lab22 CLI(`LAB22_API_KEY`)는 사용자가 직접 실행한다.

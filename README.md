@@ -176,9 +176,21 @@ manifest에는 다음이 들어 있다.
 - HD-EPIC, Ego4D, Ego-Exo4D는 각 데이터셋의 약관·라이선스 계약을 따른다.
 - `data/`(원본 주석, 카탈로그, 컴포지션, export된 manifest)는 라이선스가 있는 데이터에서 파생된 것이므로 절대 커밋하지 않는다. `.gitignore`에 들어 있다.
 
-## 6. 테스트
+## 6. 서버 간 데이터 동기화
+
+`data/`의 `catalog`, `compositions`, `exports`, `renders`는 비공개 Hugging Face 저장소 `zzu819/videomem`의 `data/` 폴더로 동기화한다. `huggingface-cli login`이나 `HF_TOKEN`으로 이 저장소에 접근할 수 있어야 한다.
+
+```bash
+python3 scripts/sync_data.py push   # 저장소가 비공개가 아니면 올리지 않는다
+python3 scripts/sync_data.py pull   # 로컬 compositions가 있으면 --overwrite가 필요하다
+```
+
+원본 미디어와 `data/raw`는 동기화하지 않는다. 각 데이터셋에서 직접 받는다.
+
+## 7. 테스트
 
 ```bash
 npm test
 npm run typecheck
+python3 -m pytest scripts/test_sync_data.py
 ```
