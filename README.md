@@ -1,6 +1,6 @@
 # video-benchmark
 
-NextMe-800, HD-EPIC, Ego4D의 주석(caption)을 정규화한 카탈로그로 만들고, Claude Code에서 MCP 도구로 "하루짜리 영상 타임라인"을 합성한 뒤 manifest(JSON)로 내보내는 도구다. 영상 자체는 다루지 않고, 합성된 구간 구조와 시간 재매핑된 caption만 만든다.
+NextMe-800, HD-EPIC, Ego4D, Ego-Exo4D의 주석(caption)을 정규화한 카탈로그로 만들고, Claude Code에서 MCP 도구로 "하루짜리 영상 타임라인"을 합성한 뒤 manifest(JSON)로 내보내는 도구다. 영상 자체는 다루지 않고, 합성된 구간 구조와 시간 재매핑된 caption만 만든다.
 
 구성은 npm workspaces 세 패키지다.
 
@@ -103,13 +103,19 @@ npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
 
 다른 카테고리 파일을 쓰려면 `--categories <path>`를 준다(기본값은 `config/categories.json`).
 
-### Ego-Exo4D (다운로드만)
+### Ego-Exo4D (요리·건강·자전거 수리·취미·운동 이벤트)
 
-Ego-Exo4D는 같은 키로 메타데이터와 annotations만 받을 수 있다. 아직 ingest 어댑터는 없다.
+Ego4D와 같은 키로 메타데이터와 annotations만 내려받은 뒤 ingest한다. take 하나가 이벤트 후보 하나가 된다.
 
 ```bash
 scripts/download_lab22.sh egoexo     # 기본 출력 경로: data/raw/egoexo
 ```
+
+```bash
+npm run ingest -- egoexo --root data/raw/egoexo
+```
+
+블록이 될 구간이 60초보다 짧은 take는 건너뛴다. 기준을 바꾸려면 `--min-sec <초>`를 준다. 도메인과 카테고리 매핑은 `config/categories.json`의 `dataset: "egoexo4d"` 항목이고, Cooking은 HD-EPIC과 같은 `cooking` 카테고리로 들어간다. 다른 카테고리 파일을 쓰려면 `--categories <path>`를 준다.
 
 ingest가 끝나면 `data/catalog/` 아래에 카탈로그와 인덱스가 만들어지고, 건너뛴 항목의 사유별 개수가 JSON 리포트로 출력된다.
 
@@ -167,7 +173,7 @@ manifest에는 다음이 들어 있다.
 ## 5. 라이선스와 데이터 취급
 
 - NextMe-800은 CC BY-NC 4.0이다. 연구 목적으로만 쓴다.
-- HD-EPIC과 Ego4D는 각 데이터셋의 약관·라이선스 계약을 따른다.
+- HD-EPIC, Ego4D, Ego-Exo4D는 각 데이터셋의 약관·라이선스 계약을 따른다.
 - `data/`(원본 주석, 카탈로그, 컴포지션, export된 manifest)는 라이선스가 있는 데이터에서 파생된 것이므로 절대 커밋하지 않는다. `.gitignore`에 들어 있다.
 
 ## 6. 테스트

@@ -71,9 +71,9 @@ describe("export_manifest", () => {
     expect(sc.duration).toBe(total);
     expect(sc.blocks).toBe(manifest.blocks.length);
     expect(sc.blocks).toBe(timeline.length);
-    expect(Object.keys(sc.captions_by_dataset).sort()).toEqual(["ego4d", "hdepic", "nextme800"]);
+    expect(Object.keys(sc.captions_by_dataset).sort()).toEqual(["ego4d", "egoexo4d", "hdepic", "nextme800"]);
     expect(sc.captions_by_dataset["hdepic"]).toBeGreaterThan(0);
-    const counted: Record<string, number> = { nextme800: 0, hdepic: 0, ego4d: 0 };
+    const counted: Record<string, number> = { nextme800: 0, hdepic: 0, ego4d: 0, egoexo4d: 0 };
     for (const c of manifest.tracks.captions) counted[c.provenance.dataset]! += 1;
     expect(sc.captions_by_dataset).toEqual(counted);
 

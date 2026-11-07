@@ -13,12 +13,13 @@ import {
 } from "./schema.js";
 import { resolveTimeline } from "./timeline.js";
 
-export const LEVEL_ORDER = ["L5", "L4", "L3", "L2", "L1", "raw", "summary", "narration"] as const;
+export const LEVEL_ORDER = ["L5", "L4", "L3", "L2", "L1", "raw", "summary", "keystep", "narration", "atomic"] as const;
 
 export const LICENSES: Record<Dataset, { license: string; note?: string }> = {
   nextme800: { license: "CC BY-NC 4.0", note: "Research/evaluation only; gated (mmm8383/NextMe-800)" },
   hdepic: { license: "HD-EPIC dataset terms", note: "https://hd-epic.github.io/site/" },
   ego4d: { license: "Ego4D License Agreement", note: "https://ego4d-data.org/" },
+  egoexo4d: { license: "Ego-Exo4D License Agreement", note: "https://ego-exo4d-data.org/" },
 };
 
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;

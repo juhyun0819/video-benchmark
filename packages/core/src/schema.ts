@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const DatasetSchema = z.enum(["nextme800", "hdepic", "ego4d"]);
+export const DatasetSchema = z.enum(["nextme800", "hdepic", "ego4d", "egoexo4d"]);
 export type Dataset = z.infer<typeof DatasetSchema>;
 
 export const SourceRefSchema = z.object({
@@ -8,7 +8,7 @@ export const SourceRefSchema = z.object({
   video_id: z.string(),
   media: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("frames"), approx_fps: z.literal(1), tar: z.string(), start_wallclock: z.string().optional() }),
-    z.object({ kind: z.literal("video"), fps: z.number() }),
+    z.object({ kind: z.literal("video"), fps: z.number(), path: z.string().optional() }),
   ]),
 });
 export type SourceRef = z.infer<typeof SourceRefSchema>;
@@ -28,6 +28,8 @@ export const AnnotationLevelSchema = z.enum([
   "L5",
   "narration",
   "summary",
+  "keystep",
+  "atomic",
 ]);
 export type AnnotationLevel = z.infer<typeof AnnotationLevelSchema>;
 

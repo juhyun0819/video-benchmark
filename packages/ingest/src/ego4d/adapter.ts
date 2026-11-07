@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { AnnotationSchema, BlockCandidateSchema, type Annotation, type BlockCandidate } from "@vb/core";
-import type { Categories, Category } from "../categories.js";
+import { keywordMatches, type Categories, type Category } from "../categories.js";
 import { bump, type IngestReport } from "../jsonl.js";
 
 /** Files larger than this are refused before reading (exit 1, naming the file). */
@@ -58,7 +58,7 @@ export const Ego4dNarrationsSchema = z.record(
 );
 export type Ego4dNarrations = z.infer<typeof Ego4dNarrationsSchema>;
 
-function parseWith<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, json: unknown, file: string): T {
+export function parseWith<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, json: unknown, file: string): T {
   const parsed = schema.safeParse(json);
   if (!parsed.success) {
     const issue = parsed.error.issues
@@ -99,12 +99,6 @@ export function listScenarios(meta: Ego4dMeta): Array<{ scenario: string; videos
     .sort((a, b) => b.videos - a.videos || cmpStr(a.scenario, b.scenario));
 }
 
-function keywordMatches(cat: Category, text: string): boolean {
-  if (cat.keywords.length === 0) return true;
-  const lower = text.toLowerCase();
-  return cat.keywords.some((k) => lower.includes(k.toLowerCase()));
-}
-
 /**
  * Build Ego4D event candidates and per-video annotations.
  * - A video matches a category when its scenarios intersect the category's scenarios.
@@ -124,7 +118,8 @@ export function buildEgo4dCatalog(
   categories: Categories | Category[],
   report: IngestReport,
 ): { candidates: BlockCandidate[]; annotations: Map<string, Annotation[]> } {
-  const cats = Array.isArray(categories) ? categories : categories.categories;
+  // Both datasets have a "Cooking" scenario, so a category only applies to its own dataset.
+  const cats = (Array.isArray(categories) ? categories : categories.categories).filter((c) => c.dataset === "ego4d");
   const candidates: BlockCandidate[] = [];
   const annotations = new Map<string, Annotation[]>();
 

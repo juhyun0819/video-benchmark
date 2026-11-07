@@ -20,7 +20,7 @@
 4. 지금은 MCP로 구현하고, 이후 UI로 확장한다.
 5. manifest는 벤치마크 데이터 용도다. 원본 캡션을 합성 영상의 **새 타임스탬프**로 변환해 연결한다.
 6. 원본 영상은 직접 내려받지 않는다. 주석 정보만 수집해 재조합 가능한 **통일된 형태**로 정규화한다(데이터셋마다 fps·프레임 간격 등이 다름).
-7. 데이터셋: base = **NextMe-800**, 요리 = **HD-EPIC**, 나머지(산책·이동·취미 등) = **Ego4D**에서 추출.
+7. 데이터셋: base = **NextMe-800**, 요리 = **HD-EPIC**, 나머지(산책·이동·취미 등) = **Ego4D**에서 추출. **Ego-Exo4D**는 요리·건강·자전거 수리·악기·춤·운동 이벤트를 더한다(§6.7).
 8. 이벤트는 **끼워넣기** 방식이다. 넣은 만큼 이후 base가 뒤로 밀리고 전체 길이가 늘어난다.
 9. 합성은 **블록 나열**이다. base도 여러 블록으로 나뉘어 있고, 블록 사이 슬롯에 이벤트를 0개 이상 넣는다.
 10. base 블록 단위는 **L4 활동**(평균 약 24분)이다.
@@ -69,7 +69,7 @@ packages/
 scripts/
   convert_hdepic.py   HD-EPIC pkl → JSONL (일회성)
 config/
-  categories.json     이벤트 카테고리 정의(Ego4D scenario·키워드 매핑)
+  categories.json     이벤트 카테고리 정의(Ego4D scenario·Ego-Exo4D 도메인·키워드 매핑)
 data/                 .gitignore. 카탈로그·컴포지션·export 저장
 ```
 
@@ -93,14 +93,14 @@ data/                 .gitignore. 카탈로그·컴포지션·export 저장
 ### 5.2 타입
 
 ```ts
-type Dataset = "nextme800" | "hdepic" | "ego4d";
+type Dataset = "nextme800" | "hdepic" | "ego4d" | "egoexo4d";
 
 type SourceRef = {
   dataset: Dataset;
-  video_id: string;              // NextMe recording_id | HD-EPIC video_id | Ego4D video_uid
+  video_id: string;              // NextMe recording_id | HD-EPIC video_id | Ego4D video_uid | Ego-Exo4D take_uid
   media:
     | { kind: "frames"; approx_fps: 1; tar: string; start_wallclock?: string }   // NextMe; start_wallclock = recording_start "YYYY-MM-DD HH:MM:SS" (HKT)
-    | { kind: "video"; fps: number };                  // HD-EPIC, Ego4D
+    | { kind: "video"; fps: number; path?: string };   // HD-EPIC, Ego4D, Ego-Exo4D; path = 다운로드 루트 기준 ego 영상 경로(Ego-Exo4D만)
 };
 
 type TimeSpan =
@@ -110,7 +110,7 @@ type TimeSpan =
 type Annotation = {
   id: string;                    // 원본 id 기반, 결정적
   track: "captions";
-  level: "raw" | "L1" | "L2" | "L3" | "L4" | "L5" | "narration" | "summary";
+  level: "raw" | "L1" | "L2" | "L3" | "L4" | "L5" | "narration" | "summary" | "keystep" | "atomic";
   time: TimeSpan;                // src_t 기준
   text: string;                  // 원본 그대로
   original: Record<string, unknown>;  // 원본 레코드 전체
@@ -197,6 +197,7 @@ npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
 npm run ingest -- hdepic --annotations <hd-epic-annotations 경로> --narrations <converted.jsonl> [--data <dir>]
 npm run ingest -- ego4d  --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
 npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
+npm run ingest -- egoexo --root <egoexo 다운로드 경로> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
 ```
 
 ### 6.2 NextMe-800 어댑터 (base)
@@ -241,12 +242,29 @@ data/catalog/
   hdepic/annotations/<video_id>.jsonl
   ego4d/candidates.jsonl
   ego4d/annotations/<video_uid>.jsonl
+  egoexo4d/candidates.jsonl
+  egoexo4d/annotations/<take_uid>.jsonl
 ```
 
 ### 6.6 공통 규칙
 
 - 모든 출력은 zod 스키마로 검증한다. 같은 입력이면 같은 출력이 나온다(결정적, 멱등).
 - 실행이 끝나면 수집 수와 건너뛴 수(이유별)를 요약해 출력한다.
+
+### 6.7 Ego-Exo4D 어댑터 (요리·건강·자전거 수리·취미·운동)
+
+- 입력은 `lab22` CLI로 받은 다운로드 루트다. `takes.json`과 `annotations/`의 `atomic_descriptions_{train,val}.json`, `keystep_{train,val}.json`을 읽는다. test split에는 이 주석이 없어 후보가 되지 않는다.
+- **take 하나가 이벤트 후보 하나다.** keystep은 중앙값 6.4초라 시간표 블록으로 쓰기에 짧다.
+  - 구간은 `task_start_sec`~`task_end_sec`이고, 끝이 `duration_sec`을 넘으면 자른다. 값이 없거나 쓸 수 없으면(시작이 음수, 끝 ≤ 시작, 시작 ≥ `duration_sec`) take 전체를 쓰고 `egoexo4d:whole_take_span`으로 센다.
+  - 구간이 `--min-sec`(기본 60초) 미만이면 `too_short`로 건너뛴다. 영상 길이가 아니라 블록이 될 구간으로 잰다.
+  - `duration_sec`이 양수가 아니면 `invalid_time`, ego RGB 영상이 없으면 `no_ego_video`, 쓸 수 있는 atomic 주석이 없으면 `no_atomic`으로 건너뛴다.
+- `config/categories.json`에서 `dataset: "egoexo4d"`인 카테고리만 쓴다. `scenarios`는 `parent_task_name`과 맞추고, `keywords`는 `task_name`에서 찾는다. Ego4D에도 같은 이름의 scenario가 있으므로 어댑터는 자기 데이터셋의 카테고리만 본다. Cooking은 `cooking` 카테고리로 들어가 HD-EPIC 후보와 함께 보인다.
+- `media.fps`는 30이다(`takes.json`에 값은 없지만 `timesync` 프레임 수와 길이로 계산하면 모든 take가 30이다). `media.path`는 `root_dir`과 aria 카메라 `rgb`의 `relative_path`를 이은 경로다.
+- summary는 `task_name`에 시간순 keystep 이름 앞 3개(중복 제외)를 붙인다. keystep이 없으면 `task_name (take_name)`이다. 같은 과제의 take를 구분하기 위해서다.
+- 주석은 원본 그대로 복사한다.
+  - 거부되지 않고 내용이 있는 첫 atomic 주석자만 `level: "atomic"` **시점형**으로 넣는다. 주석자를 합치면 같은 장면이 중복된다.
+  - keystep 구간을 `level: "keystep"` 구간형으로 넣는다. 끝 ≤ 시작이면 `end_before_start`로 건너뛴다.
+  - `expert_commentary`는 장면 묘사보다 평가에 가까워 제외한다.
 
 ## 7. 합성과 재매핑 (core)
 

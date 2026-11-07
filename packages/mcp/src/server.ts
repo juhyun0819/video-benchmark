@@ -444,13 +444,13 @@ function registerExportTools(server: McpServer, ctx: ToolContext): void {
       const comp = ctx.store.load(composition_id);
       const manifest = buildManifest(comp, ctx.catalog(), ctx.now());
       const path = ctx.store.writeExport(manifest);
-      const captions_by_dataset: Record<Dataset, number> = { nextme800: 0, hdepic: 0, ego4d: 0 };
+      const captions_by_dataset: Record<Dataset, number> = { nextme800: 0, hdepic: 0, ego4d: 0, egoexo4d: 0 };
       for (const c of manifest.tracks.captions) captions_by_dataset[c.provenance.dataset] += 1;
       const blocks = manifest.blocks.length;
       const text = [
         `manifest 저장: ${path}`,
         `총 ${formatTotal(manifest.duration)} · ${blocks}개 블록 · rev ${manifest.composition_revision}`,
-        `caption: nextme800 ${captions_by_dataset.nextme800} · hdepic ${captions_by_dataset.hdepic} · ego4d ${captions_by_dataset.ego4d}`,
+        `caption: nextme800 ${captions_by_dataset.nextme800} · hdepic ${captions_by_dataset.hdepic} · ego4d ${captions_by_dataset.ego4d} · egoexo4d ${captions_by_dataset.egoexo4d}`,
       ].join("\n");
       return ok(text, { path, duration: manifest.duration, blocks, captions_by_dataset });
     }),

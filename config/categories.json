@@ -3,6 +3,14 @@
     { "id": "walking", "label": "산책·보행", "dataset": "ego4d", "scenarios": ["Walking on street"], "keywords": [] },
     { "id": "transit", "label": "차량·대중교통 이동", "dataset": "ego4d", "scenarios": ["Car - commuting, road trip"], "keywords": [] },
     { "id": "hobby_lego", "label": "취미: 레고", "dataset": "ego4d", "scenarios": ["Playing board games"], "keywords": ["lego"] },
-    { "id": "hobby_tent", "label": "취미: 텐트", "dataset": "ego4d", "scenarios": ["Camping"], "keywords": ["tent"] }
+    { "id": "hobby_tent", "label": "취미: 텐트", "dataset": "ego4d", "scenarios": ["Camping"], "keywords": ["tent"] },
+    { "id": "cooking", "label": "요리", "dataset": "egoexo4d", "scenarios": ["Cooking"], "keywords": [] },
+    { "id": "health", "label": "건강: 코로나 검사·심폐소생술", "dataset": "egoexo4d", "scenarios": ["Health"], "keywords": [] },
+    { "id": "bike_repair", "label": "자전거 수리", "dataset": "egoexo4d", "scenarios": ["Bike Repair"], "keywords": [] },
+    { "id": "hobby_music", "label": "취미: 악기 연주", "dataset": "egoexo4d", "scenarios": ["Music"], "keywords": [] },
+    { "id": "hobby_dance", "label": "취미: 춤", "dataset": "egoexo4d", "scenarios": ["Dance"], "keywords": [] },
+    { "id": "sport_basketball", "label": "운동: 농구", "dataset": "egoexo4d", "scenarios": ["Basketball"], "keywords": [] },
+    { "id": "sport_soccer", "label": "운동: 축구", "dataset": "egoexo4d", "scenarios": ["Soccer"], "keywords": [] },
+    { "id": "sport_climbing", "label": "운동: 암벽 등반", "dataset": "egoexo4d", "scenarios": ["Rock Climbing"], "keywords": [] }
   ]
 }

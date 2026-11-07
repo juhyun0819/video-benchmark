@@ -113,6 +113,46 @@ describe("buildManifest", () => {
     expect(full.licenses.map((l) => l.dataset)).toEqual(["nextme800", "hdepic", "ego4d"]);
   });
 
+  it("exports an Ego-Exo4D block with its ego video path, license and keystep before atomic at one start", () => {
+    const catalog = makeFixtureCatalog();
+    const TAKE = "egoexo4d:take-1:5.000-65.000";
+    const media = { kind: "video", fps: 30, path: "takes/t1/frame_aligned_videos/aria01_214-1.mp4" } as const;
+    const withTake: Catalog = {
+      getBaseDay: (d) => catalog.getBaseDay(d),
+      getAnnotations: (ds, v) =>
+        ds === "egoexo4d"
+          ? [
+              { id: "a0", track: "captions", level: "atomic", time: { kind: "point", t: 10 }, text: "C cracks an egg.", original: {} },
+              { id: "k0", track: "captions", level: "keystep", time: { kind: "interval", start: 10, end: 20 }, text: "Crack eggs", original: {} },
+            ]
+          : catalog.getAnnotations(ds, v),
+      getCandidate: (id) =>
+        id === TAKE
+          ? {
+              id: TAKE,
+              role: "event",
+              category: "cooking",
+              source: { dataset: "egoexo4d", video_id: "take-1", media },
+              src_start: 5,
+              src_end: 65,
+              summary: "Cooking an Omelet",
+            }
+          : catalog.getCandidate(id),
+    };
+    const comp = insertEvent(
+      createComposition(catalog.baseDay, { genId: () => "c1" }),
+      withTake,
+      { slot: 0, candidateId: TAKE },
+      () => "r1",
+    );
+
+    const m = buildManifest(comp, withTake, NOW);
+
+    expect(m.blocks.find((b) => b.block_id === "evt:r1")?.source.media).toEqual(media);
+    expect(m.licenses.find((l) => l.dataset === "egoexo4d")?.license).toBe("Ego-Exo4D License Agreement");
+    expect(m.tracks.captions.filter((c) => c.block_id === "evt:r1").map((c) => c.level)).toEqual(["keystep", "atomic"]);
+  });
+
   it("rounds composed values to 3 decimals but keeps src values verbatim", () => {
     const catalog = makeFixtureCatalog();
     const odd: Catalog = {

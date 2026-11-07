@@ -19,6 +19,12 @@ import {
   parseEgo4dNarrations,
   readJsonFile,
 } from "./ego4d/adapter.js";
+import {
+  buildEgoExoCatalog,
+  parseEgoExoAtomic,
+  parseEgoExoKeysteps,
+  parseEgoExoTakes,
+} from "./egoexo/adapter.js";
 import { bump, newReport, readJsonl, type IngestReport } from "./jsonl.js";
 import { buildNextmeDay, parseRecordingsCsv } from "./nextme/adapter.js";
 import { makeHfFetcher } from "./nextme/hf.js";
@@ -29,6 +35,7 @@ const USAGE = `Usage:
   npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
+  npm run ingest -- egoexo --root <egoexo download dir> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
 
 HD-EPIC narrations come from a one-off pkl conversion:
   uv run --isolated --no-project --with pandas --with "numpy>=2" \\
@@ -179,6 +186,46 @@ export function ingestEgo4d(opts: IngestEgo4dOptions): IngestReport {
   return report;
 }
 
+export interface IngestEgoExoOptions {
+  /** Ego-Exo4D download root: holds takes.json and annotations/. */
+  rootDir: string;
+  categoriesPath: string;
+  dataDir: string;
+  now: Date;
+  /** Minimum block length in seconds (adapter default when omitted). */
+  minSec?: number;
+}
+
+/** Read the Ego-Exo4D takes and train/val annotations, build one candidate per take, write the catalog. */
+export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
+  const report = newReport();
+  const categories = loadCategories(opts.categoriesPath);
+  const takesPath = join(opts.rootDir, "takes.json");
+  const takes = parseEgoExoTakes(readJsonFile(takesPath), takesPath);
+  const splitPath = (name: string, split: string) => join(opts.rootDir, "annotations", `${name}_${split}.json`);
+  const atomicTrain = splitPath("atomic_descriptions", "train");
+  const atomicVal = splitPath("atomic_descriptions", "val");
+  const keystepTrain = splitPath("keystep", "train");
+  const keystepVal = splitPath("keystep", "val");
+  const atomic = {
+    ...parseEgoExoAtomic(readJsonFile(atomicTrain), atomicTrain),
+    ...parseEgoExoAtomic(readJsonFile(atomicVal), atomicVal),
+  };
+  const keysteps = {
+    ...parseEgoExoKeysteps(readJsonFile(keystepTrain), keystepTrain),
+    ...parseEgoExoKeysteps(readJsonFile(keystepVal), keystepVal),
+  };
+
+  // Build everything first so a malformed input writes nothing.
+  const { candidates, annotations } = buildEgoExoCatalog(takes, atomic, keysteps, categories, report, opts.minSec);
+
+  const writer = new CatalogWriter(opts.dataDir);
+  writer.writeCandidates("egoexo4d", candidates);
+  for (const [takeUid, anns] of annotations) writer.writeAnnotations("egoexo4d", takeUid, anns);
+  rebuildIndex(opts.dataDir, opts.now);
+  return report;
+}
+
 export async function main(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
@@ -194,6 +241,8 @@ export async function main(
       metadata: { type: "string" },
       categories: { type: "string" },
       "list-scenarios": { type: "boolean" },
+      root: { type: "string" },
+      "min-sec": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
   });
@@ -267,6 +316,27 @@ export async function main(
       categoriesPath: values.categories ?? resolve("config", "categories.json"),
       dataDir,
       now: new Date(),
+    });
+    console.log(JSON.stringify(report, null, 2));
+    return 0;
+  }
+
+  if (command === "egoexo") {
+    if (!values.root) {
+      console.error("egoexo: --root <egoexo download dir> is required");
+      return 1;
+    }
+    const minSec = values["min-sec"] === undefined ? undefined : Number(values["min-sec"]);
+    if (minSec !== undefined && !(Number.isFinite(minSec) && minSec >= 0)) {
+      console.error(`egoexo: --min-sec must be a non-negative number, got "${values["min-sec"]}"`);
+      return 1;
+    }
+    const report = ingestEgoExo({
+      rootDir: values.root,
+      categoriesPath: values.categories ?? resolve("config", "categories.json"),
+      dataDir,
+      now: new Date(),
+      minSec,
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;
