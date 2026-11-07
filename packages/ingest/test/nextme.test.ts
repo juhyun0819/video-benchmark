@@ -258,7 +258,7 @@ describe("makeHfFetcher", () => {
         () => undefined,
         (e: Error) => e,
       );
-      expect(err?.message).toBe("HF 접근 거부: NextMe-800 접근 승인과 HF_TOKEN을 확인하세요");
+      expect(err?.message).toBe("HF access denied: check NextMe-800 access approval and HF_TOKEN");
       expect(err?.message).not.toContain("secret-token");
     }
   });

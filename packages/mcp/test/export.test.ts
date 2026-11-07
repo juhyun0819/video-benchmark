@@ -55,7 +55,7 @@ describe("export_manifest", () => {
     const timeline = (tt.structuredContent as { timeline: Array<{ composed_end: number }> }).timeline;
     const total = timeline[timeline.length - 1]!.composed_end;
     const header = textOf(tt).split("\n")[0]!;
-    const headerTotal = /총 (\d+:\d{2}:\d{2})/.exec(header)![1]!;
+    const headerTotal = /total (\d+:\d{2}:\d{2})/.exec(header)![1]!;
 
     const r = await session.call("export_manifest", { composition_id: id });
     expect(r.isError).toBeFalsy();
@@ -79,8 +79,8 @@ describe("export_manifest", () => {
 
     const text = textOf(r);
     expect(text).toContain(sc.path);
-    expect(text).toContain(`총 ${headerTotal}`);
-    expect(text).toContain(`${sc.blocks}개 블록`);
+    expect(text).toContain(`total ${headerTotal}`);
+    expect(text).toContain(`blocks: ${sc.blocks}`);
     expect(text).toContain(`hdepic ${counted["hdepic"]}`);
   });
 
@@ -104,7 +104,7 @@ describe("export_manifest", () => {
     expect(ManifestSchema.parse(JSON.parse(readFileSync(pc, "utf8"))).composition_revision).toBe(3);
   });
 
-  it("export with missing candidate returns 카탈로그에 없는 후보 and writes nothing", async () => {
+  it("export with missing candidate returns candidates not in catalog and writes nothing", async () => {
     const c = await session.call("create_composition", { day: "2026-04-15" });
     const id = (c.structuredContent as { composition: { id: string } }).composition.id;
     await session.call("insert_event", { composition_id: id, slot: 0, candidate_id: IDS.cooking });
@@ -117,11 +117,11 @@ describe("export_manifest", () => {
 
     const r = await session.call("export_manifest", { composition_id: id });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain(`카탈로그에 없는 후보: ${IDS.cooking}`);
+    expect(textOf(r)).toContain(`candidates not in catalog: ${IDS.cooking}`);
     expect(existsSync(join(dir, "exports"))).toBe(false);
   });
 
-  it("base day that changed shape after composition creation: get_composition and export_manifest fail in Korean, export writes nothing", async () => {
+  it("base day that changed shape after composition creation: get_composition and export_manifest fail, export writes nothing", async () => {
     const c = await session.call("create_composition", { day: "2026-04-15" });
     const id = (c.structuredContent as { composition: { id: string } }).composition.id;
 
@@ -131,7 +131,7 @@ describe("export_manifest", () => {
     day.blocks.pop();
     writeFileSync(file, JSON.stringify(day));
 
-    const expected = "base day 2026-04-15의 블록 구성이 바뀜 (슬롯 4개, 현재 필요 3개) — 새 composition을 만드세요";
+    const expected = "base day 2026-04-15 block layout changed (slots: 4, required now: 3) — create a new composition";
     const g = await session.call("get_composition", { composition_id: id });
     expect(g.isError).toBe(true);
     expect(textOf(g)).toBe(expected);

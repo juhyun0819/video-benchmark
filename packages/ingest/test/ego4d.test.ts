@@ -38,10 +38,10 @@ afterEach(() => {
 });
 
 describe("loadCategories", () => {
-  it("loads the shipped config with Korean labels", () => {
+  it("loads the shipped config with its labels", () => {
     const cats = categories().categories.filter((c) => c.dataset === "ego4d");
     expect(cats.map((c) => c.id)).toEqual(["walking", "transit", "hobby_lego", "hobby_tent"]);
-    expect(cats.map((c) => c.label)).toEqual(["산책·보행", "차량·대중교통 이동", "취미: 레고", "취미: 텐트"]);
+    expect(cats.map((c) => c.label)).toEqual(["Walking", "Driving and transit", "Hobby: Lego", "Hobby: Tent"]);
     expect(cats[2]).toMatchObject({ scenarios: ["Playing board games"], keywords: ["lego"] });
   });
 

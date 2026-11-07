@@ -3,12 +3,10 @@ import { AnnotationSchema, BlockCandidateSchema, type Annotation, type BlockCand
 import { keywordMatches, type Categories, type Category } from "../categories.js";
 import { parseWith } from "../ego4d/adapter.js";
 import { bump, type IngestReport } from "../jsonl.js";
+import { DEFAULT_MIN_EVENT_SEC } from "../time.js";
 
 /** takes.json has no fps field; (timesync_end_idx - timesync_start_idx) / duration_sec is 30 for every take. */
 export const EGOEXO_FPS = 30;
-
-/** Shorter blocks are too small for a timetable (Rock Climbing takes have a 33 s median). */
-export const DEFAULT_MIN_TAKE_SEC = 60;
 
 /** takes.json: only the fields we rely on; everything else passes through. */
 export const EgoExoTakeSchema = z
@@ -105,7 +103,7 @@ export function buildEgoExoCatalog(
   keysteps: EgoExoKeysteps,
   categories: Categories | Category[],
   report: IngestReport,
-  minSec: number = DEFAULT_MIN_TAKE_SEC,
+  minSec: number = DEFAULT_MIN_EVENT_SEC,
 ): { candidates: BlockCandidate[]; annotations: Map<string, Annotation[]> } {
   const cats = (Array.isArray(categories) ? categories : categories.categories).filter(
     (c) => c.dataset === "egoexo4d",

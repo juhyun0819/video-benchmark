@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnnotationSchema, BlockCandidateSchema } from "@vb/core";
-import { ingestHdepic } from "../src/cli.js";
+import { ingestHdepic, main } from "../src/cli.js";
 import {
   buildHdepicCatalog,
   HdNarrationSchema,
@@ -28,7 +28,7 @@ const erratum = () =>
   parseErratumCsv(read("annotations/narrations-and-action-segments/HD_EPIC_Narrations_erratum.csv"), "e.csv");
 
 function build(report: IngestReport = newReport()) {
-  const out = buildHdepicCatalog(segments(), narrations(), recipes(), report, erratum());
+  const out = buildHdepicCatalog(segments(), narrations(), recipes(), report, erratum(), 0);
   return { ...out, report };
 }
 
@@ -156,6 +156,7 @@ describe("ingestHdepic", () => {
     narrationsPath: join(FIX, "HD_EPIC_Narrations.jsonl"),
     dataDir: dir,
     now: new Date("2026-11-03T00:00:00.000Z"),
+    minSec: 0,
   });
 
   it("writes candidates, per-video annotations and the index", () => {
@@ -176,5 +177,65 @@ describe("ingestHdepic", () => {
     const first = readFileSync(path, "utf8");
     ingestHdepic(opts());
     expect(readFileSync(path, "utf8")).toBe(first);
+  });
+
+  it("cli applies --min-sec and rejects a bad value", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const args = ["hdepic", "--annotations", ANN, "--narrations", join(FIX, "HD_EPIC_Narrations.jsonl"), "--data", dir];
+
+    await expect(main([...args, "--min-sec", "soon"], {})).resolves.toBe(1);
+    expect(err.mock.calls[0]?.[0]).toMatch(/--min-sec/);
+
+    await expect(main([...args, "--min-sec", "150"], {})).resolves.toBe(0);
+    const ids = readFileSync(join(dir, "catalog/hdepic/candidates.jsonl"), "utf8");
+    expect(ids).toContain(`hdepic:${V2}:100.000-300.000`);
+    expect(ids).not.toContain(`hdepic:${V2}:0.000-100.000`);
+    expect(JSON.parse(log.mock.calls[0]?.[0] as string).skipped["too_short"]).toBeGreaterThan(0);
+    log.mockRestore();
+    err.mockRestore();
+  });
+});
+
+describe("buildHdepicCatalog minimum length", () => {
+  const seg = (start: number, end: number | "end", video_id = "P01-x") => ({ video_id, start, end, label: "step" });
+  const narr = (id: string, end_timestamp: number, video_id = "P01-x") => ({
+    unique_narration_id: id,
+    video_id,
+    narration: "Stir the pan",
+    start_timestamp: 1,
+    end_timestamp,
+  });
+
+  it("drops candidates under 60 seconds by default and keeps exactly 60", () => {
+    const report = newReport();
+    const { candidates } = buildHdepicCatalog([seg(0, 59.9), seg(100, 160)], [], {}, report);
+    expect(candidates.map((c) => c.id)).toEqual(["hdepic:P01-x:100.000-160.000"]);
+    expect(report.skipped["too_short"]).toBe(1);
+  });
+
+  it("measures an open end after resolving it", () => {
+    const short = newReport();
+    expect(buildHdepicCatalog([seg(0, "end")], [narr("a", 30)], {}, short).candidates).toEqual([]);
+    expect(short.skipped["too_short"]).toBe(1);
+
+    const long = buildHdepicCatalog([seg(0, "end")], [narr("a", 90)], {}, newReport());
+    expect(long.candidates.map((c) => c.src_end)).toEqual([90]);
+  });
+
+  it("keeps no annotations for a video left without candidates", () => {
+    const { annotations } = buildHdepicCatalog(
+      [seg(0, 30, "P01-short"), seg(0, 90, "P01-long")],
+      [narr("a", 5, "P01-short"), narr("b", 5, "P01-long")],
+      {},
+      newReport(),
+    );
+    expect([...annotations.keys()]).toEqual(["P01-long"]);
+  });
+
+  it("honours a custom minimum length", () => {
+    const segs = [seg(0, 30)];
+    expect(buildHdepicCatalog(segs, [], {}, newReport(), new Set(), 30).candidates).toHaveLength(1);
+    expect(buildHdepicCatalog(segs, [], {}, newReport(), new Set(), 31).candidates).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@ import { parse } from "csv-parse/sync";
 import { z } from "zod";
 import { AnnotationSchema, BlockCandidateSchema, type Annotation, type BlockCandidate } from "@vb/core";
 import { bump, type IngestReport } from "../jsonl.js";
+import { DEFAULT_MIN_EVENT_SEC } from "../time.js";
 
 /** Columns of high-level/activities/PXX_recipe_timestamps.csv (spec section 11, HD-EPIC findings). */
 export const HIGH_LEVEL_COLUMNS = {
@@ -101,7 +102,9 @@ function recipeNames(seg: HighLevelSegment, recipes: Record<string, { name: stri
  *   for videos that yield at least one candidate.
  * - Segments resolving to the same video and span (e.g. one activity listed per recipe) become one candidate
  *   with the recipe names merged; the extra rows count as skipped: duplicate_span.
- * Skip reasons: invalid_time, open_end, end_before_start (segments and narrations), erratum, duplicate_span.
+ * - A span under `minSec`, measured after resolving `end`, is skipped as too_short.
+ * Skip reasons: invalid_time, open_end, end_before_start (segments and narrations), too_short, erratum,
+ * duplicate_span.
  */
 export function buildHdepicCatalog(
   segments: HighLevelSegment[],
@@ -109,6 +112,7 @@ export function buildHdepicCatalog(
   recipes: Record<string, { name: string }>,
   report: IngestReport,
   erratum: ReadonlySet<string> = new Set(),
+  minSec: number = DEFAULT_MIN_EVENT_SEC,
 ): { candidates: BlockCandidate[]; annotations: Map<string, Annotation[]> } {
   // Narrations: drop erratum / bad ranges, group by video.
   const narrByVideo = new Map<string, HdNarration[]>();
@@ -166,6 +170,10 @@ export function buildHdepicCatalog(
       }
       if (seg.start >= end) {
         bump(report.skipped, "end_before_start");
+        return;
+      }
+      if (end - seg.start < minSec) {
+        bump(report.skipped, "too_short");
         return;
       }
       const id = `hdepic:${videoId}:${seg.start.toFixed(3)}-${end.toFixed(3)}`;

@@ -11,14 +11,14 @@ describe("renderTimetable", () => {
     const text = renderTimetable(comp, resolveTimeline(comp, catalog));
     expect(text).toBe(
       [
-        "rev 1 · 총 0:31:00",
-        "S0  (비어 있음)",
+        "rev 1 · total 0:31:00",
+        "S0  (empty)",
         "B0  00:00:00–00:10:00  base      Morning at home",
         "S1  00:10:00–00:11:00  cooking   evt:a1  Cooking onions in a pan",
         "B1  00:11:00–00:26:00  base      Commute and arrival",
-        "S2  (비어 있음)",
+        "S2  (empty)",
         "B2  00:26:00–00:31:00  base      Early afternoon desk work",
-        "S3  (비어 있음)",
+        "S3  (empty)",
       ].join("\n"),
     );
   });

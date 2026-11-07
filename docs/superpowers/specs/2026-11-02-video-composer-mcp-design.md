@@ -194,7 +194,7 @@ type Manifest = {
 
 ```
 npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
-npm run ingest -- hdepic --annotations <hd-epic-annotations 경로> --narrations <converted.jsonl> [--data <dir>]
+npm run ingest -- hdepic --annotations <hd-epic-annotations 경로> --narrations <converted.jsonl> [--min-sec 60] [--data <dir>]
 npm run ingest -- ego4d  --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
 npm run ingest -- ego4d  --metadata <ego4d.json> --list-scenarios
 npm run ingest -- egoexo --root <egoexo 다운로드 경로> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
@@ -217,6 +217,7 @@ npm run ingest -- egoexo --root <egoexo 다운로드 경로> [--min-sec 60] [--c
 
 - `scripts/convert_hdepic.py`가 `HD_EPIC_Narrations.pkl`을 JSONL로 한 번 변환한다.
 - 이벤트 후보는 `high-level/activities/PXX_recipe_timestamps.csv`의 high-level activity 구간이고, category는 `cooking`이다. summary는 `high_level_activity_label`에 레시피 이름이 있으면 덧붙인다.
+- 구간이 `--min-sec`(기본 60초) 미만이면 시간표 블록으로 쓰기에 짧으므로 `too_short`로 건너뛴다. 끝이 `end`인 행은 끝을 정한 뒤에 잰다.
 - 후보 구간에 들어가는 narration을 `level: "narration"` 구간형 주석으로 만든다.
 
 ### 6.4 Ego4D 어댑터 (산책·이동·취미 등)
@@ -347,12 +348,12 @@ data/exports/<id>-r<revision>.manifest.json
 - 편집 도구와 `get_composition`은 갱신된 시간표를 텍스트와 `structuredContent`로 함께 돌려준다. 텍스트 예시는 아래와 같다.
 
 ```
-rev 3 · 총 7:42:10
-S0  (비어 있음)
+rev 3 · total 7:42:10
+S0  (empty)
 B0  00:00:00–00:23:41  base     Working at desk, reviewing documents
 S1  00:23:41–00:41:02  cooking  evt:a1  P01 · Making breakfast (omelette)
 B1  00:41:02–01:05:19  base     Video call with colleagues
-S2  (비어 있음)
+S2  (empty)
 ```
 
 - `expected_revision`이 현재 revision과 다르면 변경을 거부하고 현재 revision을 알린다.
@@ -370,7 +371,7 @@ S2  (비어 있음)
   - 레코드 수준 문제(시각 파싱 실패, `end < start`)는 그 레코드만 건너뛰고 이유별로 집계한다.
 - **저장:** 컴포지션과 manifest는 원자적으로 쓴다(임시 파일에 쓴 뒤 rename).
 - **MCP**
-  - 잘못된 입력에는 `isError`와 바로 고칠 수 있는 메시지를 돌려준다. 예: `slot 21은 범위 밖 (0..20)`, `candidate_id 없음 — list_event_candidates로 확인`.
+  - 잘못된 입력에는 `isError`와 바로 고칠 수 있는 메시지를 돌려준다. 메시지는 영어다. 예: `slot 21 out of range (0..20)`, `candidate_id not found: x — check with list_event_candidates`.
   - 카탈로그가 없으면 ingest 실행 방법을 안내한다.
 
 ## 10. 테스트

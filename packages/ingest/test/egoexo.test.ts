@@ -18,8 +18,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CATS_PATH = resolve(HERE, "..", "..", "..", "config", "categories.json");
 
 const CATS: Category[] = [
-  { id: "cooking", label: "요리", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: [] },
-  { id: "bike_repair", label: "자전거 수리", dataset: "egoexo4d", scenarios: ["Bike Repair"], keywords: [] },
+  { id: "cooking", label: "Cooking", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: [] },
+  { id: "bike_repair", label: "Bike repair", dataset: "egoexo4d", scenarios: ["Bike Repair"], keywords: [] },
 ];
 
 const take = (over: Record<string, unknown> = {}) => ({
@@ -170,8 +170,8 @@ describe("buildEgoExoCatalog candidates", () => {
 
   it("uses category keywords against the task name", () => {
     const cats: Category[] = [
-      { id: "eggs", label: "달걀", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: ["omelet"] },
-      { id: "salad", label: "샐러드", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: ["salad"] },
+      { id: "eggs", label: "Eggs", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: ["omelet"] },
+      { id: "salad", label: "Salad", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: ["salad"] },
     ];
     const takes = takesOf(
       take({ take_uid: "take-a", task_name: "Cooking an OMELET" }),

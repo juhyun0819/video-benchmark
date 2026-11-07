@@ -31,7 +31,7 @@ describe("edit tools", () => {
     expect(id).toBe("id1");
     expect(created.composition.revision).toBe(0);
     expect(existsSync(join(dir, "compositions", `${id}.json`))).toBe(true);
-    expect(textOf(c)).toContain("rev 0 · 총 0:30:00");
+    expect(textOf(c)).toContain("rev 0 · total 0:30:00");
 
     const ins = await session.call("insert_event", {
       composition_id: id,
@@ -64,7 +64,7 @@ describe("edit tools", () => {
     expect(onDisk(id).slots.flat()).toHaveLength(0);
 
     const got = await session.call("get_composition", { composition_id: id });
-    expect(textOf(got)).toContain("rev 3 · 총 0:30:00");
+    expect(textOf(got)).toContain("rev 3 · total 0:30:00");
 
     const list = await session.call("list_compositions");
     expect(list.structuredContent).toEqual({
@@ -72,7 +72,7 @@ describe("edit tools", () => {
     });
   });
 
-  it("insert with stale expected_revision returns revision 불일치 and does not save", async () => {
+  it("insert with stale expected_revision returns revision mismatch and does not save", async () => {
     const c = await session.call("create_composition", { day: "2026-04-15" });
     const id = (c.structuredContent as { composition: { id: string } }).composition.id;
     const r = await session.call("insert_event", {
@@ -82,25 +82,25 @@ describe("edit tools", () => {
       expected_revision: 5,
     });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain("revision 불일치");
-    expect(textOf(r)).toContain("현재 0");
+    expect(textOf(r)).toContain("revision mismatch");
+    expect(textOf(r)).toContain("current 0");
     expect(onDisk(id).revision).toBe(0);
     expect(onDisk(id).slots.flat()).toHaveLength(0);
   });
 
-  it("slot out of range returns Korean range message", async () => {
+  it("slot out of range returns a range message", async () => {
     const c = await session.call("create_composition", { day: "2026-04-15" });
     const id = (c.structuredContent as { composition: { id: string } }).composition.id;
     const r = await session.call("insert_event", { composition_id: id, slot: 21, candidate_id: IDS.cooking });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toBe("slot 21은 범위 밖 (0..3)");
+    expect(textOf(r)).toBe("slot 21 out of range (0..3)");
     expect(onDisk(id).revision).toBe(0);
   });
 
   it("create_composition with unknown day is an error", async () => {
     const r = await session.call("create_composition", { day: "1999-01-01" });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toBe("base day 없음: 1999-01-01 — list_base_days로 확인");
+    expect(textOf(r)).toBe("base day not found: 1999-01-01 — check with list_base_days");
   });
 
   it("get_composition on composition referencing removed candidate lists missing ids", async () => {
@@ -116,7 +116,7 @@ describe("edit tools", () => {
 
     const r = await session.call("get_composition", { composition_id: id });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain(`카탈로그에 없는 후보: ${IDS.cooking}`);
+    expect(textOf(r)).toContain(`candidates not in catalog: ${IDS.cooking}`);
   });
 
   /** composition with a walking ref (id2) in slot 0; walking then removed from the catalog. */
@@ -138,8 +138,8 @@ describe("edit tools", () => {
     const { id } = await staleComposition();
     const r = await session.call("insert_event", { composition_id: id, slot: 1, candidate_id: IDS.cooking });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toContain(`카탈로그에 없는 후보: ${IDS.walking}`);
-    expect(textOf(r)).toContain(" (변경 사항은 rev 2으로 저장됨)");
+    expect(textOf(r)).toContain(`candidates not in catalog: ${IDS.walking}`);
+    expect(textOf(r)).toContain(" (changes saved as rev 2)");
     expect(onDisk(id).revision).toBe(2);
     expect(onDisk(id).slots[1]).toHaveLength(1);
   });
@@ -148,7 +148,7 @@ describe("edit tools", () => {
     const { id, refId } = await staleComposition();
     const r = await session.call("remove_event", { composition_id: id, ref_id: refId });
     expect(r.isError).toBeFalsy();
-    expect(textOf(r)).toContain("rev 2 · 총 0:30:00");
+    expect(textOf(r)).toContain("rev 2 · total 0:30:00");
     expect(onDisk(id).revision).toBe(2);
     const got = await session.call("get_composition", { composition_id: id });
     expect(got.isError).toBeFalsy();

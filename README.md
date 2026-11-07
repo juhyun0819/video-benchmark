@@ -71,7 +71,7 @@ npm run ingest -- hdepic \
   --narrations data/raw/hdepic_narrations.jsonl
 ```
 
-`--annotations`는 clone한 저장소의 루트 디렉터리다.
+`--annotations`는 clone한 저장소의 루트 디렉터리다. 60초보다 짧은 구간은 시간표 블록으로 쓰기에 짧아 건너뛴다. 기준을 바꾸려면 `--min-sec <초>`를 준다.
 
 ### Ego4D (산책·이동·취미 등 이벤트)
 
@@ -162,7 +162,7 @@ claude mcp add video-composer -e VIDEO_BENCH_DATA_DIR=$PWD/data -- npx tsx $PWD/
 data/exports/<composition_id>-r<revision>.manifest.json
 ```
 
-반환값은 파일 경로, 총 길이(`H:MM:SS`), 블록 수, 데이터셋별 caption 수다. 참조한 후보가 카탈로그에서 사라졌으면 `카탈로그에 없는 후보: …`로 실패하고 아무것도 쓰지 않는다.
+반환값은 파일 경로, 총 길이(`H:MM:SS`), 블록 수, 데이터셋별 caption 수다. 참조한 후보가 카탈로그에서 사라졌으면 `candidates not in catalog: …`로 실패하고 아무것도 쓰지 않는다.
 
 manifest에는 다음이 들어 있다.
 

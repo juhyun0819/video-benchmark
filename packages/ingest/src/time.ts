@@ -1,3 +1,6 @@
+/** Event candidates shorter than this are too small for a timetable block. */
+export const DEFAULT_MIN_EVENT_SEC = 60;
+
 const HKT_OFFSET_SECONDS = 8 * 3600;
 const PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 

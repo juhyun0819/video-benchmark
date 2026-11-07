@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Lab22 CLI(https://lab22.ai/docs/cli)로 메타데이터와 annotations만 받는다. 영상은 받지 않는다.
-# 인증: LAB22_API_KEY. 환경 변수에 없으면 ~/.config/lab22/env 를 읽는다.
+# Downloads metadata and annotations only, through the Lab22 CLI (https://lab22.ai/docs/cli). No video.
+# Auth: LAB22_API_KEY. Read from ~/.config/lab22/env when it is not in the environment.
 #
-# Usage: scripts/download_lab22.sh <ego4d|egoexo> [output_dir]   (기본값 <repo>/data/raw/<dataset>)
-# Env:   LAB22_ENV_FILE                                           (기본값 ~/.config/lab22/env)
+# Usage: scripts/download_lab22.sh <ego4d|egoexo> [output_dir]   (default <repo>/data/raw/<dataset>)
+# Env:   LAB22_ENV_FILE                                           (default ~/.config/lab22/env)
 set -euo pipefail
 
 DATASET="${1:-}"
@@ -24,7 +24,7 @@ if [ -z "${LAB22_API_KEY:-}" ] && [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
 fi
 if [ -z "${LAB22_API_KEY:-}" ]; then
-  echo "LAB22_API_KEY가 비어 있습니다: $ENV_FILE 에 Lab22 API Keys 페이지에서 만든 키를 채우세요." >&2
+  echo "LAB22_API_KEY is empty: add a key from the Lab22 API Keys page to $ENV_FILE." >&2
   exit 1
 fi
 export LAB22_API_KEY
@@ -33,7 +33,7 @@ LAB22=(uvx --isolated --python 3.11 --from lab22 lab22)
 if [ "$DATASET" = ego4d ]; then
   "${LAB22[@]}" ego4d --output_directory "$OUT" --datasets annotations --metadata --version v2
   echo
-  echo "다음 단계:"
+  echo "Next steps:"
   echo "  npm run ingest -- ego4d --metadata $OUT/v2/ego4d.json --list-scenarios"
   echo "  npm run ingest -- ego4d --metadata $OUT/v2/ego4d.json --narrations $OUT/v2/annotations/narration.json"
 else

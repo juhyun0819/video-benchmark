@@ -24,11 +24,11 @@ const range = (b: TimelineBlock) => `${clock(b.composed_start)}–${clock(b.comp
 /** Text timetable (spec 8.2): S0, B0, S1, B1, ..., SN. Each event gets its own `S<slot>` line. */
 export function renderTimetable(comp: Composition, timeline: TimelineBlock[]): string {
   const totalSec = timeline.length > 0 ? timeline[timeline.length - 1]!.composed_end : 0;
-  const lines = [`rev ${comp.revision} · 총 ${total(totalSec)}`];
+  const lines = [`rev ${comp.revision} · total ${total(totalSec)}`];
   for (let slot = 0; slot < comp.slots.length; slot++) {
     const events = timeline.filter((b) => b.role === "event" && b.slot === slot);
     if (events.length === 0) {
-      lines.push(`S${slot}  (비어 있음)`);
+      lines.push(`S${slot}  (empty)`);
     } else {
       for (const e of events) {
         lines.push(`S${slot}  ${range(e)}  ${e.category.padEnd(8)}  evt:${e.ref_id ?? ""}  ${e.summary}`);

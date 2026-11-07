@@ -32,7 +32,7 @@ import { CatalogWriter, rebuildIndex } from "./writer.js";
 
 const USAGE = `Usage:
   npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
-  npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--data <dir>]
+  npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--min-sec 60] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
   npm run ingest -- egoexo --root <egoexo download dir> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
@@ -124,6 +124,8 @@ export interface IngestHdepicOptions {
   narrationsPath: string;
   dataDir: string;
   now: Date;
+  /** Minimum block length in seconds (adapter default when omitted). */
+  minSec?: number | undefined;
 }
 
 const HIGH_LEVEL_FILE = /^P\d+_recipe_timestamps\.csv$/;
@@ -152,7 +154,7 @@ export function ingestHdepic(opts: IngestHdepicOptions): IngestReport {
   const narrations = readJsonl(readFileSync(opts.narrationsPath, "utf8"), opts.narrationsPath, HdNarrationSchema);
 
   // Build everything first so a malformed input writes nothing.
-  const { candidates, annotations } = buildHdepicCatalog(segments, narrations, recipes, report, erratum);
+  const { candidates, annotations } = buildHdepicCatalog(segments, narrations, recipes, report, erratum, opts.minSec);
 
   const writer = new CatalogWriter(opts.dataDir);
   writer.writeCandidates("hdepic", candidates);
@@ -193,7 +195,7 @@ export interface IngestEgoExoOptions {
   dataDir: string;
   now: Date;
   /** Minimum block length in seconds (adapter default when omitted). */
-  minSec?: number;
+  minSec?: number | undefined;
 }
 
 /** Read the Ego-Exo4D takes and train/val annotations, build one candidate per take, write the catalog. */
@@ -224,6 +226,15 @@ export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
   for (const [takeUid, anns] of annotations) writer.writeAnnotations("egoexo4d", takeUid, anns);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
+}
+
+/** The parsed --min-sec value, undefined when absent, or null (after logging) when it is not a non-negative number. */
+function parseMinSec(command: string, value: string | undefined): number | undefined | null {
+  if (value === undefined) return undefined;
+  const minSec = Number(value);
+  if (Number.isFinite(minSec) && minSec >= 0) return minSec;
+  console.error(`${command}: --min-sec must be a non-negative number, got "${value}"`);
+  return null;
 }
 
 export async function main(
@@ -286,11 +297,14 @@ export async function main(
       console.error("hdepic: --annotations <repo dir> and --narrations <converted.jsonl> are required");
       return 1;
     }
+    const minSec = parseMinSec("hdepic", values["min-sec"]);
+    if (minSec === null) return 1;
     const report = ingestHdepic({
       annotationsDir: values.annotations,
       narrationsPath: values.narrations,
       dataDir,
       now: new Date(),
+      minSec,
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;
@@ -326,11 +340,8 @@ export async function main(
       console.error("egoexo: --root <egoexo download dir> is required");
       return 1;
     }
-    const minSec = values["min-sec"] === undefined ? undefined : Number(values["min-sec"]);
-    if (minSec !== undefined && !(Number.isFinite(minSec) && minSec >= 0)) {
-      console.error(`egoexo: --min-sec must be a non-negative number, got "${values["min-sec"]}"`);
-      return 1;
-    }
+    const minSec = parseMinSec("egoexo", values["min-sec"]);
+    if (minSec === null) return 1;
     const report = ingestEgoExo({
       rootDir: values.root,
       categoriesPath: values.categories ?? resolve("config", "categories.json"),

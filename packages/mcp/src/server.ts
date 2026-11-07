@@ -43,31 +43,31 @@ export function toToolError(e: unknown): CallToolResult {
 }
 
 function errorText(e: unknown): string {
-  if (e instanceof CatalogMissingError) return "카탈로그가 없습니다. 먼저 npm run ingest를 실행하세요";
+  if (e instanceof CatalogMissingError) return "Catalog not found. Run npm run ingest first";
   if (e instanceof CompositionError) {
     const d = e.details;
     switch (e.code) {
       case "SLOT_OUT_OF_RANGE":
-        return `slot ${String(d["slot"])}은 범위 밖 (0..${String(d["max"])})`;
+        return `slot ${String(d["slot"])} out of range (0..${String(d["max"])})`;
       case "CANDIDATE_NOT_FOUND":
-        return `candidate_id 없음: ${String(d["candidateId"])} — list_event_candidates로 확인`;
+        return `candidate_id not found: ${String(d["candidateId"])} — check with list_event_candidates`;
       case "POSITION_OUT_OF_RANGE":
-        return `position ${String(d["position"])}은 범위 밖 (0..${String(d["max"])})`;
+        return `position ${String(d["position"])} out of range (0..${String(d["max"])})`;
       case "NOT_EVENT":
-        return `이벤트 후보가 아님: ${String(d["candidateId"])}`;
+        return `not an event candidate: ${String(d["candidateId"])}`;
       case "REF_NOT_FOUND":
-        return `ref_id 없음: ${String(d["refId"])} — get_composition으로 확인`;
+        return `ref_id not found: ${String(d["refId"])} — check with get_composition`;
       case "COMPOSITION_NOT_FOUND":
-        return `composition 없음: ${String(d["id"])} — list_compositions로 확인`;
+        return `composition not found: ${String(d["id"])} — check with list_compositions`;
       case "BASE_DAY_NOT_FOUND":
-        return `base day 없음: ${String(d["day"])} — list_base_days로 확인`;
+        return `base day not found: ${String(d["day"])} — check with list_base_days`;
       case "BASE_DAY_CHANGED":
-        return `base day ${String(d["day"])}의 블록 구성이 바뀜 (슬롯 ${String(d["actual"])}개, 현재 필요 ${String(d["expected"])}개) — 새 composition을 만드세요`;
+        return `base day ${String(d["day"])} block layout changed (slots: ${String(d["actual"])}, required now: ${String(d["expected"])}) — create a new composition`;
       case "REVISION_MISMATCH":
-        return `revision 불일치 (현재 ${String(d["current"])})`;
+        return `revision mismatch (current ${String(d["current"])})`;
       case "MISSING_CANDIDATES": {
         const ids = Array.isArray(d["ids"]) ? d["ids"].map(String) : [];
-        return `카탈로그에 없는 후보: ${ids.join(", ")}`;
+        return `candidates not in catalog: ${ids.join(", ")}`;
       }
       default:
         return `${e.code}: ${e.message}`;
@@ -163,7 +163,7 @@ function registerBrowseTools(server: McpServer, ctx: ToolContext): void {
       const days = ctx.catalog().listBaseDays();
       const text =
         days.length === 0
-          ? "(base day 없음)"
+          ? "(no base days)"
           : days.map((d) => `${d.day}  ${d.blocks} blocks  ${fmtDuration(d.duration)}`).join("\n");
       return ok(text, { days });
     }),
@@ -178,7 +178,7 @@ function registerBrowseTools(server: McpServer, ctx: ToolContext): void {
     guard(({ day }: { day: string }) => {
       const d = ctx.catalog().getBaseDay(day);
       if (!d) {
-        throw new CompositionError("BASE_DAY_NOT_FOUND", `Base day ${day} not found — list_base_days로 확인`, { day });
+        throw new CompositionError("BASE_DAY_NOT_FOUND", `Base day ${day} not found — check with list_base_days`, { day });
       }
       const blocks = d.blocks.map((b, index) => ({ index, ...candidateView(b) }));
       const text = [
@@ -199,7 +199,7 @@ function registerBrowseTools(server: McpServer, ctx: ToolContext): void {
       const categories = ctx.catalog().listCategories();
       const text =
         categories.length === 0
-          ? "(카테고리 없음)"
+          ? "(no categories)"
           : categories.map((c) => `${c.category}  ${c.count}`).join("\n");
       return ok(text, { categories });
     }),
@@ -283,7 +283,7 @@ function timetableResult(comp: Composition, catalog: FsCatalog): CallToolResult 
   } catch (e) {
     return {
       isError: true,
-      content: [{ type: "text", text: `${errorText(e)} (변경 사항은 rev ${comp.revision}으로 저장됨)` }],
+      content: [{ type: "text", text: `${errorText(e)} (changes saved as rev ${comp.revision})` }],
     };
   }
 }
@@ -306,7 +306,7 @@ function registerEditTools(server: McpServer, ctx: ToolContext): void {
       const catalog = ctx.catalog();
       const baseDay = catalog.getBaseDay(day);
       if (!baseDay) {
-        throw new CompositionError("BASE_DAY_NOT_FOUND", `Base day ${day} not found — list_base_days로 확인`, { day });
+        throw new CompositionError("BASE_DAY_NOT_FOUND", `Base day ${day} not found — check with list_base_days`, { day });
       }
       const comp = createComposition(baseDay, { genId: ctx.genId, ...(name !== undefined ? { name } : {}) });
       ctx.store.save(comp);
@@ -321,7 +321,7 @@ function registerEditTools(server: McpServer, ctx: ToolContext): void {
       const compositions = ctx.store.list();
       const text =
         compositions.length === 0
-          ? "(컴포지션 없음)"
+          ? "(no compositions)"
           : compositions
               .map((c) => `${c.id}  ${c.base_day}  rev ${c.revision}${c.name !== undefined ? `  ${c.name}` : ""}`)
               .join("\n");
@@ -448,8 +448,8 @@ function registerExportTools(server: McpServer, ctx: ToolContext): void {
       for (const c of manifest.tracks.captions) captions_by_dataset[c.provenance.dataset] += 1;
       const blocks = manifest.blocks.length;
       const text = [
-        `manifest 저장: ${path}`,
-        `총 ${formatTotal(manifest.duration)} · ${blocks}개 블록 · rev ${manifest.composition_revision}`,
+        `manifest saved: ${path}`,
+        `total ${formatTotal(manifest.duration)} · blocks: ${blocks} · rev ${manifest.composition_revision}`,
         `caption: nextme800 ${captions_by_dataset.nextme800} · hdepic ${captions_by_dataset.hdepic} · ego4d ${captions_by_dataset.ego4d} · egoexo4d ${captions_by_dataset.egoexo4d}`,
       ].join("\n");
       return ok(text, { path, duration: manifest.duration, blocks, captions_by_dataset });
