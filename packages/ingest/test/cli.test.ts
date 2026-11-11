@@ -1,8 +1,9 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { LabelRules } from "../src/nextme/draft.js";
 import { ingestNextme, resolveDataDir, resolveHfToken } from "../src/cli.js";
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "nextme");
@@ -23,45 +24,46 @@ const fakeFetch = async (path: string): Promise<string> => {
   return readFileSync(join(FIX, m[1] as string, `${m[2]}.jsonl`), "utf8");
 };
 
-describe("ingestNextme", () => {
-  it("fetches, writes the catalog, rebuilds the index and returns the report", async () => {
-    const report = await ingestNextme({
-      days: ["2026-04-15"],
-      dataDir: dir,
-      fetchText: fakeFetch,
-      now: new Date("2026-11-03T00:00:00.000Z"),
-    });
-    expect(report.ingested["nextme800:recordings"]).toBe(2);
-    expect(report.ingested["nextme800:blocks"]).toBe(4);
+const RULES: LabelRules = {
+  version: 1,
+  person_source: "nextme800:wearer",
+  places: [
+    { words: ["station", "train"], node: "transit", setting: "outdoor" },
+    { words: ["home"], node: "home", setting: "home_indoor" },
+  ],
+  activities: [],
+  default_category_by_node: { home: "home", transit: "transit" },
+};
 
-    const cat = join(dir, "catalog");
-    const day = JSON.parse(readFileSync(join(cat, "nextme800/days/2026-04-15.json"), "utf8"));
-    expect(day.blocks).toHaveLength(4);
-    expect(readFileSync(join(cat, "nextme800/annotations/2026-04-15_0900-1000.jsonl"), "utf8")).toContain(
-      "nextme800:2026-04-15_0900-1000:L4:L4_00001",
-    );
-    expect(JSON.parse(readFileSync(join(cat, "index.json"), "utf8")).base_days).toEqual(["2026-04-15"]);
+describe("ingestNextme", () => {
+  const out = () => join(dir, "nested", "draft.jsonl");
+  const opts = (days: string[]) => ({ days, outPath: out(), rules: RULES, fetchText: fakeFetch });
+
+  it("writes one draft JSONL (creating parent dirs), reports counts and leaves the catalog alone", async () => {
+    const report = await ingestNextme(opts(["2026-04-15", "2026-04-15"]));
+    const rows = readFileSync(out(), "utf8").trimEnd().split("\n").map((l) => JSON.parse(l));
+    expect(rows.map((r) => r.day_group)).toEqual(["2026-04-15", "2026-04-15", "2026-04-15", "2026-04-15"]);
+    expect(rows.slice(0, 4).map((r) => r.source_start_s)).toEqual([0, 1200, 2460, 0]);
+    expect(rows.every((r) => r.extractor_version === "nextme-draft.v1")).toBe(true);
+    expect(report.ingested["nextme800:labeled"]! + report.ingested["nextme800:unlabeled"]!).toBe(rows.length);
+    expect(report.ingested["nextme800:labeled"]).toBe(rows.filter((r) => r.category !== null).length);
+    expect(existsSync(join(dir, "catalog"))).toBe(false);
   });
 
   it("rerunning gives identical output (idempotent)", async () => {
-    const opts = { days: ["2026-04-15"], dataDir: dir, fetchText: fakeFetch, now: new Date(0) };
-    await ingestNextme(opts);
-    const read = () => readFileSync(join(dir, "catalog/nextme800/days/2026-04-15.json"), "utf8");
-    const first = read();
-    await ingestNextme(opts);
-    expect(read()).toBe(first);
+    await ingestNextme(opts(["2026-04-15"]));
+    const first = readFileSync(out(), "utf8");
+    await ingestNextme(opts(["2026-04-15"]));
+    expect(readFileSync(out(), "utf8")).toBe(first);
   });
 
   it("fails with the day in the message when it has no recordings", async () => {
-    await expect(
-      ingestNextme({ days: ["2026-05-01"], dataDir: dir, fetchText: fakeFetch, now: new Date(0) }),
-    ).rejects.toThrow(/2026-05-01/);
+    await expect(ingestNextme(opts(["2026-05-01"]))).rejects.toThrow(/2026-05-01/);
+    expect(existsSync(out())).toBe(false);
   });
 
   it("rejects malformed day arguments", async () => {
-    await expect(
-      ingestNextme({ days: ["15-04-2026"], dataDir: dir, fetchText: fakeFetch, now: new Date(0) }),
-    ).rejects.toThrow(/YYYY-MM-DD/);
+    await expect(ingestNextme(opts(["15-04-2026"]))).rejects.toThrow(/YYYY-MM-DD/);
   });
 });
 

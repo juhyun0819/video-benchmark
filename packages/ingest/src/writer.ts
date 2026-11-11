@@ -8,17 +8,8 @@ import {
   type Clip,
   type Dataset,
 } from "@vb/core";
-import { BaseDaySchema, BlockCandidateSchema, type BaseDay, type BlockCandidate } from "./legacy.js";
+import { BlockCandidateSchema, type BlockCandidate } from "./legacy.js";
 import { readJsonl } from "./jsonl.js";
-
-const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-
-function safeSegment(kind: string, value: string): string {
-  if (!SAFE_SEGMENT.test(value) || value.includes("..")) {
-    throw new Error(`Unsafe ${kind} for catalog path: ${JSON.stringify(value)}`);
-  }
-  return value;
-}
 
 const SAFE_VIDEO_ID = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
@@ -49,15 +40,6 @@ export class CatalogWriter {
 
   constructor(dataDir: string) {
     this.root = join(dataDir, "catalog");
-  }
-
-  writeBaseDay(d: BaseDay): void {
-    const parsed = BaseDaySchema.parse(d);
-    const day = safeSegment("day", parsed.day);
-    writeFileAtomic(
-      join(this.root, "nextme800", "days", `${day}.json`),
-      JSON.stringify(parsed, null, 2) + "\n",
-    );
   }
 
   writeAnnotations(dataset: Dataset, videoId: string, a: Annotation[]): void {
@@ -121,20 +103,11 @@ export class CatalogWriter {
 
 /**
  * Scans `<dataDir>/catalog` and writes `index.json`:
- * `base_days` = days under nextme800/days, `categories` = event-candidate counts
- * per category from every dataset's candidates.jsonl (base blocks are not event candidates),
+ * `categories` = event-candidate counts per category from every dataset's candidates.jsonl,
  * `clips` = clip counts per dataset and category from every dataset's clips.jsonl.
  */
 export function rebuildIndex(dataDir: string, now: Date): void {
   const root = join(dataDir, "catalog");
-
-  const daysDir = join(root, "nextme800", "days");
-  const base_days = existsSync(daysDir)
-    ? readdirSync(daysDir)
-        .filter((f) => f.endsWith(".json"))
-        .map((f) => f.slice(0, -".json".length))
-        .sort()
-    : [];
 
   const counts = new Map<string, number>();
   for (const ds of DatasetSchema.options) {
@@ -159,6 +132,6 @@ export function rebuildIndex(dataDir: string, now: Date): void {
 
   writeFileAtomic(
     join(root, "index.json"),
-    JSON.stringify({ updated_at: now.toISOString(), base_days, categories, clips }, null, 2) + "\n",
+    JSON.stringify({ updated_at: now.toISOString(), categories, clips }, null, 2) + "\n",
   );
 }

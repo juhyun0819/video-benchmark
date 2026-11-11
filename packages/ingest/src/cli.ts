@@ -1,10 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { DatasetSchema, type Annotation, type Dataset } from "@vb/core";
-import type { BaseDay } from "./legacy.js";
 import {
   buildHdepicCatalog,
   HdNarrationSchema,
@@ -29,11 +28,13 @@ import {
 import { ingestBank } from "./bank.js";
 import { bump, newReport, readJsonl, type IngestReport } from "./jsonl.js";
 import { buildNextmeDay, parseRecordingsCsv } from "./nextme/adapter.js";
+import { loadLabelRules, nextmeDraftRows, type DraftRow, type LabelRules } from "./nextme/draft.js";
 import { makeHfFetcher } from "./nextme/hf.js";
+import { parseHkt } from "./time.js";
 import { CatalogWriter, rebuildIndex } from "./writer.js";
 
 const USAGE = `Usage:
-  npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--data <dir>]
+  npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--out data/raw/bank/nextme800.draft.jsonl] [--rules config/nextme_label_rules.json]
   npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--min-sec 60] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
@@ -72,13 +73,23 @@ export function resolveDataDir(flag: string | undefined, env: Record<string, str
 
 export interface IngestNextmeOptions {
   days: string[];
-  dataDir: string;
+  /** Draft JSONL to write (parent directories are created). */
+  outPath: string;
+  rules: LabelRules;
   /** Downloads a text file from the HF dataset repo by repo-relative path. */
   fetchText: (path: string) => Promise<string>;
-  now: Date;
 }
 
-/** Fetch, build and write the given NextMe-800 days, then rebuild the index. */
+const rowStartEpoch = (r: DraftRow): number =>
+  (r.source.media.kind === "frames" && r.source.media.start_wallclock
+    ? parseHkt(r.source.media.start_wallclock)
+    : 0) + r.source_start_s;
+
+/**
+ * Fetch and build the given NextMe-800 days and write one labeled clip-contract draft JSONL for review
+ * (rows sorted by day, then clip start). Rows the rules cannot label keep null labels; `ingest bank` skips them.
+ * Nothing is written to the catalog.
+ */
 export async function ingestNextme(opts: IngestNextmeOptions): Promise<IngestReport> {
   for (const day of opts.days) {
     if (!DAY_PATTERN.test(day)) throw new Error(`Invalid day "${day}": expected YYYY-MM-DD`);
@@ -107,16 +118,16 @@ export async function ingestNextme(opts: IngestNextmeOptions): Promise<IngestRep
   };
 
   // Build everything first so a bad day writes nothing.
-  const built: { baseDay: BaseDay; annotations: Map<string, Annotation[]> }[] = [];
-  for (const day of opts.days) built.push(buildNextmeDay(day, recordings, files, report));
-
-  const writer = new CatalogWriter(opts.dataDir);
-  for (const { baseDay, annotations } of built) {
-    writer.writeBaseDay(baseDay);
-    for (const [recId, anns] of annotations) writer.writeAnnotations("nextme800", recId, anns);
+  const rows: DraftRow[] = [];
+  for (const day of [...new Set(opts.days)].sort()) {
+    const built = buildNextmeDay(day, recordings, files, report);
+    rows.push(...nextmeDraftRows(day, built, opts.rules).sort((a, b) => rowStartEpoch(a) - rowStartEpoch(b)));
   }
-  rebuildIndex(opts.dataDir, opts.now);
-  bump(report.ingested, "nextme800:days", built.length);
+
+  mkdirSync(dirname(opts.outPath), { recursive: true });
+  writeFileSync(opts.outPath, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length > 0 ? "\n" : ""), "utf8");
+  bump(report.ingested, "nextme800:labeled", rows.filter((r) => r.category !== null).length);
+  bump(report.ingested, "nextme800:unlabeled", rows.filter((r) => r.category === null).length);
   return report;
 }
 
@@ -262,6 +273,8 @@ export async function main(
     allowPositionals: true,
     options: {
       days: { type: "string" },
+      out: { type: "string" },
+      rules: { type: "string" },
       data: { type: "string" },
       annotations: { type: "string" },
       narrations: { type: "string" },
@@ -302,9 +315,9 @@ export async function main(
     }
     const report = await ingestNextme({
       days,
-      dataDir,
+      outPath: values.out ?? resolve("data", "raw", "bank", "nextme800.draft.jsonl"),
+      rules: loadLabelRules(values.rules ?? resolve("config", "nextme_label_rules.json")),
       fetchText: makeHfFetcher(token),
-      now: new Date(),
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;

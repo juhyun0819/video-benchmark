@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "person_source": "nextme800:wearer",
+  "places": [
+    { "words": ["apartment", "home", "bedroom", "kitchen", "dorm"], "node": "home", "setting": "home_indoor" },
+    { "words": ["hospital", "library", "office", "lab", "laboratory", "campus"], "node": "workplace", "setting": "venue_indoor" },
+    { "words": ["street", "streets", "tram", "bus", "subway", "train", "MTR"], "node": "transit", "setting": "outdoor" }
+  ],
+  "activities": [
+    { "words": ["meal", "eat", "eating", "ate", "cook", "cooking", "breakfast", "lunch", "dinner"], "category": "meal" },
+    { "words": ["commute", "commuting"], "category": "transit" }
+  ],
+  "default_category_by_node": { "home": "home", "workplace": "work", "transit": "transit" }
+}
