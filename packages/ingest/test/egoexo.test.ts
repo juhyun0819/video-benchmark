@@ -21,6 +21,11 @@ const CATS: Category[] = [
   { id: "cooking", label: "Cooking", dataset: "egoexo4d", scenarios: ["Cooking"], keywords: [] },
   { id: "bike_repair", label: "Bike repair", dataset: "egoexo4d", scenarios: ["Bike Repair"], keywords: [] },
 ];
+// The same two categories with a clip mapping on bike_repair only (cooking stays unmapped).
+const MAPPED: Category[] = [
+  CATS[0] as Category,
+  { ...(CATS[1] as Category), clip: { category: "hobby", setting: "venue_indoor", node: "hobby", tags: [] } },
+];
 
 const take = (over: Record<string, unknown> = {}) => ({
   take_uid: "take-a",
@@ -323,11 +328,11 @@ function writeRoot(root: string): void {
 describe("ingestEgoExo", () => {
   const CATS_FILE = () => {
     const path = join(dir, "categories.json");
-    writeFileSync(path, JSON.stringify({ categories: CATS }));
+    writeFileSync(path, JSON.stringify({ categories: MAPPED }));
     return path;
   };
 
-  it("merges train and val and writes candidates, annotations and the index", () => {
+  it("merges train and val and writes clips, annotations and the index", () => {
     const root = join(dir, "egoexo");
     writeRoot(root);
     const dataDir = join(dir, "data");
@@ -341,9 +346,13 @@ describe("ingestEgoExo", () => {
 
     expect(report.ingested["egoexo4d:candidates"]).toBe(2);
     const catalog = join(dataDir, "catalog");
-    expect(readFileSync(join(catalog, "egoexo4d", "candidates.jsonl"), "utf8").trimEnd().split("\n")).toHaveLength(2);
+    expect(report.ingested["egoexo4d:clips"]).toBe(1);
+    expect(report.skipped.no_clip_mapping).toBe(1);
+    expect(existsSync(join(catalog, "egoexo4d", "candidates.jsonl"))).toBe(false);
+    expect(readFileSync(join(catalog, "egoexo4d", "clips.jsonl"), "utf8").trimEnd().split("\n")).toHaveLength(1);
     expect(readFileSync(join(catalog, "egoexo4d", "annotations", "take-b.jsonl"), "utf8")).toContain("C loosens the bolt.");
-    expect(JSON.parse(readFileSync(join(catalog, "index.json"), "utf8")).categories).toEqual({ bike_repair: 1, cooking: 1 });
+    expect(existsSync(join(catalog, "egoexo4d", "annotations", "take-a.jsonl"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(catalog, "index.json"), "utf8")).clips).toEqual({ egoexo4d: { hobby: 1 } });
   });
 
   it("writes nothing when an annotation file is missing, naming the file", () => {
@@ -376,7 +385,7 @@ describe("cli egoexo", () => {
     const root = join(dir, "egoexo");
     writeRoot(root);
     const cats = join(dir, "categories.json");
-    writeFileSync(cats, JSON.stringify({ categories: CATS }));
+    writeFileSync(cats, JSON.stringify({ categories: MAPPED }));
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
     const code = await main(

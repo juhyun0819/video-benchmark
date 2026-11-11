@@ -6,7 +6,7 @@ import {
   type AnnotationLevel,
   type SourceRef,
 } from "@vb/core";
-import { BaseDaySchema, type BaseDay, type BlockCandidate } from "../legacy.js";
+import { BaseDaySchema, type BaseDay, type BlockCandidate } from "../blocks.js";
 import { tileRecording } from "./tiling.js";
 import { bump, readJsonl, type IngestReport } from "../jsonl.js";
 import { parseHkt } from "../time.js";

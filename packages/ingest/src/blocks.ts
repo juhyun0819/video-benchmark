@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { SourceRefSchema } from "@vb/core";
 
-// Legacy catalog shapes, kept for the ingest adapters until they move to the clip model.
+// Block candidates and base days: internal shapes of the adapters (the catalog itself stores clips).
 export const BlockCandidateSchema = z.object({
   id: z.string(),
   role: z.enum(["base", "event"]),

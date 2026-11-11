@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const DatasetSchema = z.enum(["nextme800", "hdepic", "ego4d", "egoexo4d", "youtube"]);
+export const DatasetSchema = z.enum(["nextme800", "ego4d", "egoexo4d", "youtube"]);
 export type Dataset = z.infer<typeof DatasetSchema>;
 
 export const SourceRefSchema = z.object({

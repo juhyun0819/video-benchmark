@@ -4,14 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { DatasetSchema, type Annotation, type Dataset } from "@vb/core";
-import {
-  buildHdepicCatalog,
-  HdNarrationSchema,
-  parseErratumCsv,
-  parseHighLevel,
-  type HighLevelSegment,
-} from "./hdepic/adapter.js";
 import { loadCategories } from "./categories.js";
+import { candidatesToClips } from "./clipmap.js";
 import {
   buildEgo4dCatalog,
   listScenarios,
@@ -35,15 +29,10 @@ import { CatalogWriter, rebuildIndex } from "./writer.js";
 
 const USAGE = `Usage:
   npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--out data/raw/bank/nextme800.draft.jsonl] [--rules config/nextme_label_rules.json]
-  npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--min-sec 60] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
-  npm run ingest -- bank --input <clips.jsonl> --dataset <nextme800|hdepic|ego4d|egoexo4d|youtube> [--data <dir>]
+  npm run ingest -- bank --input <clips.jsonl> --dataset <nextme800|ego4d|egoexo4d|youtube> [--data <dir>]
   npm run ingest -- egoexo --root <egoexo download dir> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
-
-HD-EPIC narrations come from a one-off pkl conversion:
-  uv run --isolated --no-project --with pandas --with "numpy>=2" \\
-    python scripts/convert_hdepic.py <HD_EPIC_Narrations.pkl> <converted.jsonl>
 
 Environment:
   HF_TOKEN                 Hugging Face token (falls back to ~/.cache/huggingface/token)
@@ -131,51 +120,6 @@ export async function ingestNextme(opts: IngestNextmeOptions): Promise<IngestRep
   return report;
 }
 
-export interface IngestHdepicOptions {
-  /** Root of the cloned hd-epic-annotations repo. */
-  annotationsDir: string;
-  /** Converted HD_EPIC_Narrations.jsonl (scripts/convert_hdepic.py output). */
-  narrationsPath: string;
-  dataDir: string;
-  now: Date;
-  /** Minimum block length in seconds (adapter default when omitted). */
-  minSec?: number | undefined;
-}
-
-const HIGH_LEVEL_FILE = /^P\d+_recipe_timestamps\.csv$/;
-
-/** Read the HD-EPIC annotations, build cooking candidates + narration annotations, write the catalog. */
-export function ingestHdepic(opts: IngestHdepicOptions): IngestReport {
-  const report = newReport();
-  const activitiesDir = join(opts.annotationsDir, "high-level", "activities");
-  if (!existsSync(activitiesDir)) {
-    throw new Error(`HD-EPIC: ${activitiesDir} not found (is --annotations the hd-epic-annotations repo root?)`);
-  }
-  const segments: HighLevelSegment[] = [];
-  for (const f of readdirSync(activitiesDir).filter((n) => HIGH_LEVEL_FILE.test(n)).sort()) {
-    segments.push(...parseHighLevel(readFileSync(join(activitiesDir, f), "utf8"), f));
-  }
-  if (segments.length === 0) throw new Error(`HD-EPIC: no PXX_recipe_timestamps.csv files in ${activitiesDir}`);
-
-  const recipes = JSON.parse(
-    readFileSync(join(opts.annotationsDir, "high-level", "complete_recipes.json"), "utf8"),
-  ) as Record<string, { name: string }>;
-  const erratumFile = "HD_EPIC_Narrations_erratum.csv";
-  const erratum = parseErratumCsv(
-    readFileSync(join(opts.annotationsDir, "narrations-and-action-segments", erratumFile), "utf8"),
-    erratumFile,
-  );
-  const narrations = readJsonl(readFileSync(opts.narrationsPath, "utf8"), opts.narrationsPath, HdNarrationSchema);
-
-  // Build everything first so a malformed input writes nothing.
-  const { candidates, annotations } = buildHdepicCatalog(segments, narrations, recipes, report, erratum, opts.minSec);
-
-  const writer = new CatalogWriter(opts.dataDir);
-  writer.writeEventCatalog("hdepic", candidates, annotations);
-  rebuildIndex(opts.dataDir, opts.now);
-  return report;
-}
-
 export interface IngestEgo4dOptions {
   metadataPath: string;
   narrationsPath: string;
@@ -184,7 +128,7 @@ export interface IngestEgo4dOptions {
   now: Date;
 }
 
-/** Read the Ego4D metadata + narrations, build scenario/keyword candidates and narration annotations, write the catalog. */
+/** Read the Ego4D metadata + narrations, build scenario/keyword candidates, map them to clips and write the clip catalog. */
 export function ingestEgo4d(opts: IngestEgo4dOptions): IngestReport {
   const report = newReport();
   const categories = loadCategories(opts.categoriesPath);
@@ -192,10 +136,12 @@ export function ingestEgo4d(opts: IngestEgo4dOptions): IngestReport {
   const narrations = parseEgo4dNarrations(readJsonFile(opts.narrationsPath), opts.narrationsPath);
 
   // Build everything first so a malformed input writes nothing.
-  const { candidates, annotations } = buildEgo4dCatalog(meta, narrations, categories, report);
+  const built = buildEgo4dCatalog(meta, narrations, categories, report);
+  const { clips, annotations } = candidatesToClips(built.candidates, built.annotations, categories.categories, report);
+  bump(report.ingested, "ego4d:clips", clips.length);
 
   const writer = new CatalogWriter(opts.dataDir);
-  writer.writeEventCatalog("ego4d", candidates, annotations);
+  writer.writeClipCatalog("ego4d", clips, annotations);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
 }
@@ -210,7 +156,7 @@ export interface IngestEgoExoOptions {
   minSec?: number | undefined;
 }
 
-/** Read the Ego-Exo4D takes and train/val annotations, build one candidate per take, write the catalog. */
+/** Read the Ego-Exo4D takes and train/val annotations, build one candidate per take, map them to clips and write the clip catalog. */
 export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
   const report = newReport();
   const categories = loadCategories(opts.categoriesPath);
@@ -231,10 +177,12 @@ export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
   };
 
   // Build everything first so a malformed input writes nothing.
-  const { candidates, annotations } = buildEgoExoCatalog(takes, atomic, keysteps, categories, report, opts.minSec);
+  const built = buildEgoExoCatalog(takes, atomic, keysteps, categories, report, opts.minSec);
+  const { clips, annotations } = candidatesToClips(built.candidates, built.annotations, categories.categories, report);
+  bump(report.ingested, "egoexo4d:clips", clips.length);
 
   const writer = new CatalogWriter(opts.dataDir);
-  writer.writeEventCatalog("egoexo4d", candidates, annotations);
+  writer.writeClipCatalog("egoexo4d", clips, annotations);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
 }
@@ -318,24 +266,6 @@ export async function main(
       outPath: values.out ?? resolve("data", "raw", "bank", "nextme800.draft.jsonl"),
       rules: loadLabelRules(values.rules ?? resolve("config", "nextme_label_rules.json")),
       fetchText: makeHfFetcher(token),
-    });
-    console.log(JSON.stringify(report, null, 2));
-    return 0;
-  }
-
-  if (command === "hdepic") {
-    if (!values.annotations || !values.narrations) {
-      console.error("hdepic: --annotations <repo dir> and --narrations <converted.jsonl> are required");
-      return 1;
-    }
-    const minSec = parseMinSec("hdepic", values["min-sec"]);
-    if (minSec === null) return 1;
-    const report = ingestHdepic({
-      annotationsDir: values.annotations,
-      narrationsPath: values.narrations,
-      dataDir,
-      now: new Date(),
-      minSec,
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;

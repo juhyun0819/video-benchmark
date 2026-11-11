@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AnnotationSchema, type Annotation } from "@vb/core";
-import { BlockCandidateSchema, type BlockCandidate } from "../legacy.js";
+import { BlockCandidateSchema, type BlockCandidate } from "../blocks.js";
 import { keywordMatches, type Categories, type Category } from "../categories.js";
 import { parseWith } from "../ego4d/adapter.js";
 import { bump, type IngestReport } from "../jsonl.js";

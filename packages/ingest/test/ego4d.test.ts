@@ -4,7 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnnotationSchema } from "@vb/core";
-import { BlockCandidateSchema } from "../src/legacy.js";
+import { BlockCandidateSchema } from "../src/blocks.js";
+import { ClipSchema } from "@vb/core";
 import { keywordMatches, loadCategories, type Category } from "../src/categories.js";
 import { ingestEgo4d, main } from "../src/cli.js";
 import {
@@ -339,7 +340,7 @@ describe("parse errors", () => {
 });
 
 describe("ingestEgo4d / CLI", () => {
-  it("writes candidates, per-video annotations and the index", () => {
+  it("writes clips, per-video annotations and the index", () => {
     const report = ingestEgo4d({
       metadataPath: META_PATH,
       narrationsPath: NARR_PATH,
@@ -347,15 +348,20 @@ describe("ingestEgo4d / CLI", () => {
       dataDir: dir,
       now: new Date("2026-11-03T00:00:00Z"),
     });
+    // hobby_lego has no clip mapping (another person's home): its 2 candidates are skipped.
     expect(report.ingested["ego4d:candidates"]).toBe(5);
+    expect(report.ingested["ego4d:clips"]).toBe(3);
+    expect(report.skipped.no_clip_mapping).toBe(2);
     const cat = join(dir, "catalog", "ego4d");
-    const lines = readFileSync(join(cat, "candidates.jsonl"), "utf8").trim().split("\n");
-    expect(lines).toHaveLength(5);
+    expect(existsSync(join(cat, "candidates.jsonl"))).toBe(false);
+    const rows = readFileSync(join(cat, "clips.jsonl"), "utf8").trim().split("\n").map((l) => ClipSchema.parse(JSON.parse(l)));
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.category === "hobby" || r.category === "transit")).toBe(true);
     expect(existsSync(join(cat, "annotations", `${V1}.jsonl`))).toBe(true);
     expect(existsSync(join(cat, "annotations", `${V2}.jsonl`))).toBe(true);
     expect(existsSync(join(cat, "annotations", `${V3}.jsonl`))).toBe(false);
     const index = JSON.parse(readFileSync(join(dir, "catalog", "index.json"), "utf8"));
-    expect(index.categories).toMatchObject({ walking: 2, hobby_lego: 2, hobby_tent: 1 });
+    expect(index.clips.ego4d).toEqual({ hobby: 3 });
   });
 
   it("removes annotation files left by an earlier run for videos that are no longer candidates", () => {
@@ -404,6 +410,6 @@ describe("ingestEgo4d / CLI", () => {
       {},
     );
     expect(code).toBe(0);
-    expect(existsSync(join(dir, "catalog", "ego4d", "candidates.jsonl"))).toBe(true);
+    expect(existsSync(join(dir, "catalog", "ego4d", "clips.jsonl"))).toBe(true);
   });
 });

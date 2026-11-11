@@ -8,7 +8,6 @@ import {
   type Clip,
   type Dataset,
 } from "@vb/core";
-import { BlockCandidateSchema, type BlockCandidate } from "./legacy.js";
 import { readJsonl } from "./jsonl.js";
 
 const SAFE_VIDEO_ID = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
@@ -49,28 +48,9 @@ export class CatalogWriter {
     writeFileAtomic(join(this.root, ds, "annotations", `${id}.jsonl`), jsonl(rows));
   }
 
-  writeCandidates(dataset: Dataset, c: BlockCandidate[]): void {
-    const ds = DatasetSchema.parse(dataset);
-    const rows = c.map((x) => BlockCandidateSchema.parse(x));
-    writeFileAtomic(join(this.root, ds, "candidates.jsonl"), jsonl(rows));
-  }
-
-  /**
-   * Replaces an event dataset's catalog: candidates.jsonl, one annotation file per video in `annotations`,
-   * and removal of `<id>.jsonl` annotation files for videos not in `annotations` (left by an earlier run).
-   * Everything is validated before any file is written or removed. nextme800 is refused because its ingest
-   * adds days one at a time, so its other annotation files are still in use.
-   */
-  writeEventCatalog(dataset: Dataset, candidates: BlockCandidate[], annotations: Map<string, Annotation[]>): void {
-    const ds = DatasetSchema.parse(dataset);
-    if (ds === "nextme800") throw new Error("writeEventCatalog: nextme800 is not an event dataset");
-    const candRows = candidates.map((x) => BlockCandidateSchema.parse(x));
-    this.replaceCatalog(ds, "candidates.jsonl", candRows, annotations);
-  }
-
   /**
    * Replaces a dataset's clip catalog: clips.jsonl, one annotation file per video in `annotations`, and
-   * removal of stale `<id>.jsonl` annotation files. Validated before anything is written, like writeEventCatalog.
+   * removal of stale `<id>.jsonl` annotation files. Everything is validated before any file is written or removed.
    */
   writeClipCatalog(dataset: Dataset, clips: Clip[], annotations: Map<string, Annotation[]>): void {
     const ds = DatasetSchema.parse(dataset);
@@ -78,7 +58,7 @@ export class CatalogWriter {
     this.replaceCatalog(ds, "clips.jsonl", clipRows, annotations);
   }
 
-  /** Shared by the event and clip catalogs: validate all annotations, write the list file and annotations, drop stale files. */
+  /** Validate all annotations, write the list file and annotations, drop stale annotation files. */
   private replaceCatalog(
     ds: Dataset,
     listFile: string,
@@ -103,21 +83,11 @@ export class CatalogWriter {
 
 /**
  * Scans `<dataDir>/catalog` and writes `index.json`:
- * `categories` = event-candidate counts per category from every dataset's candidates.jsonl,
- * `clips` = clip counts per dataset and category from every dataset's clips.jsonl.
+ * `clips` = clip counts per dataset and category from every dataset's clips.jsonl,
+ * `categories` = the same counts summed across datasets.
  */
 export function rebuildIndex(dataDir: string, now: Date): void {
   const root = join(dataDir, "catalog");
-
-  const counts = new Map<string, number>();
-  for (const ds of DatasetSchema.options) {
-    const file = join(root, ds, "candidates.jsonl");
-    if (!existsSync(file)) continue;
-    for (const c of readJsonl(readFileSync(file, "utf8"), `${ds}/candidates.jsonl`, BlockCandidateSchema)) {
-      counts.set(c.category, (counts.get(c.category) ?? 0) + 1);
-    }
-  }
-  const categories = Object.fromEntries([...counts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
   const clips: Record<string, Record<string, number>> = {};
   for (const ds of [...DatasetSchema.options].sort()) {
@@ -129,6 +99,12 @@ export function rebuildIndex(dataDir: string, now: Date): void {
     }
     clips[ds] = Object.fromEntries([...perCategory].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
   }
+
+  const totals = new Map<string, number>();
+  for (const perCategory of Object.values(clips)) {
+    for (const [category, n] of Object.entries(perCategory)) totals.set(category, (totals.get(category) ?? 0) + n);
+  }
+  const categories = Object.fromEntries([...totals].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
   writeFileAtomic(
     join(root, "index.json"),

@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { AnnotationSchema } from "@vb/core";
-import { BaseDaySchema } from "../src/legacy.js";
+import { BaseDaySchema } from "../src/blocks.js";
 import { buildNextmeDay, parseRecordingsCsv } from "../src/nextme/adapter.js";
 import { makeHfFetcher } from "../src/nextme/hf.js";
 import { newReport, type IngestReport } from "../src/jsonl.js";

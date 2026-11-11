@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import { ClipCategorySchema, SettingSchema } from "@vb/core";
 import { containsWord } from "./words.js";
 
 export const CategorySchema = z.object({
@@ -8,6 +9,10 @@ export const CategorySchema = z.object({
   dataset: z.enum(["ego4d", "egoexo4d"]),
   scenarios: z.array(z.string()).min(1),
   keywords: z.array(z.string()),
+  /** How candidates of this category become catalog clips; categories without it are not ingested as clips. */
+  clip: z
+    .object({ category: ClipCategorySchema, setting: SettingSchema, node: z.string(), tags: z.array(z.string()) })
+    .optional(),
 });
 export type Category = z.infer<typeof CategorySchema>;
 

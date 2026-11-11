@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { AnnotationSchema, type Annotation } from "@vb/core";
-import { BlockCandidateSchema, type BlockCandidate } from "../legacy.js";
+import { BlockCandidateSchema, type BlockCandidate } from "../blocks.js";
 import { keywordMatches, type Categories, type Category } from "../categories.js";
 import { bump, type IngestReport } from "../jsonl.js";
 
