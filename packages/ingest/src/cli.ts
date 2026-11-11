@@ -28,7 +28,7 @@ import { parseHkt } from "./time.js";
 import { CatalogWriter, rebuildIndex } from "./writer.js";
 
 const USAGE = `Usage:
-  npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--out data/raw/bank/nextme800.draft.jsonl] [--rules config/nextme_label_rules.json]
+  npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--out data/raw/bank/nextme800.draft.jsonl] [--rules config/nextme_label_rules.json] [--overwrite]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
   npm run ingest -- bank --input <clips.jsonl> --dataset <nextme800|ego4d|egoexo4d|youtube> [--data <dir>]
@@ -67,6 +67,8 @@ export interface IngestNextmeOptions {
   rules: LabelRules;
   /** Downloads a text file from the HF dataset repo by repo-relative path. */
   fetchText: (path: string) => Promise<string>;
+  /** Replace an existing `outPath`; without it an existing draft (possibly reviewed by hand) is refused. */
+  overwrite?: boolean;
 }
 
 const rowStartEpoch = (r: DraftRow): number =>
@@ -77,11 +79,16 @@ const rowStartEpoch = (r: DraftRow): number =>
 /**
  * Fetch and build the given NextMe-800 days and write one labeled clip-contract draft JSONL for review
  * (rows sorted by day, then clip start). Rows the rules cannot label keep null labels; `ingest bank` skips them.
- * Nothing is written to the catalog.
+ * Nothing is written to the catalog. An existing `outPath` is refused unless `overwrite` is set.
  */
 export async function ingestNextme(opts: IngestNextmeOptions): Promise<IngestReport> {
   for (const day of opts.days) {
     if (!DAY_PATTERN.test(day)) throw new Error(`Invalid day "${day}": expected YYYY-MM-DD`);
+  }
+  if (!opts.overwrite && existsSync(opts.outPath)) {
+    throw new Error(
+      `${opts.outPath} already exists and may hold reviewed labels; keep a copy and pass --overwrite to replace it, or choose another --out`,
+    );
   }
   const report = newReport();
 
@@ -223,6 +230,7 @@ export async function main(
       days: { type: "string" },
       out: { type: "string" },
       rules: { type: "string" },
+      overwrite: { type: "boolean" },
       data: { type: "string" },
       annotations: { type: "string" },
       narrations: { type: "string" },
@@ -266,6 +274,7 @@ export async function main(
       outPath: values.out ?? resolve("data", "raw", "bank", "nextme800.draft.jsonl"),
       rules: loadLabelRules(values.rules ?? resolve("config", "nextme_label_rules.json")),
       fetchText: makeHfFetcher(token),
+      overwrite: values.overwrite ?? false,
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;

@@ -50,11 +50,30 @@ describe("ingestNextme", () => {
     expect(existsSync(join(dir, "catalog"))).toBe(false);
   });
 
-  it("rerunning gives identical output (idempotent)", async () => {
+  it("rerunning with overwrite gives identical output (idempotent)", async () => {
     await ingestNextme(opts(["2026-04-15"]));
     const first = readFileSync(out(), "utf8");
-    await ingestNextme(opts(["2026-04-15"]));
+    await ingestNextme({ ...opts(["2026-04-15"]), overwrite: true });
     expect(readFileSync(out(), "utf8")).toBe(first);
+  });
+
+  it("refuses an existing draft without overwrite, naming the file and leaving it untouched", async () => {
+    mkdirSync(dirname(out()), { recursive: true });
+    writeFileSync(out(), "reviewed\n");
+    let fetched = 0;
+    const counting = async (path: string) => {
+      fetched += 1;
+      return fakeFetch(path);
+    };
+    await expect(ingestNextme({ ...opts(["2026-04-15"]), fetchText: counting })).rejects.toThrow(
+      `${out()} already exists`,
+    );
+    await expect(ingestNextme({ ...opts(["2026-04-15"]), fetchText: counting })).rejects.toThrow(/--overwrite/);
+    expect(fetched).toBe(0);
+    expect(readFileSync(out(), "utf8")).toBe("reviewed\n");
+
+    await ingestNextme({ ...opts(["2026-04-15"]), overwrite: true });
+    expect(readFileSync(out(), "utf8")).not.toBe("reviewed\n");
   });
 
   it("fails with the day in the message when it has no recordings", async () => {

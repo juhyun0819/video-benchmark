@@ -74,7 +74,7 @@ npm run ingest -- nextme --days 2026-04-15,2026-04-16 \
   --rules config/nextme_label_rules.json
 ```
 
-`--days`는 `YYYY-MM-DD`를 쉼표로 이어서 준다. `--out`과 `--rules`는 위 값이 기본값이다. 이 명령은 카탈로그가 아니라 초안 JSONL만 만든다.
+`--days`는 `YYYY-MM-DD`를 쉼표로 이어서 준다. `--out`과 `--rules`는 위 값이 기본값이다. 이 명령은 카탈로그가 아니라 초안 JSONL만 만든다. `--out` 파일이 이미 있으면 검수한 라벨을 지우지 않도록 오류로 끝난다. 덮어쓰려면 `--overwrite`를 주고, 날짜를 더 받을 때는 다른 `--out`에 쓴 뒤 검수한 초안과 합친다.
 
 초안의 장소(node)와 활동 분류는 `config/nextme_label_rules.json`의 키워드로 자동 붙인 것이라 틀릴 수 있다. 반드시 사람이 검수해 고친 뒤 bank에 넣는다.
 
@@ -83,6 +83,8 @@ npm run ingest -- bank --input data/raw/bank/nextme800.draft.jsonl --dataset nex
 ```
 
 `--dataset`은 `nextme800`, `ego4d`, `egoexo4d`, `youtube` 중 하나다. 같은 형식의 JSONL(검수한 YouTube 클립 등)은 이 명령으로 넣는다.
+
+`ingest bank`는 그 데이터셋의 카탈로그 전체를 입력 파일로 바꾼다. 그래서 NextMe 초안에는 쓰려는 NextMe 날짜가 모두 들어 있어야 하고, 이번에 받은 날짜만 넣으면 전에 넣은 날짜가 카탈로그에서 빠진다. 검수한 초안은 `data/raw`에 있는데 `data/raw`는 동기화하지 않는다. 검수 결과를 잃지 않고 다른 서버에서도 쓰려면 사본을 따로 둔다.
 
 타임라인에는 집(home)과 직장(workplace) 클립이 모두 있는 NextMe 날짜만 쓸 수 있다. 쓸 수 있는 날짜는 출근 전 `home_morning` 창(대개 1시간 안팎)에 들어갈 만큼 짧은 아침 집 영상과, 오전·오후 직장 영상이 모두 있어야 한다. 한 원본 날짜는 합성 하루 하나에만 쓰인다(D7). 매칭은 합성 하루를 되도록 한 원본 날짜로 채우지만, 맞는 클립이 없으면 하루가 원본 날짜 두 개를 쓰고 둘 다 다른 날에 다시 쓰지 못한다. 그래서 28일 타임라인에는 쓸 수 있는 NextMe 날짜가 28개보다 넉넉히 많아야 한다. 지금은 1일만 ingest했으므로 날짜를 더 받아야 한다.
 
