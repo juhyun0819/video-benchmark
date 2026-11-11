@@ -4,16 +4,21 @@ import {
   ExceptionCatalogSchema,
   GapTableSchema,
   OCCUPATION_CODES,
+  ScheduleDaySchema,
   ScheduleDefaultsSchema,
   ScheduleSchema,
   TemplatesSchema,
   TimelineError,
   WorldSchema,
   atus2025Source,
+  createTimeline,
   decideDay,
   generateDay,
   generateSchedule,
+  hardFilterFailures,
   parseClock,
+  type Clip,
+  type ClipCatalog,
   type DonorRow,
   type GapTable,
   type ScheduleInput,
@@ -270,6 +275,51 @@ describe("generateSchedule", () => {
       const hobby = day.slots.find((s) => s.role === "hobby")!;
       expect(parseClock(hobby.window[1])).toBeLessThanOrEqual(parseClock(day.sleep) - 60);
     }
+  });
+
+  it("a donor going to bed at 27:55 with σ 45 never sleeps past 27:59 and every slot window parses (R44)", () => {
+    const inp = input({ day: 0, slot: 0, routine: 0 }, { bed: 1675 }, { bed: 1675 });
+    const schedule = generateSchedule(inp);
+    expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
+    expect(Math.max(...schedule.days.map((d) => parseClock(d.sleep)))).toBe(1679);
+    // The matcher parses every slot window (slotWindow); "28:xx" used to throw there.
+    const t = createTimeline(inp.world, schedule, () => "tl-late");
+    const probe: Clip = {
+      clip_id: "probe",
+      category: "home",
+      setting: "home_indoor",
+      node: "h",
+      activity: "probe",
+      time_of_day: "unknown",
+      tags: [],
+      source: { dataset: "nextme800", video_id: "v", media: { kind: "frames", approx_fps: 1, tar: "t.tar" } },
+      source_start_s: 0,
+      source_end_s: 60,
+      day_group: "g",
+      person_source: "p",
+      fingerprint: null,
+      extractor_version: "fixture.v1",
+    };
+    const catalog: ClipCatalog = { clips: () => [probe], getClip: () => probe, getAnnotations: () => [] };
+    for (const day of schedule.days) {
+      for (const slot of day.slots) expect(() => hardFilterFailures(t, catalog, slot.slot_id, probe, [])).not.toThrow();
+    }
+  });
+
+  it("a donor waking at 03:20 wakes at 04:00 or later (R44)", () => {
+    const schedule = generateSchedule(input({ day: 0, slot: 0, routine: 1 }, {}, { wake: 200, breakfast_time: 220 }));
+    const wakes = schedule.days.map((d) => parseClock(d.wake));
+    expect(Math.min(...wakes)).toBe(240);
+    for (const day of schedule.days) expect(day.slots[0]!.spec.time_of_day).not.toBe("night");
+  });
+
+  it("schedule clocks accept 00:00–27:59 and reject 28:00 and minute 60 (R44)", () => {
+    const day = generateSchedule(input()).days[0]!;
+    expect(ScheduleDaySchema.safeParse({ ...day, sleep: "27:59" }).success).toBe(true);
+    expect(ScheduleDaySchema.safeParse({ ...day, sleep: "28:00" }).success).toBe(false);
+    expect(ScheduleDaySchema.safeParse({ ...day, wake: "06:60" }).success).toBe(false);
+    const slot = day.slots[0]!;
+    expect(ScheduleDaySchema.safeParse({ ...day, slots: [{ ...slot, window: [slot.window[0], "28:10"] }] }).success).toBe(false);
   });
 
   it("rethrows SCHEDULE_INFEASIBLE naming the day after the 5th retry", () => {

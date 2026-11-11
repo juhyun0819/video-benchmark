@@ -39,7 +39,12 @@ function daySigma(input: ScheduleInput): number {
   return s0 + (s1 - s0) * input.world.dials.routine_strength;
 }
 
-/** Donor times jittered per day, rounded, then bent into a plausible order (R14, R22, R25). */
+/** Earliest wake (04:00): earlier wakes would fall in the previous night's time-of-day bucket (R44). */
+const MIN_WAKE = 240;
+/** Latest sleep (27:59): the last minute a schedule clock can express (R44). */
+const MAX_SLEEP = 27 * 60 + 59;
+
+/** Donor times jittered per day, rounded, then bent into a plausible order (R14, R22, R25, R44). */
 function dayAnchors(input: ScheduleInput, profile: DayProfile, decisions: DayDecisions, attempt: number): DayAnchors {
   const { seed } = input.world;
   const d = decisions.day_index;
@@ -49,8 +54,8 @@ function dayAnchors(input: ScheduleInput, profile: DayProfile, decisions: DayDec
 
   const workday = decisions.template === "workday";
   const a: DayAnchors = {
-    wake: jitter("wake", profile.wake),
-    sleep: jitter("sleep", profile.sleep),
+    wake: Math.max(jitter("wake", profile.wake), MIN_WAKE),
+    sleep: Math.min(jitter("sleep", profile.sleep), MAX_SLEEP),
     breakfast: jitter("breakfast", profile.breakfast),
     lunch: jitter("lunch", profile.lunch),
     dinner: jitter("dinner", profile.dinner),

@@ -61,7 +61,8 @@ export type DayDecisions = {
   exceptions: Exception[];
 };
 
-const ClockSchema = z.string().regex(/^\d{2}:\d{2}$/, "expected HH:MM");
+/** Exactly what parseClock accepts: HH 00–27, MM 00–59 (R44). */
+const ClockSchema = z.string().regex(/^(?:[01]\d|2[0-7]):[0-5]\d$/, "expected HH:MM with HH 00-27 and MM 00-59");
 
 /** The subset of schedule_defaults_*.json the generator reads; other keys pass through (R5). */
 export const ScheduleDefaultsSchema = z
