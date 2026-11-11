@@ -1,0 +1,40 @@
+{
+  "person_id": "example-nextme",
+  "attributes": {
+    "country": "HK",
+    "occupation_group": "professional",
+    "work_pattern": "day_shift"
+  },
+  "distribution_source": "atus_2025",
+  "allow_country_fallback": true,
+  "nodes": {
+    "home": { "kind": "home" },
+    "workplace": { "kind": "workplace", "job": "office worker" },
+    "hobby_1": { "kind": "hobby", "activity": "climbing", "setting": "venue_indoor", "weekly_freq": 2 }
+  },
+  "node_binding": {
+    "home": { "dataset": ["nextme800"], "person_source": "nextme800:wearer", "node": "home" },
+    "workplace": { "dataset": ["nextme800"], "person_source": "nextme800:wearer", "node": "workplace" },
+    "hobby_1": { "dataset": ["egoexo4d"], "tags_any": ["sport_climbing"] }
+  },
+  "meal_style": {
+    "workday": {
+      "lunch": { "workplace": 0.84, "home": 0.1, "eat_out": 0.06 },
+      "dinner": { "home": 0.83, "eat_out": 0.09, "workplace": 0.07, "others_home": 0.01 }
+    },
+    "weekend": {
+      "breakfast": { "home": 1 },
+      "lunch": { "home": 0.62, "eat_out": 0.23, "workplace": 0.1, "others_home": 0.05 },
+      "dinner": { "home": 0.77, "eat_out": 0.13, "others_home": 0.08, "workplace": 0.02 }
+    },
+    "breakfast_skip_prob": 0.3,
+    "place_nodes": {}
+  },
+  "dials": {
+    "length_days": 28,
+    "routine_strength": 0.7,
+    "exception_rate": { "slot": 0.1, "day": 0.05 },
+    "wake_sleep": "default_v1"
+  },
+  "seed": 1234
+}
