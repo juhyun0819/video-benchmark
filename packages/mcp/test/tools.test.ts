@@ -158,6 +158,27 @@ describe("timeline tools", () => {
     expect(res.candidates[0]).toMatchObject({ dataset: "nextme800", duration_s: 300, time_of_day: "unknown" });
   });
 
+  it("list_slot_candidates shows the previous days' picks and the routine strength (§6.3)", async () => {
+    const dataDir = setupDataDir();
+    const s = await open(dataDir);
+    const { timeline_id } = dataOf<Created>(await s.call("create_timeline", { person_id: PERSON_ID }));
+    const first = dataOf<{ candidates: { clip_id: string; activity: string; day_group: string }[] }>(
+      await s.call("list_slot_candidates", { timeline_id, slot_id: "d1-s1" }),
+    ).candidates[0]!;
+    await s.call("assign_clip", { timeline_id, slot_id: "d1-s1", clip_id: first.clip_id, expected_revision: 0 });
+    const role = readTimeline(dataDir, timeline_id).schedule.days[0]!.slots[0]!.role;
+    const routine = WorldSchema.parse(JSON.parse(readFileSync(EXAMPLE_WORLD, "utf8"))).dials.routine_strength;
+
+    const res = await s.call("list_slot_candidates", { timeline_id, slot_id: "d2-s1" });
+    const data = dataOf<{ recent: unknown[]; routine_strength: number }>(res);
+    expect(data.routine_strength).toBe(routine);
+    expect(data.recent).toEqual([
+      { day: 1, role, clip_id: first.clip_id, activity: first.activity, day_group: first.day_group },
+    ]);
+    expect(textOf(res)).toContain(`routine_strength ${routine}`);
+    expect(textOf(res)).toContain(`day 1 ${role} ${first.clip_id}`);
+  });
+
   it("create_timeline with a 10-day_group bank returns BANK_CAPACITY and saves nothing", async () => {
     const dataDir = setupDataDir({ groups: 10 });
     const s = await open(dataDir);

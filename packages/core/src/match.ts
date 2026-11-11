@@ -23,7 +23,7 @@ export interface Selector {
 /** Candidates handed to the selector (§6.3). */
 export const SELECTOR_TOP_K = 10;
 /** Days of history handed to the selector. */
-const RECENT_DAYS = 3;
+export const RECENT_DAYS = 3;
 /** Day regenerations after the first fill fails (§6.4 step 3). */
 export const MAX_REGEN_ATTEMPTS = 5;
 /** The clip's day_group already fills another slot of the same day at the same node. */
@@ -105,8 +105,8 @@ export const rankSelector: Selector = {
   },
 };
 
-/** Assignments of the RECENT_DAYS days before `dayIndex`, in day and slot order. */
-function recentPicks(t: Timeline, dayIndex: number): RecentPick[] {
+/** Assignments of the RECENT_DAYS days before `dayIndex`, in day and slot order (the selector's `recent`). */
+export function recentPicks(t: Timeline, dayIndex: number): RecentPick[] {
   return t.schedule.days
     .filter((d) => d.day_index >= dayIndex - RECENT_DAYS && d.day_index < dayIndex)
     .flatMap((d) =>

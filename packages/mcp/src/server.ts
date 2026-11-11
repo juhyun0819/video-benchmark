@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
+  RECENT_DAYS,
   RULE_IDS,
   TimelineError,
   assertRevision,
@@ -15,6 +16,7 @@ import {
   generateSchedule,
   preflightCapacity,
   rankSelector,
+  recentPicks,
   unassignClip,
   verifyTimeline,
   type RankedCandidate,
@@ -226,7 +228,7 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
     "list_slot_candidates",
     {
       description:
-        "Ranked clips that pass every hard filter for a slot (§6.3). Prefer the same day_group for slots at the same node on one day; follow routine strength when choosing between clips similar to yesterday's and different ones.",
+        "Ranked clips that pass every hard filter for a slot (§6.3). Prefer the same day_group for slots at the same node on one day; follow routine strength when choosing between clips similar to yesterday's and different ones. Also returns the previous days' picks (`recent`) and the world's `routine_strength`.",
       inputSchema: {
         timeline_id: timelineId,
         slot_id: slotId,
@@ -237,21 +239,34 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
     guard(
       ({ timeline_id, slot_id, relax: r, limit }: { timeline_id: string; slot_id: string; relax?: Relaxable[] | undefined; limit: number }) => {
         const t = ctx.timelines.load(timeline_id);
-        const ranked = candidatesFor(t, ctx.catalog(), slot_id, r ?? []);
+        const catalog = ctx.catalog();
+        const ranked = candidatesFor(t, catalog, slot_id, r ?? []);
         const candidates = ranked.slice(0, limit).map(candidateView);
-        const slot = locate(t, slot_id)!.slot;
+        const { day, slot } = locate(t, slot_id)!;
+        // candidatesFor has already checked that every assigned clip is in the catalog.
+        const recent = recentPicks(t, day).map((p) => {
+          const c = catalog.getClip(p.clip_id)!;
+          return { day: p.day_index, role: p.role, clip_id: p.clip_id, activity: c.activity, day_group: c.day_group };
+        });
+        const routine_strength = t.world.dials.routine_strength;
         const head = `${slot.slot_id} ${slot.window[0]}-${slot.window[1]} ${slot.role} ${slot.spec.node} ${slot.spec.category}/${slot.spec.setting} "${slot.spec.activity}" — ${ranked.length} candidates`;
         const lines = candidates.map(
           (c) =>
             `${c.clip_id}  ${c.score.toFixed(3)}  "${c.activity}"  ${c.day_group}  ${c.duration_s}s  ${c.time_of_day}${c.reasons.length > 0 ? `  [${c.reasons.join("; ")}]` : ""}`,
         );
-        return ok([head, ...lines].join("\n"), {
+        const history = [
+          `routine_strength ${routine_strength}; recent picks (previous ${RECENT_DAYS} days):${recent.length === 0 ? " (none)" : ""}`,
+          ...recent.map((p) => `  day ${p.day} ${p.role} ${p.clip_id}  "${p.activity}"  ${p.day_group}`),
+        ];
+        return ok([head, ...lines, ...history].join("\n"), {
           timeline_id: t.id,
           revision: t.revision,
           slot,
           relax: r ?? [],
           total: ranked.length,
           candidates,
+          recent,
+          routine_strength,
         });
       },
     ),
