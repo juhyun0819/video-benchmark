@@ -67,6 +67,14 @@ export function assignClip(
   const clip = catalog.getClip(a.clipId);
   if (!clip) throw new TimelineError("CLIP_NOT_FOUND", `clip ${a.clipId} is not in the catalog`, { clip_id: a.clipId });
   const relax = a.relaxations ?? [];
+  if (relax.includes("dropped_optional")) {
+    // R36: only fillTimeline marks a slot dropped; an assigned slot is never dropped.
+    throw new TimelineError("CLIP_INELIGIBLE", `"dropped_optional" is not a relaxation a clip can be assigned with`, {
+      slot_id: a.slotId,
+      clip_id: a.clipId,
+      failed: ["invalid_relaxation"],
+    });
+  }
   const failed = hardFilterFailures(t, catalog, a.slotId, clip, relax);
   if (failed.length > 0) {
     throw new TimelineError("CLIP_INELIGIBLE", `clip ${a.clipId} does not fit slot ${a.slotId}: ${failed.join(", ")}`, {
@@ -76,7 +84,7 @@ export function assignClip(
     });
   }
   const entry = t.slots[a.slotId] ?? { clip_ids: [], relaxations: [] };
-  const used = new Set([...entry.relaxations, ...relax]);
+  const used = new Set([...entry.relaxations.filter((r) => r !== "dropped_optional"), ...relax]);
   return withSlot(t, a.slotId, {
     clip_ids: [...entry.clip_ids, a.clipId],
     relaxations: RELAXATION_ORDER.filter((r) => used.has(r)),

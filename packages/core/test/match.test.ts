@@ -111,20 +111,23 @@ describe("fillTimeline", () => {
     expect(t.slots["d1-s1"]!.clip_ids).toHaveLength(1);
   });
 
-  it("required slot with no clips triggers regen attempts 1..5, then UNFILLABLE lists the slot", () => {
+  it("required slot with no clips triggers regen attempts day.attempt+1..+5, then UNFILLABLE lists the slot", () => {
     const noHobbyClips = memoryCatalog(makeClips({ hobbyVideos: 0 }));
-    const t0 = createTimeline(makeWorld(), makeSchedule(3, (d) => (d === 2 ? HOBBY_DAY : undefined)), genId);
+    // The generator already built day 2 at attempt 2 (R34: retries continue from there).
+    const schedule = makeSchedule(3);
+    schedule.days[1] = makeDay(2, 2, HOBBY_DAY);
+    const t0 = createTimeline(makeWorld(), schedule, genId);
     const calls: [number, number][] = [];
     const regen = (d: number, a: number): ScheduleDay => {
       calls.push([d, a]);
       // R6: an infeasible attempt counts as a failed attempt; the loop goes on.
-      if (a === 3) throw new TimelineError("SCHEDULE_INFEASIBLE", "synthetic infeasible day");
+      if (a === 5) throw new TimelineError("SCHEDULE_INFEASIBLE", "synthetic infeasible day");
       return makeDay(d, a, HOBBY_DAY);
     };
     const err = errorOf(() => fillTimeline(t0, noHobbyClips, rankSelector, regen));
     expect(err.code).toBe("UNFILLABLE");
     expect(err.details).toMatchObject({ slots: ["d2-s2"] });
-    expect(calls).toEqual([[2, 1], [2, 2], [2, 3], [2, 4], [2, 5]]);
+    expect(calls).toEqual([[2, 3], [2, 4], [2, 5], [2, 6], [2, 7]]);
     // No partial timeline: the input is untouched.
     expect(t0.revision).toBe(0);
     expect(Object.values(t0.slots).every((s) => s.clip_ids.length === 0)).toBe(true);
@@ -142,18 +145,16 @@ describe("fillTimeline", () => {
       calls.push([d, a]);
       return makeDay(d, a);
     };
-    const a = fillTimeline(
-      createTimeline(makeWorld(), makeSchedule(5, (d) => (d === 3 ? broken : undefined)), genId),
-      catalog,
-      rankSelector,
-      regen,
-    );
-    expect(calls).toEqual([[3, 1]]);
+    // Day 3 was built at attempt 1, so the first regeneration is attempt 2 (R34).
+    const schedule = makeSchedule(5);
+    schedule.days[2] = makeDay(3, 1, broken);
+    const a = fillTimeline(createTimeline(makeWorld(), schedule, genId), catalog, rankSelector, regen);
+    expect(calls).toEqual([[3, 2]]);
 
-    // Same schedule with day 3 already at attempt 1: identical result means days 1–2 kept their
+    // Same schedule with day 3 already at attempt 2: identical result means days 1–2 kept their
     // assignments and the day groups day 3's failed first try had taken were released.
     const b0 = createTimeline(makeWorld(), makeSchedule(5), genId);
-    b0.schedule.days[2] = makeDay(3, 1);
+    b0.schedule.days[2] = makeDay(3, 2);
     const b = fillTimeline(b0, catalog, rankSelector, neverRegen);
     expect(a.schedule).toEqual(b.schedule);
     expect(a.slots).toEqual(b.slots);

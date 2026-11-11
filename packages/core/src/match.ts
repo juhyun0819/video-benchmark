@@ -185,9 +185,10 @@ const isInfeasible = (e: unknown) => e instanceof TimelineError && e.code === "S
 
 /**
  * Fills every empty slot, day by day (§6.4, D10, D11, D13). A day whose required
- * slot finds no candidate at any ladder level is replaced by `regen(day, 1..5)`
- * and refilled; after the 5th failure nothing is returned and UNFILLABLE names
- * the slots. One revision per call.
+ * slot finds no candidate at any ladder level is replaced by
+ * `regen(day, a + 1 … a + 5)`, where `a` is the day's original attempt (R34), and
+ * refilled; after the 5th failure nothing is returned and UNFILLABLE names the
+ * slots. One revision per call.
  */
 export function fillTimeline(
   t: Timeline,
@@ -197,13 +198,13 @@ export function fillTimeline(
 ): Timeline {
   let cur: Timeline = { ...t, slots: { ...t.slots } };
   for (let i = 0; i < cur.schedule.days.length; i++) {
-    const dayIndex = cur.schedule.days[i]!.day_index;
+    const { day_index: dayIndex, attempt: base } = cur.schedule.days[i]!;
     let failed = fillDay(cur, catalog, selector, cur.schedule.days[i]!);
     let lastFailed = failed;
-    for (let attempt = 1; failed.length > 0 && attempt <= MAX_REGEN_ATTEMPTS; attempt++) {
+    for (let k = 1; failed.length > 0 && k <= MAX_REGEN_ATTEMPTS; k++) {
       let next: ScheduleDay;
       try {
-        next = regen(dayIndex, attempt);
+        next = regen(dayIndex, base + k);
       } catch (e) {
         if (isInfeasible(e)) continue; // R6: counts as a failed attempt.
         throw e;

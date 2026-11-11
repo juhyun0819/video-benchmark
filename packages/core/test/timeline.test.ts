@@ -6,9 +6,11 @@ import {
   assignClip,
   bindingAccepts,
   createTimeline,
+  fillTimeline,
+  rankSelector,
   unassignClip,
 } from "../src/index.js";
-import { clip, genId, makeClips, makeSchedule, makeWorld, memoryCatalog } from "./fixtures.js";
+import { clip, genId, makeClips, makeSchedule, makeWorld, memoryCatalog, type SlotDef } from "./fixtures.js";
 
 const catalog = memoryCatalog(makeClips());
 const fresh = () => createTimeline(makeWorld(), makeSchedule(28), genId);
@@ -84,6 +86,25 @@ describe("assignClip", () => {
     expect(codeOf(() => assignClip(t, catalog, { slotId: "d1-s1", clipId: "g01-a-morning" })).details.failed).toEqual(["tags"]);
     const ok = assignClip(t, catalog, { slotId: "d1-s1", clipId: "g01-a-morning", relaxations: ["ignore_tags"] });
     expect(ok.slots["d1-s1"]).toEqual({ clip_ids: ["g01-a-morning"], relaxations: ["ignore_tags"] });
+  });
+
+  it("assigning into a slot that fillTimeline dropped removes dropped_optional", () => {
+    const diner: SlotDef = { role: "dinner", category: "meal", setting: "venue_indoor", node: "diner", activity: "eating dinner", required: false, window: ["18:30", "19:30"] };
+    const dinerClip = clip({ clip_id: "diner-1", category: "meal", setting: "venue_indoor", node: "diner", activity: "eating dinner", time_of_day: "evening" });
+    const dropped = fillTimeline(createTimeline(makeWorld(), makeSchedule(1, () => [diner]), genId), catalog, rankSelector, () => {
+      throw new Error("unexpected regen");
+    });
+    expect(dropped.slots["d1-s1"]).toEqual({ clip_ids: [], relaxations: ["dropped_optional"] });
+    const t = assignClip(dropped, memoryCatalog([dinerClip]), { slotId: "d1-s1", clipId: "diner-1", relaxations: ["ignore_tags"] });
+    expect(t.slots["d1-s1"]).toEqual({ clip_ids: ["diner-1"], relaxations: ["ignore_tags"] });
+  });
+
+  it("rejects dropped_optional as an input relaxation", () => {
+    const err = codeOf(() =>
+      assignClip(fresh(), catalog, { slotId: "d1-s1", clipId: "g01-a-morning", relaxations: ["dropped_optional"] }),
+    );
+    expect(err.code).toBe("CLIP_INELIGIBLE");
+    expect(err.details.failed).toEqual(["invalid_relaxation"]);
   });
 
   it("throws SLOT_NOT_FOUND and CLIP_NOT_FOUND", () => {
