@@ -15,7 +15,7 @@ from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.utils import HfHubHTTPError
 
 REPO = "zzu819/videomem"
-FOLDERS = ("catalog", "compositions", "exports", "renders")
+FOLDERS = ("catalog", "worlds", "timelines", "exports", "renders", "distributions")
 BLOCKED_FOR_ANONYMOUS = (401, 403, 404)
 
 
@@ -46,10 +46,10 @@ def folders_to_push(data_dir):
 
 
 def assert_pull_safe(data_dir, overwrite):
-    """Compositions are edited by hand, so a pull must not silently replace them."""
-    compositions = data_dir / "compositions"
-    if not overwrite and compositions.is_dir() and any(compositions.iterdir()):
-        raise SyncError(f"{compositions} already has files: pass --overwrite to replace them")
+    """Timelines are edited by hand, so a pull must not silently replace them."""
+    timelines = data_dir / "timelines"
+    if not overwrite and timelines.is_dir() and any(timelines.iterdir()):
+        raise SyncError(f"{timelines} already has files: pass --overwrite to replace them")
 
 
 def push(root):
@@ -85,7 +85,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("command", choices=["push", "pull"])
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
-    parser.add_argument("--overwrite", action="store_true", help="let pull replace local compositions")
+    parser.add_argument("--overwrite", action="store_true", help="let pull replace local timelines")
     args = parser.parse_args()
     try:
         if args.command == "push":

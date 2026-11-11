@@ -8,7 +8,7 @@ import requests
 from huggingface_hub.utils import HfHubHTTPError
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sync_data import SyncError, assert_private, assert_pull_safe, folders_to_push
+from sync_data import FOLDERS, SyncError, assert_private, assert_pull_safe, folders_to_push
 
 
 def http_error(status):
@@ -51,25 +51,37 @@ def test_push_takes_only_allowed_folders_that_exist(tmp_path):
     for name in ["catalog", "exports", "media", "raw", "samples"]:
         (tmp_path / name).mkdir()
         (tmp_path / name / "x.json").write_text("{}")
-    (tmp_path / "compositions").mkdir()
+    (tmp_path / "timelines").mkdir()
 
     assert folders_to_push(tmp_path) == ["catalog", "exports"]
 
 
-def test_pull_refuses_to_replace_local_compositions(tmp_path):
-    (tmp_path / "compositions").mkdir()
-    (tmp_path / "compositions" / "a.json").write_text("{}")
+def test_pull_refuses_to_replace_local_timelines_without_overwrite(tmp_path):
+    (tmp_path / "timelines").mkdir()
+    (tmp_path / "timelines" / "a.json").write_text("{}")
 
     with pytest.raises(SyncError, match="--overwrite"):
         assert_pull_safe(tmp_path, overwrite=False)
 
 
 def test_pull_allows_overwrite_when_asked(tmp_path):
-    (tmp_path / "compositions").mkdir()
-    (tmp_path / "compositions" / "a.json").write_text("{}")
+    (tmp_path / "timelines").mkdir()
+    (tmp_path / "timelines" / "a.json").write_text("{}")
 
     assert_pull_safe(tmp_path, overwrite=True)
 
 
 def test_pull_into_empty_data_folder_is_safe(tmp_path):
     assert_pull_safe(tmp_path, overwrite=False)
+
+
+def test_push_folders_are_the_timeline_set():
+    assert FOLDERS == ("catalog", "worlds", "timelines", "exports", "renders", "distributions")
+
+
+def test_pull_refuses_when_local_timelines_exist(tmp_path):
+    (tmp_path / "timelines").mkdir()
+    (tmp_path / "timelines" / "x.json").write_text("{}")
+
+    with pytest.raises(SyncError, match="timelines"):
+        assert_pull_safe(tmp_path, overwrite=False)
