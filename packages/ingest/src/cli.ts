@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import type { Annotation } from "@vb/core";
+import { DatasetSchema, type Annotation, type Dataset } from "@vb/core";
 import type { BaseDay } from "./legacy.js";
 import {
   buildHdepicCatalog,
@@ -26,6 +26,7 @@ import {
   parseEgoExoKeysteps,
   parseEgoExoTakes,
 } from "./egoexo/adapter.js";
+import { ingestBank } from "./bank.js";
 import { bump, newReport, readJsonl, type IngestReport } from "./jsonl.js";
 import { buildNextmeDay, parseRecordingsCsv } from "./nextme/adapter.js";
 import { makeHfFetcher } from "./nextme/hf.js";
@@ -36,6 +37,7 @@ const USAGE = `Usage:
   npm run ingest -- hdepic --annotations <hd-epic-annotations dir> --narrations <converted.jsonl> [--min-sec 60] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
+  npm run ingest -- bank --input <clips.jsonl> --dataset <nextme800|hdepic|ego4d|egoexo4d|youtube> [--data <dir>]
   npm run ingest -- egoexo --root <egoexo download dir> [--min-sec 60] [--categories config/categories.json] [--data <dir>]
 
 HD-EPIC narrations come from a one-off pkl conversion:
@@ -226,6 +228,22 @@ export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
   return report;
 }
 
+export interface IngestBankOptions {
+  inputPath: string;
+  dataset: Dataset;
+  dataDir: string;
+  now: Date;
+}
+
+/** Read a content-contract clip JSONL, write the dataset's clip catalog and caption annotations. */
+export function ingestBankFile(opts: IngestBankOptions): IngestReport {
+  const { clips, annotations, report } = ingestBank(readFileSync(opts.inputPath, "utf8"), opts.inputPath, opts.dataset);
+  const writer = new CatalogWriter(opts.dataDir);
+  writer.writeClipCatalog(opts.dataset, clips, annotations);
+  rebuildIndex(opts.dataDir, opts.now);
+  return report;
+}
+
 /** The parsed --min-sec value, undefined when absent, or null (after logging) when it is not a non-negative number. */
 function parseMinSec(command: string, value: string | undefined): number | undefined | null {
   if (value === undefined) return undefined;
@@ -251,6 +269,8 @@ export async function main(
       categories: { type: "string" },
       "list-scenarios": { type: "boolean" },
       root: { type: "string" },
+      input: { type: "string" },
+      dataset: { type: "string" },
       "min-sec": { type: "string" },
       help: { type: "boolean", short: "h" },
     },
@@ -346,6 +366,26 @@ export async function main(
       dataDir,
       now: new Date(),
       minSec,
+    });
+    console.log(JSON.stringify(report, null, 2));
+    return 0;
+  }
+
+  if (command === "bank") {
+    if (!values.input || !values.dataset) {
+      console.error("bank: --input <clips.jsonl> and --dataset <ds> are required");
+      return 1;
+    }
+    const dataset = DatasetSchema.safeParse(values.dataset);
+    if (!dataset.success) {
+      console.error(`bank: --dataset must be one of ${DatasetSchema.options.join(", ")}, got "${values.dataset}"`);
+      return 1;
+    }
+    const report = ingestBankFile({
+      inputPath: values.input,
+      dataset: dataset.data,
+      dataDir,
+      now: new Date(),
     });
     console.log(JSON.stringify(report, null, 2));
     return 0;

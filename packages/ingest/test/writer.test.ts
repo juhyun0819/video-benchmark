@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Annotation } from "@vb/core";
+import type { Annotation, Clip } from "@vb/core";
 import type { BaseDay, BlockCandidate } from "../src/legacy.js";
 import { CatalogWriter, rebuildIndex } from "../src/writer.js";
 
@@ -80,6 +80,7 @@ describe("CatalogWriter", () => {
       updated_at: "2026-11-03T12:00:00.000Z",
       base_days: ["2026-04-14", "2026-04-15"],
       categories: { cooking: 2, walking: 1 },
+      clips: {},
     });
   });
 
@@ -102,6 +103,7 @@ describe("CatalogWriter", () => {
       updated_at: "2026-11-03T00:00:00.000Z",
       base_days: [],
       categories: {},
+      clips: {},
     });
   });
 
@@ -156,5 +158,49 @@ describe("CatalogWriter.writeEventCatalog", () => {
     const w = new CatalogWriter(dir);
     mkdirSync(join(dir, "catalog/nextme800/annotations"), { recursive: true });
     expect(() => w.writeEventCatalog("nextme800", [], new Map())).toThrow(/nextme800/);
+  });
+
+  describe("writeClipCatalog", () => {
+    const clip = (id: string, category: Clip["category"], videoId = "vid00000001"): Clip => ({
+      clip_id: id,
+      category,
+      setting: "home_indoor",
+      node: "kitchen",
+      activity: "cooking",
+      time_of_day: "unknown",
+      tags: [],
+      source: { dataset: "youtube", video_id: videoId, media: { kind: "video", fps: 30 } },
+      source_start_s: 0,
+      source_end_s: 60,
+      day_group: "g1",
+      person_source: "p1",
+      fingerprint: null,
+      extractor_version: "test",
+    });
+
+    it("writes clips.jsonl, annotations, and counts clips per dataset and category in the index", () => {
+      const w = new CatalogWriter(dir);
+      w.writeClipCatalog("youtube", [clip("c1", "home"), clip("c2", "home"), clip("c3", "work", "vid00000002")], new Map([["vid00000001", [ann("a1", "x")]]]));
+      rebuildIndex(dir, new Date(0));
+      const cat = join(dir, "catalog");
+      expect(readFileSync(join(cat, "youtube/clips.jsonl"), "utf8").trimEnd().split("\n")).toHaveLength(3);
+      expect(existsSync(join(cat, "youtube/annotations/vid00000001.jsonl"))).toBe(true);
+      expect((JSON.parse(readFileSync(join(cat, "index.json"), "utf8")) as { clips: unknown }).clips).toEqual({
+        youtube: { home: 2, work: 1 },
+      });
+    });
+
+    it("removes stale annotation files and validates before writing", () => {
+      const w = new CatalogWriter(dir);
+      w.writeClipCatalog("youtube", [clip("c1", "home")], new Map([["old", [ann("a1", "x")]]]));
+      w.writeClipCatalog("youtube", [clip("c1", "home")], new Map([["new", [ann("a1", "x")]]]));
+      const annDir = join(dir, "catalog/youtube/annotations");
+      expect(readdirSync(annDir)).toEqual(["new.jsonl"]);
+      expect(() =>
+        w.writeClipCatalog("youtube", [{ ...clip("c2", "home"), source_end_s: -1 }], new Map()),
+      ).toThrow();
+      expect(readdirSync(annDir)).toEqual(["new.jsonl"]);
+      expect(readFileSync(join(dir, "catalog/youtube/clips.jsonl"), "utf8")).toContain('"c1"');
+    });
   });
 });

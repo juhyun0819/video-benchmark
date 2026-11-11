@@ -2,8 +2,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSyn
 import { dirname, join } from "node:path";
 import {
   AnnotationSchema,
+  ClipSchema,
   DatasetSchema,
   type Annotation,
+  type Clip,
   type Dataset,
 } from "@vb/core";
 import { BaseDaySchema, BlockCandidateSchema, type BaseDay, type BlockCandidate } from "./legacy.js";
@@ -69,13 +71,33 @@ export class CatalogWriter {
     const ds = DatasetSchema.parse(dataset);
     if (ds === "nextme800") throw new Error("writeEventCatalog: nextme800 is not an event dataset");
     const candRows = candidates.map((x) => BlockCandidateSchema.parse(x));
+    this.replaceCatalog(ds, "candidates.jsonl", candRows, annotations);
+  }
+
+  /**
+   * Replaces a dataset's clip catalog: clips.jsonl, one annotation file per video in `annotations`, and
+   * removal of stale `<id>.jsonl` annotation files. Validated before anything is written, like writeEventCatalog.
+   */
+  writeClipCatalog(dataset: Dataset, clips: Clip[], annotations: Map<string, Annotation[]>): void {
+    const ds = DatasetSchema.parse(dataset);
+    const clipRows = clips.map((x) => ClipSchema.parse(x));
+    this.replaceCatalog(ds, "clips.jsonl", clipRows, annotations);
+  }
+
+  /** Shared by the event and clip catalogs: validate all annotations, write the list file and annotations, drop stale files. */
+  private replaceCatalog(
+    ds: Dataset,
+    listFile: string,
+    rows: unknown[],
+    annotations: Map<string, Annotation[]>,
+  ): void {
     const annRows = [...annotations].map(
       ([videoId, a]) => [safeSegment("video id", videoId), a.map((x) => AnnotationSchema.parse(x))] as const,
     );
 
-    writeFileAtomic(join(this.root, ds, "candidates.jsonl"), jsonl(candRows));
+    writeFileAtomic(join(this.root, ds, listFile), jsonl(rows));
     const annDir = join(this.root, ds, "annotations");
-    for (const [id, rows] of annRows) writeFileAtomic(join(annDir, `${id}.jsonl`), jsonl(rows));
+    for (const [id, annotationRows] of annRows) writeFileAtomic(join(annDir, `${id}.jsonl`), jsonl(annotationRows));
 
     if (!existsSync(annDir)) return;
     const keep = new Set(annRows.map(([id]) => `${id}.jsonl`));
@@ -88,7 +110,8 @@ export class CatalogWriter {
 /**
  * Scans `<dataDir>/catalog` and writes `index.json`:
  * `base_days` = days under nextme800/days, `categories` = event-candidate counts
- * per category from every dataset's candidates.jsonl (base blocks are not event candidates).
+ * per category from every dataset's candidates.jsonl (base blocks are not event candidates),
+ * `clips` = clip counts per dataset and category from every dataset's clips.jsonl.
  */
 export function rebuildIndex(dataDir: string, now: Date): void {
   const root = join(dataDir, "catalog");
@@ -111,8 +134,19 @@ export function rebuildIndex(dataDir: string, now: Date): void {
   }
   const categories = Object.fromEntries([...counts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
+  const clips: Record<string, Record<string, number>> = {};
+  for (const ds of [...DatasetSchema.options].sort()) {
+    const file = join(root, ds, "clips.jsonl");
+    if (!existsSync(file)) continue;
+    const perCategory = new Map<string, number>();
+    for (const c of readJsonl(readFileSync(file, "utf8"), `${ds}/clips.jsonl`, ClipSchema)) {
+      perCategory.set(c.category, (perCategory.get(c.category) ?? 0) + 1);
+    }
+    clips[ds] = Object.fromEntries([...perCategory].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  }
+
   writeFileAtomic(
     join(root, "index.json"),
-    JSON.stringify({ updated_at: now.toISOString(), base_days, categories }, null, 2) + "\n",
+    JSON.stringify({ updated_at: now.toISOString(), base_days, categories, clips }, null, 2) + "\n",
   );
 }
