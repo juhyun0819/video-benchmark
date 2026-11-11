@@ -17,6 +17,7 @@ import {
   generateSchedule,
   hardFilterFailures,
   parseClock,
+  verifyTimeline,
   type Clip,
   type ClipCatalog,
   type DonorRow,
@@ -320,6 +321,26 @@ describe("generateSchedule", () => {
     expect(ScheduleDaySchema.safeParse({ ...day, wake: "06:60" }).success).toBe(false);
     const slot = day.slots[0]!;
     expect(ScheduleDaySchema.safeParse({ ...day, slots: [{ ...slot, window: [slot.window[0], "28:10"] }] }).success).toBe(false);
+  });
+
+  it("a slot exception whose slot is dropped for time is removed from the day (R45)", () => {
+    // Work spans 4 h with lunch pinned to its end: an eat-out lunch adds transitions and leaves work_pm < 60 min.
+    const inp = input({ day: 0, slot: 1, routine: 1 }, {}, { work_start: 540, work_end: 640, lunch_time: 900 });
+    const schedule = generateSchedule(inp);
+    const lunchDropped = schedule.days.filter((d) => d.dropped_slots.some((x) => x.role === "lunch"));
+    expect(lunchDropped.length).toBeGreaterThan(0);
+    let slotExceptions = 0;
+    for (const day of schedule.days) {
+      for (const ex of day.exceptions.filter((e) => e.scope === "slot")) {
+        slotExceptions += 1;
+        expect(day.slots.map((s) => s.role), `day ${day.day_index} ${ex.type}`).toContain(ex.replaces);
+      }
+    }
+    expect(slotExceptions).toBeGreaterThan(0);
+    for (const day of lunchDropped) expect(day.exceptions.some((e) => e.replaces === "lunch")).toBe(false);
+    const empty: ClipCatalog = { clips: () => [], getClip: () => undefined, getAnnotations: () => [] };
+    const report = verifyTimeline(createTimeline(inp.world, schedule, () => "tl-exc"), empty);
+    expect(report.rules.exceptions).toEqual({ pass: true, violations: [] });
   });
 
   it("rethrows SCHEDULE_INFEASIBLE naming the day after the 5th retry", () => {
