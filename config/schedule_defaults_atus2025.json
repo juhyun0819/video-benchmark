@@ -1,0 +1,62 @@
+{
+  "_source": "ATUS 2025 microdata, full-time employed (TELFS=1, TRDPFTPT=1), weighted by TUFINLWGT. See atus2025_stats.json and spec section 5.5.",
+  "_units": "times are HH:MM (local clock), durations and sigmas are minutes",
+  "person_level": {
+    "weekday": {
+      "wake":  {"dist": "normal", "mean": "06:26", "sd": 61},
+      "sleep": {"dist": "normal", "mean": "22:18", "sd": 67}
+    },
+    "weekend_shift_from_weekday": {"wake": 83, "sleep": 0},
+    "work_start_day_shift": {"dist": "normal", "mean": "07:34", "sd": 77, "clip": ["05:00", "11:00"]},
+    "work_start_by_occupation": {
+      "mgmt_business_fin":       {"p25": "07:20", "p50": "08:00", "p75": "09:06", "n": 162},
+      "professional":            {"p25": "07:00", "p50": "07:45", "p75": "08:31", "n": 252},
+      "office_admin":            {"p25": "06:45", "p50": "07:07", "p75": "08:16", "n": 76},
+      "construction_extraction": {"p25": "06:00", "p50": "06:39", "p75": "07:04", "n": 35},
+      "production":              {"p25": "05:49", "p50": "06:40", "p75": "07:35", "n": 55}
+    },
+    "work_minutes_excl_lunch": {"dist": "empirical", "p10": 415, "p25": 453, "p50": 500, "p75": 582, "p90": 684}
+  },
+  "day_level_sigma": {
+    "_note": "design choice, not from ATUS (one diary day per respondent)",
+    "routine_strength_1": 20,
+    "routine_strength_0": 45
+  },
+  "transition_gaps": {
+    "home->workplace": {"dist": "empirical", "p10": 7, "p25": 15, "p50": 20, "p75": 35, "p90": 60},
+    "workplace->home": {"dist": "empirical", "p10": 6, "p25": 15, "p50": 20, "p75": 30, "p90": 55}
+  },
+  "meal_windows": {
+    "workday": {
+      "breakfast": {"p25": "06:10", "p50": "07:03", "p75": "08:55"},
+      "lunch":     {"p25": "11:35", "p50": "12:00", "p75": "12:30"},
+      "dinner":    {"p25": "17:30", "p50": "18:30", "p75": "19:25"}
+    },
+    "weekend": {
+      "breakfast": {"p25": "07:10", "p50": "08:00", "p75": "09:00"},
+      "lunch":     {"p25": "11:40", "p50": "12:26", "p75": "13:15"},
+      "dinner":    {"p25": "17:20", "p50": "18:05", "p75": "19:01"}
+    }
+  },
+  "meal_location_priors": {
+    "workday": {
+      "lunch":  {"workplace": 0.84, "home": 0.10, "eat_out": 0.06},
+      "dinner": {"home": 0.83, "eat_out": 0.09, "workplace": 0.07, "others_home": 0.01}
+    },
+    "weekend": {
+      "lunch":  {"home": 0.62, "eat_out": 0.23, "workplace": 0.10, "others_home": 0.05},
+      "dinner": {"home": 0.77, "eat_out": 0.13, "others_home": 0.08, "workplace": 0.02}
+    }
+  },
+  "weekend": {
+    "sports_day_share": 0.18,
+    "sports_outdoor_share": 0.35,
+    "sports_minutes": {"p25": 45, "p50": 90, "p75": 150},
+    "sports_start": {"p25": "08:30", "p50": "10:45", "p75": "14:41"},
+    "household_120min_plus_share": 0.45,
+    "social_outing_share": 0.32
+  },
+  "exceptions": {
+    "weekday_no_work_share_upper_ref": 0.10
+  }
+}
