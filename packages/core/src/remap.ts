@@ -1,11 +1,18 @@
-import type { Annotation, ManifestCaption, TimeSpan } from "./schema.js";
-import type { TimelineBlock } from "./timeline.js";
+import type { Annotation, ManifestCaption, SourceRef, TimeSpan } from "./schema.js";
+
+export type PlacedSpan = {
+  block_id: string;
+  source: SourceRef;
+  src_start: number;
+  src_end: number;
+  composed_start: number;
+};
 
 /**
- * Maps source annotations into composed time for one timeline block.
+ * Maps source annotations into composed time for one placed span.
  * Values are unrounded; Task 6 rounds. Output follows annotation input order.
  */
-export function remapAnnotations(block: TimelineBlock, annotations: Annotation[]): ManifestCaption[] {
+export function remapAnnotations(block: PlacedSpan, annotations: Annotation[]): ManifestCaption[] {
   const out: ManifestCaption[] = [];
   const shift = (t: number) => block.composed_start + (t - block.src_start);
 

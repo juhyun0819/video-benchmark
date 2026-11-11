@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AnnotationSchema, BlockCandidateSchema } from "@vb/core";
+import { AnnotationSchema } from "@vb/core";
+import { BlockCandidateSchema } from "../src/legacy.js";
 import { keywordMatches, loadCategories, type Category } from "../src/categories.js";
 import { ingestEgo4d, main } from "../src/cli.js";
 import {

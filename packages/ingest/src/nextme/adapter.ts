@@ -2,14 +2,12 @@ import { parse } from "csv-parse/sync";
 import { z } from "zod";
 import {
   AnnotationSchema,
-  BaseDaySchema,
-  tileRecording,
   type Annotation,
   type AnnotationLevel,
-  type BaseDay,
-  type BlockCandidate,
   type SourceRef,
 } from "@vb/core";
+import { BaseDaySchema, type BaseDay, type BlockCandidate } from "../legacy.js";
+import { tileRecording } from "./tiling.js";
 import { bump, readJsonl, type IngestReport } from "../jsonl.js";
 import { parseHkt } from "../time.js";
 

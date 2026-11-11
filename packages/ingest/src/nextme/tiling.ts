@@ -1,4 +1,5 @@
-import type { Annotation, BlockCandidate, SourceRef } from "./schema.js";
+import type { Annotation, SourceRef } from "@vb/core";
+import type { BlockCandidate } from "../legacy.js";
 
 const MIN_BLOCK_SECONDS = 60;
 const UNLABELED = "(unlabeled)";

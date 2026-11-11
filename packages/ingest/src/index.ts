@@ -1,5 +1,6 @@
 export * from "./time.js";
 export * from "./jsonl.js";
+export * from "./legacy.js";
 export * from "./writer.js";
 export * from "./nextme/adapter.js";
 export * from "./nextme/hf.js";

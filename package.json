@@ -7,8 +7,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "ingest": "tsx packages/ingest/src/cli.ts",
-    "mcp": "tsx packages/mcp/src/main.ts"
+    "ingest": "tsx packages/ingest/src/cli.ts"
   },
   "devDependencies": {
     "@types/node": "^24",

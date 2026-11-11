@@ -1,22 +1,27 @@
-export type CompositionErrorCode =
-  | "BASE_DAY_NOT_FOUND"
-  | "SLOT_OUT_OF_RANGE"
-  | "POSITION_OUT_OF_RANGE"
-  | "CANDIDATE_NOT_FOUND"
-  | "NOT_EVENT"
-  | "REF_NOT_FOUND"
+export type TimelineErrorCode =
+  | "COUNTRY_SOURCE_MISSING"
+  | "DONOR_POOL_EMPTY"
+  | "SCHEDULE_INFEASIBLE"
+  | "GAP_MISSING"
+  | "EXCEPTION_OVERLAP"
+  | "BANK_CAPACITY"
+  | "UNFILLABLE"
+  | "SLOT_NOT_FOUND"
+  | "CLIP_NOT_FOUND"
+  | "CLIP_INELIGIBLE"
   | "REVISION_MISMATCH"
-  | "MISSING_CANDIDATES"
-  | "COMPOSITION_NOT_FOUND"
-  | "BASE_DAY_CHANGED";
+  | "TIMELINE_NOT_FOUND"
+  | "WORLD_NOT_FOUND"
+  | "MISSING_CLIPS"
+  | "VERIFY_FAILED";
 
-export class CompositionError extends Error {
-  readonly code: CompositionErrorCode;
+export class TimelineError extends Error {
+  readonly code: TimelineErrorCode;
   readonly details: Record<string, unknown>;
 
-  constructor(code: CompositionErrorCode, message: string, details: Record<string, unknown> = {}) {
+  constructor(code: TimelineErrorCode, message: string, details: Record<string, unknown> = {}) {
     super(message);
-    this.name = "CompositionError";
+    this.name = "TimelineError";
     this.code = code;
     this.details = details;
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { tileRecording, type Annotation, type SourceRef } from "../src/index.js";
+import type { Annotation, SourceRef } from "@vb/core";
+import { tileRecording } from "../src/nextme/tiling.js";
 
 const source: SourceRef = {
   dataset: "nextme800",

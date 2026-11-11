@@ -2,15 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   remapAnnotations,
   type Annotation,
-  type TimelineBlock,
+  type PlacedSpan,
   type TimeSpan,
 } from "../src/index.js";
 
-const block: TimelineBlock = {
+const block: PlacedSpan = {
   block_id: "base:2026-04-15:1",
-  role: "base",
-  category: "base",
-  summary: "Commute and arrival",
   source: {
     dataset: "nextme800",
     video_id: "rec-A",
@@ -19,8 +16,6 @@ const block: TimelineBlock = {
   src_start: 600,
   src_end: 1500,
   composed_start: 660,
-  composed_end: 1560,
-  base_index: 1,
 };
 
 function ann(id: string, time: TimeSpan, extra: Record<string, unknown> = {}): Annotation {

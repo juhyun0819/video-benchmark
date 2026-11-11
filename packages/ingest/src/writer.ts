@@ -2,14 +2,11 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSyn
 import { dirname, join } from "node:path";
 import {
   AnnotationSchema,
-  BaseDaySchema,
-  BlockCandidateSchema,
   DatasetSchema,
   type Annotation,
-  type BaseDay,
-  type BlockCandidate,
   type Dataset,
 } from "@vb/core";
+import { BaseDaySchema, BlockCandidateSchema, type BaseDay, type BlockCandidate } from "./legacy.js";
 import { readJsonl } from "./jsonl.js";
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;

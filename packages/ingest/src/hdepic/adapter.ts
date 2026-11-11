@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
 import { z } from "zod";
-import { AnnotationSchema, BlockCandidateSchema, type Annotation, type BlockCandidate } from "@vb/core";
+import { AnnotationSchema, type Annotation } from "@vb/core";
+import { BlockCandidateSchema, type BlockCandidate } from "../legacy.js";
 import { bump, type IngestReport } from "../jsonl.js";
 import { DEFAULT_MIN_EVENT_SEC } from "../time.js";
 

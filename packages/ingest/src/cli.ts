@@ -3,7 +3,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import type { Annotation, BaseDay } from "@vb/core";
+import type { Annotation } from "@vb/core";
+import type { BaseDay } from "./legacy.js";
 import {
   buildHdepicCatalog,
   HdNarrationSchema,

@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Annotation, BaseDay, BlockCandidate } from "@vb/core";
+import type { Annotation } from "@vb/core";
+import type { BaseDay, BlockCandidate } from "../src/legacy.js";
 import { CatalogWriter, rebuildIndex } from "../src/writer.js";
 
 let dir: string;
