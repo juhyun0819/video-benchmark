@@ -16,3 +16,4 @@ export * from "./timeline.js";
 export * from "./match.js";
 export * from "./layout.js";
 export * from "./verify.js";
+export * from "./manifest.js";

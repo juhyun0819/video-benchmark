@@ -1,0 +1,569 @@
+{
+  "schema_version": 1,
+  "id": "tl-1",
+  "revision": 0,
+  "created_at": "2026-11-12T00:00:00.000Z",
+  "versions": {
+    "schema": 1,
+    "generator": "schedule.v1",
+    "template": "templates.fixture",
+    "gap_table": "gaps.fixture",
+    "exception_catalog": "exceptions.fixture",
+    "extractor": [
+      "fixture.v1"
+    ]
+  },
+  "inputs": {
+    "world": {
+      "person_id": "p-fixture",
+      "attributes": {
+        "country": "US",
+        "occupation_group": "professional",
+        "work_pattern": "day_shift"
+      },
+      "distribution_source": "atus_2025",
+      "allow_country_fallback": false,
+      "nodes": {
+        "home": {
+          "kind": "home"
+        },
+        "kitchen": {
+          "kind": "kitchen",
+          "default": "home"
+        },
+        "workplace": {
+          "kind": "workplace",
+          "job": "clerk"
+        },
+        "climbing": {
+          "kind": "hobby",
+          "activity": "climbing",
+          "setting": "venue_indoor",
+          "weekly_freq": 2,
+          "tags": [
+            "climbing"
+          ]
+        },
+        "diner": {
+          "kind": "frequent_place",
+          "setting": "venue_indoor",
+          "optional": true
+        }
+      },
+      "node_binding": {
+        "home": {
+          "dataset": [
+            "nextme800"
+          ],
+          "person_source": "p1",
+          "node": "home"
+        },
+        "workplace": {
+          "dataset": [
+            "nextme800"
+          ],
+          "person_source": "p1",
+          "node": "work"
+        },
+        "climbing": {
+          "dataset": [
+            "ego4d"
+          ],
+          "tags_any": [
+            "climbing"
+          ]
+        },
+        "diner": {
+          "dataset": [
+            "nextme800"
+          ],
+          "person_source": "p1",
+          "node": "diner"
+        }
+      },
+      "meal_style": {
+        "workday": {
+          "lunch": {
+            "workplace": 1
+          },
+          "dinner": {
+            "home": 1
+          }
+        },
+        "weekend": {
+          "breakfast": {
+            "home": 1
+          },
+          "lunch": {
+            "home": 1
+          },
+          "dinner": {
+            "home": 1
+          }
+        },
+        "breakfast_skip_prob": 0,
+        "place_nodes": {
+          "eat_out": "diner"
+        }
+      },
+      "dials": {
+        "length_days": 28,
+        "routine_strength": 0.5,
+        "exception_rate": {
+          "slot": 0,
+          "day": 0
+        },
+        "wake_sleep": "default_v1",
+        "start_weekday": "Mon"
+      },
+      "seed": 4242
+    },
+    "dials": {
+      "length_days": 28,
+      "routine_strength": 0.5,
+      "exception_rate": {
+        "slot": 0,
+        "day": 0
+      },
+      "wake_sleep": "default_v1",
+      "start_weekday": "Mon"
+    },
+    "seed": 4242,
+    "node_binding": {
+      "home": {
+        "dataset": [
+          "nextme800"
+        ],
+        "person_source": "p1",
+        "node": "home"
+      },
+      "workplace": {
+        "dataset": [
+          "nextme800"
+        ],
+        "person_source": "p1",
+        "node": "work"
+      },
+      "climbing": {
+        "dataset": [
+          "ego4d"
+        ],
+        "tags_any": [
+          "climbing"
+        ]
+      },
+      "diner": {
+        "dataset": [
+          "nextme800"
+        ],
+        "person_source": "p1",
+        "node": "diner"
+      }
+    },
+    "distribution_source": "atus_2025",
+    "donors": {
+      "weekday": {
+        "case_id": "synthetic",
+        "backoff_level": "all",
+        "filled": [],
+        "profile": {
+          "wake": 420,
+          "sleep": 1380,
+          "breakfast": 450,
+          "lunch": 720,
+          "dinner": 1110,
+          "meal_loc": {}
+        }
+      },
+      "weekend": {
+        "case_id": "synthetic",
+        "backoff_level": "all",
+        "filled": [],
+        "profile": {
+          "wake": 420,
+          "sleep": 1380,
+          "breakfast": 450,
+          "lunch": 720,
+          "dinner": 1110,
+          "meal_loc": {}
+        }
+      },
+      "country_fallback": false,
+      "weekend_redraws": 0
+    }
+  },
+  "days": [
+    {
+      "day_index": 1,
+      "weekday": "Mon",
+      "day_type": "workday",
+      "attempt": 0,
+      "wake": "07:00",
+      "sleep": "23:00",
+      "coverage_ratio": 0.25,
+      "exceptions": [],
+      "dropped_slots": [],
+      "clips": [
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d1-home",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d1-home",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 25200,
+          "synthetic_end_s": 28800,
+          "slot_id": "d1-s1",
+          "category": "home",
+          "node": "home",
+          "setting": "home_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "home",
+              "setting": "home_indoor",
+              "node": "home",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d1-am",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d1-am",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 35699.145,
+          "synthetic_end_s": 39299.145,
+          "slot_id": "d1-s2",
+          "category": "work",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "work",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d1-lunch",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d1-lunch",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 43200,
+          "synthetic_end_s": 46800,
+          "slot_id": "d1-s3",
+          "category": "meal",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "meal",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d1-pm",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d1-pm",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 47401.613,
+          "synthetic_end_s": 51001.613,
+          "slot_id": "d1-s4",
+          "category": "work",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "work",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        }
+      ]
+    },
+    {
+      "day_index": 2,
+      "weekday": "Tue",
+      "day_type": "workday",
+      "attempt": 0,
+      "wake": "07:00",
+      "sleep": "23:00",
+      "coverage_ratio": 0.25,
+      "exceptions": [],
+      "dropped_slots": [],
+      "clips": [
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d2-home",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d2-home",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 111600,
+          "synthetic_end_s": 115200,
+          "slot_id": "d2-s1",
+          "category": "home",
+          "node": "home",
+          "setting": "home_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "home",
+              "setting": "home_indoor",
+              "node": "home",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d2-am",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d2-am",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 121421.872,
+          "synthetic_end_s": 125021.872,
+          "slot_id": "d2-s2",
+          "category": "work",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "work",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d2-lunch",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d2-lunch",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 129600,
+          "synthetic_end_s": 133200,
+          "slot_id": "d2-s3",
+          "category": "meal",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "meal",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        },
+        {
+          "source": {
+            "dataset": "nextme800",
+            "video_id": "vid-d2-pm",
+            "media": {
+              "kind": "frames",
+              "approx_fps": 1,
+              "tar": "t.tar"
+            }
+          },
+          "video_id": "vid-d2-pm",
+          "source_start_s": 0,
+          "source_end_s": 3600,
+          "synthetic_start_s": 141087.924,
+          "synthetic_end_s": 144687.924,
+          "slot_id": "d2-s4",
+          "category": "work",
+          "node": "work",
+          "setting": "venue_indoor",
+          "relaxations": [],
+          "fingerprint": null,
+          "provenance": {
+            "spec": {
+              "category": "work",
+              "setting": "venue_indoor",
+              "node": "work",
+              "activity": "getting ready",
+              "time_of_day": "unknown",
+              "tags": []
+            },
+            "extractor_version": "fixture.v1"
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "id": "clip:d1-s1:d1-home:a1",
+      "block_id": "clip:d1-s1:d1-home",
+      "level": "L1",
+      "time": {
+        "kind": "interval",
+        "start": 25200,
+        "end": 25230
+      },
+      "text": "a1",
+      "provenance": {
+        "dataset": "nextme800",
+        "video_id": "vid-d1-home",
+        "orig_id": "a1",
+        "src_time": {
+          "kind": "interval",
+          "start": 0,
+          "end": 30
+        },
+        "original": {}
+      }
+    },
+    {
+      "id": "clip:d1-s1:d1-home:a2",
+      "block_id": "clip:d1-s1:d1-home",
+      "level": "L1",
+      "time": {
+        "kind": "interval",
+        "start": 25300,
+        "end": 25400.123
+      },
+      "text": "a2",
+      "provenance": {
+        "dataset": "nextme800",
+        "video_id": "vid-d1-home",
+        "orig_id": "a2",
+        "src_time": {
+          "kind": "interval",
+          "start": 100,
+          "end": 200.123456
+        },
+        "original": {}
+      }
+    },
+    {
+      "id": "clip:d2-s2:d2-am:b1",
+      "block_id": "clip:d2-s2:d2-am",
+      "level": "L1",
+      "time": {
+        "kind": "interval",
+        "start": 121431.872,
+        "end": 121441.872
+      },
+      "text": "b1",
+      "provenance": {
+        "dataset": "nextme800",
+        "video_id": "vid-d2-am",
+        "orig_id": "b1",
+        "src_time": {
+          "kind": "interval",
+          "start": 10,
+          "end": 20
+        },
+        "original": {}
+      }
+    }
+  ],
+  "verifier_summary": {
+    "pass": true,
+    "failed_rules": [],
+    "flags": [],
+    "seams": 0
+  },
+  "licenses": [
+    {
+      "dataset": "nextme800",
+      "license": "CC BY-NC 4.0",
+      "note": "Research/evaluation only; gated (mmm8383/NextMe-800)"
+    }
+  ],
+  "qa_tracks": {}
+}
