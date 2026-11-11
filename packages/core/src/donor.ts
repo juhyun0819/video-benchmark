@@ -77,6 +77,13 @@ const EARLY_WEEKEND_MARGIN = 120;
 const DAY_SHIFT_START: readonly [number, number] = [300, 660];
 const LOC_MAP: Record<number, MealPlace> = { 1: "home", 2: "workplace", 3: "others_home", 4: "eat_out" };
 
+const REQUIRED_COLUMNS = [
+  "id", "daytype", "occ", "w", "wake", "bed", "work_start", "work_end", "work_min", "worked",
+  "breakfast_has", "breakfast_time", "breakfast_loc", "lunch_has", "lunch_time", "lunch_loc",
+  "dinner_has", "dinner_time", "dinner_loc", "sport_has", "sport_time", "sport_outdoor",
+  "house_min", "social_out",
+] as const;
+
 const num = (s: string | undefined): number | null => {
   if (s === undefined || s === "") return null;
   const n = Number(s);
@@ -86,10 +93,12 @@ const bool = (s: string | undefined): boolean | null => (s === "True" ? true : s
 
 /** Parse the per-respondent ATUS CSV (header-driven; plain comma-separated, no quoting). */
 export function parseAtusPool(csvText: string): DonorRow[] {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim() !== "");
+  const lines = csvText.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
   const header = lines[0]?.split(",");
   if (!header) return [];
   const col = new Map(header.map((h, i) => [h.trim(), i] as const));
+  const missing = REQUIRED_COLUMNS.filter((name) => !col.has(name));
+  if (missing.length > 0) throw new Error(`ATUS CSV header is missing column(s): ${missing.join(", ")}`);
   const rows: DonorRow[] = [];
   for (const line of lines.slice(1)) {
     const c = line.split(",");

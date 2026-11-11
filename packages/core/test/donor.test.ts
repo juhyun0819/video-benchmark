@@ -261,4 +261,15 @@ describe("parseAtusPool", () => {
     expect(r.social_out).toBe(true);
     expect(r.daytype).toBe("weekend");
   });
+
+  it("throws naming a missing column", () => {
+    const header = HEADER.replace(",lunch_loc", "");
+    expect(() => parseAtusPool(`${header}\nx`)).toThrow(/lunch_loc/);
+  });
+
+  it("strips a UTF-8 BOM from the header", () => {
+    const line = "syn-3,weekday,2,10,420.0,1380.0,540.0,1020.0,480.0,0,0,True,False,,,False,,,False,,,False,,,0,0,30,False,False";
+    const rows = parseAtusPool(`\uFEFF${HEADER}\n${line}`);
+    expect(rows[0]!.id).toBe("syn-3");
+  });
 });
