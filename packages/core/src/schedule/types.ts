@@ -20,6 +20,8 @@ export const ExceptionSchema = z.object({
   replaces: z.string(),
   /** 1-based inclusive day indexes. */
   day_range: z.tuple([z.number().int().min(1), z.number().int().min(1)]),
+  /** Where the replaced meal happens; set for slot exceptions (R39). */
+  meal_place: MealPlaceSchema.optional(),
 });
 export type Exception = z.infer<typeof ExceptionSchema>;
 

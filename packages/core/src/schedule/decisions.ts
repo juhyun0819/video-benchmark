@@ -183,7 +183,12 @@ export function decideDay(
       const rng = dayRng("slot_exception");
       if (rng.bernoulli(dials.exception_rate.slot)) {
         const entry = eligible[rng.int(0, eligible.length)]!;
-        exceptions.push({ scope: "slot", type: entry.type, replaces: entry.replaces_role, day_range: [dayIndex, dayIndex] });
+        exceptions.push({
+          scope: "slot",
+          type: entry.type, replaces: entry.replaces_role,
+          day_range: [dayIndex, dayIndex],
+          meal_place: entry.meal_place,
+        });
         meal_place[entry.replaces_role] = entry.meal_place; // R19: overrides the routine draw or "skip"
       }
     }

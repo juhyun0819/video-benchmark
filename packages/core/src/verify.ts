@@ -2,7 +2,6 @@ import type { Clip, ClipCatalog } from "./clip.js";
 import { parseClock } from "./clock.js";
 import { hardFilterFailures, slotWindow, type HardFilter } from "./match/filters.js";
 import { layoutTimeline } from "./layout.js";
-import type { ExceptionCatalog } from "./schedule/types.js";
 import { unassignClip, type Timeline } from "./timeline.js";
 
 export const RULE_IDS = [
@@ -29,8 +28,6 @@ export type VerifierReport = {
   missing_clips: string[];
 };
 
-export type VerifyOptions = { exceptions?: ExceptionCatalog };
-
 const REQUIRED_ROLES: Record<string, string[]> = {
   workday: ["work_am", "work_pm"],
   hobby_day: ["hobby"],
@@ -48,7 +45,7 @@ const FILTER_RULE: Partial<Record<HardFilter, RuleId>> = {
 };
 
 /** Rule-based checks of a filled timeline (§7.1, §7.3). Never throws on missing clips. */
-export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts: VerifyOptions = {}): VerifierReport {
+export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierReport {
   const violations = Object.fromEntries(RULE_IDS.map((r) => [r, [] as Violation[]])) as Record<RuleId, Violation[]>;
   const add = (rule: RuleId, v: Violation) => violations[rule].push(v);
 
@@ -88,7 +85,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts: VerifyOp
       }
     }
 
-    checkExceptions(t, day, opts.exceptions, add);
+    checkExceptions(t, day, add);
   }
 
   if (missing_clips.length === 0) {
@@ -114,6 +111,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts: VerifyOp
   if (missing_clips.length === 0) {
     const placed = layoutTimeline(t, catalog);
     const windows = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, slotWindow(s)] as const)));
+    const nodeOf = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, s.spec.node] as const)));
     let prev: (typeof placed)[number] | undefined;
     for (const p of placed) {
       const [lo, hi] = windows.get(p.slot_id)!;
@@ -129,25 +127,15 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts: VerifyOp
           add("no_overlap", { day_index: p.day_index, slot_id: p.slot_id, detail: `clip ${p.clip.clip_id} overlaps ${prev.clip.clip_id}` });
         }
         if (p.day_index === prev.day_index && p.clip.day_group !== prev.clip.day_group) {
+          if (nodeOf.get(p.slot_id) === nodeOf.get(prev.slot_id)) {
+            flags.push({ kind: "swap_point", day_index: p.day_index, slot_ids: [prev.slot_id, p.slot_id] });
+          }
           seams.push({ day_index: p.day_index, before_clip: prev.clip.clip_id, after_clip: p.clip.clip_id, at_s: p.synthetic_start_s });
         }
       }
       prev = p;
     }
 
-    for (const day of t.schedule.days) {
-      const lastByNode = new Map<string, { slot_id: string; groups: Set<string> }>();
-      for (const slot of day.slots) {
-        const ids = t.slots[slot.slot_id]?.clip_ids ?? [];
-        if (ids.length === 0) continue;
-        const groups = new Set(ids.map((id) => catalog.getClip(id)!.day_group));
-        const before = lastByNode.get(slot.spec.node);
-        if (before && ![...groups].some((g) => before.groups.has(g))) {
-          flags.push({ kind: "swap_point", day_index: day.day_index, slot_ids: [before.slot_id, slot.slot_id] });
-        }
-        lastByNode.set(slot.spec.node, { slot_id: slot.slot_id, groups });
-      }
-    }
   }
 
   const rules = Object.fromEntries(
@@ -159,7 +147,6 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts: VerifyOp
 function checkExceptions(
   t: Timeline,
   day: Timeline["schedule"]["days"][number],
-  catalog: ExceptionCatalog | undefined,
   add: (rule: RuleId, v: Violation) => void,
 ): void {
   const d = day.day_index;
@@ -168,10 +155,9 @@ function checkExceptions(
     if (ex.scope === "day" && (ex.day_range[0] !== d || ex.day_range[1] !== d)) {
       add("exceptions", { day_index: d, detail: `day exception ${ex.type} has day_range ${ex.day_range.join("-")}` });
     }
-    if (ex.scope !== "slot" || !catalog) continue;
-    const entry = catalog.slot.find((e) => e.type === ex.type);
-    if (!entry) {
-      add("exceptions", { day_index: d, detail: `unknown slot exception type ${ex.type}` });
+    if (ex.scope !== "slot") continue;
+    if (ex.meal_place === undefined) {
+      add("exceptions", { day_index: d, detail: `slot exception ${ex.type} has no meal_place` });
       continue;
     }
     const slot = day.slots.find((s) => s.role === ex.replaces);
@@ -179,12 +165,14 @@ function checkExceptions(
       add("exceptions", { day_index: d, detail: `exception ${ex.type} replaces ${ex.replaces}, which has no slot` });
       continue;
     }
-    const node = (t.world.meal_style.place_nodes as Record<string, string | undefined>)[entry.meal_place];
+    // Same resolution as scheduling: home and workplace are node names, the rest come from place_nodes.
+    const place = ex.meal_place;
+    const node = place === "home" || place === "workplace" ? place : t.world.meal_style.place_nodes[place];
     if (slot.spec.node !== node) {
       add("exceptions", {
         day_index: d,
         slot_id: slot.slot_id,
-        detail: `exception ${ex.type} expects node ${node ?? `(none for ${entry.meal_place})`}, slot has ${slot.spec.node}`,
+        detail: `exception ${ex.type} expects node ${node ?? `(none for ${place})`}, slot has ${slot.spec.node}`,
       });
     }
   }

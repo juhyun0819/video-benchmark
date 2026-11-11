@@ -228,7 +228,7 @@ describe("exceptions", () => {
         expect(d.exceptions).toEqual([]);
       } else {
         expect(d.exceptions).toEqual([
-          { scope: "slot", type: "lunch_at_friend", replaces: "lunch", day_range: [d.day_index, d.day_index] },
+          { scope: "slot", type: "lunch_at_friend", replaces: "lunch", day_range: [d.day_index, d.day_index], meal_place: "others_home" },
         ]);
       }
     }

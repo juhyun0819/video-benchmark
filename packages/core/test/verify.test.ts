@@ -4,7 +4,6 @@ import {
   verifyTimeline,
   createTimeline,
   type Clip,
-  type ExceptionCatalog,
   type RuleId,
   type ScheduleDay,
   type Timeline,
@@ -69,20 +68,15 @@ const mapSlot = (t: Timeline, id: string, f: (s: ScheduleDay["slots"][number]) =
   },
 });
 
-function onlyFails(b: Built, rule: RuleId, opts?: { exceptions?: ExceptionCatalog }) {
-  const r = verifyTimeline(b.t, memoryCatalog(b.clips), opts);
+function onlyFails(b: Built, rule: RuleId) {
+  const r = verifyTimeline(b.t, memoryCatalog(b.clips));
   expect(r.rules[rule].pass).toBe(false);
   expect(r.rules[rule].violations.length).toBeGreaterThan(0);
   for (const other of RULE_IDS) if (other !== rule) expect(r.rules[other].pass, `${other}: ${JSON.stringify(r.rules[other].violations)}`).toBe(true);
   expect(r.pass).toBe(false);
 }
 
-const EXC: ExceptionCatalog = {
-  version: "fixture",
-  day: [],
-  slot: [{ type: "lunch_out", replaces_role: "lunch", meal_place: "eat_out", day_types: ["workday"] }],
-};
-const slotExc = { scope: "slot" as const, type: "lunch_out", replaces: "lunch", day_range: [1, 1] as [number, number] };
+const slotExc = { scope: "slot" as const, type: "lunch_out", replaces: "lunch", day_range: [1, 1] as [number, number], meal_place: "eat_out" as const };
 
 /** Day 1 lunch moved to the eat_out node ("diner"). */
 function withExceptionLunch(): Built {
@@ -102,9 +96,9 @@ describe("verifyTimeline", () => {
     expect(r.missing_clips).toEqual([]);
   });
 
-  it("valid timeline with a slot exception passes when exceptions are supplied", () => {
+  it("valid timeline with a slot exception passes", () => {
     const b = withExceptionLunch();
-    expect(verifyTimeline(b.t, memoryCatalog(b.clips), { exceptions: EXC }).pass).toBe(true);
+    expect(verifyTimeline(b.t, memoryCatalog(b.clips)).pass).toBe(true);
   });
 
   it("day_type violation is caught", () => {
@@ -181,8 +175,25 @@ describe("verifyTimeline", () => {
   it("exceptions violation is caught when the slot node is not the exception's place node", () => {
     const b = withExceptionLunch();
     const bad = mapSlot(b.t, "d1-s3", (s) => ({ ...s, spec: { ...s.spec, node: "workplace" } }));
-    const r = verifyTimeline(bad, memoryCatalog([...b.clips, lunchC("d1-lunch", "g1")]), { exceptions: EXC });
-    expect(r.rules.exceptions.pass).toBe(false);
+    onlyFails({ t: setSlot(bad, "d1-s3", ["d1-lunch"]), clips: b.clips }, "exceptions");
+  });
+
+  it("exceptions violation is caught for a slot exception without meal_place", () => {
+    const { t, clips } = base();
+    const { meal_place: _drop, ...noPlace } = slotExc;
+    onlyFails({ t: mapDay(t, 1, (d) => ({ ...d, exceptions: [noPlace] })), clips }, "exceptions");
+  });
+
+  it("exceptions violation is caught when the replaced role has no slot", () => {
+    const { t, clips } = base();
+    const ex = { ...slotExc, type: "dinner_out", replaces: "dinner" };
+    onlyFails({ t: mapDay(t, 1, (d) => ({ ...d, exceptions: [ex] })), clips }, "exceptions");
+  });
+
+  it("home and workplace meal places resolve to their own node names", () => {
+    const { t, clips } = base();
+    const ex = { ...slotExc, meal_place: "workplace" as const };
+    expect(verifyTimeline(mapDay(t, 1, (d) => ({ ...d, exceptions: [ex] })), memoryCatalog(clips)).pass).toBe(true);
   });
 
   it("exceptions violation is caught for two exceptions on one day", () => {
@@ -216,6 +227,24 @@ describe("verifyTimeline", () => {
     expect(r.pass).toBe(true);
     expect(r.flags).toContainEqual({ kind: "swap_point", day_index: 1, slot_ids: ["d1-s2", "d1-s3"] });
     expect(verifyTimeline(t, memoryCatalog(clips)).flags).toEqual([]);
+  });
+
+  it("no swap_point for the same node separated by a different node", () => {
+    const { t, clips } = base();
+    const evening: SlotDef = { role: "home_evening", category: "home", setting: "home_indoor", node: "home", activity: "relaxing", required: false, window: ["20:00", "22:00"] };
+    const t0 = createTimeline(makeWorld(), makeSchedule(2, () => [...DEFS, evening]), genId);
+    const slots = { ...t0.slots, ...t.slots, "d1-s5": { clip_ids: ["d1-eve"], relaxations: [] }, "d2-s5": { clip_ids: ["d2-eve"], relaxations: [] } };
+    const r = verifyTimeline({ ...t0, slots }, memoryCatalog([...clips, homeC("d1-eve", "g3"), homeC("d2-eve", "g2")]));
+    expect(r.pass).toBe(true);
+    expect(r.flags.filter((f) => f.day_index === 1)).toEqual([]);
+    expect(r.seams.filter((x) => x.day_index === 1).map((x) => x.after_clip)).toEqual(["d1-eve"]);
+  });
+
+  it("swap_point flag when one slot holds clips of two day groups", () => {
+    const { t, clips } = base();
+    const extra = workC("d1-pm2", "g3");
+    const r = verifyTimeline(setSlot(t, "d1-s4", ["d1-pm", "d1-pm2"]), memoryCatalog([...clips, extra]));
+    expect(r.flags).toEqual([{ kind: "swap_point", day_index: 1, slot_ids: ["d1-s4", "d1-s4"] }]);
   });
 
   it("seam list has the expected at_s", () => {
