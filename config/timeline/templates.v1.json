@@ -1,0 +1,32 @@
+{
+  "version": "templates.v1",
+  "day_types": {
+    "workday": [
+      { "role": "home_morning", "category": "home", "node": "home", "activity": "getting ready", "tags": [], "required": true, "anchor": "wake", "min_minutes": 10 },
+      { "role": "work_am", "category": "work", "node": "workplace", "activity": "work", "tags": [], "required": true, "anchor": "work_start", "min_minutes": 60 },
+      { "role": "lunch", "category": "meal", "node": "$meal", "meal": "lunch", "activity": "eating lunch", "tags": [], "required": false, "anchor": "lunch", "duration_minutes": 45, "min_minutes": 10 },
+      { "role": "work_pm", "category": "work", "node": "workplace", "activity": "work", "tags": [], "required": true, "end_anchor": "work_end", "min_minutes": 60 },
+      { "role": "dinner", "category": "meal", "node": "$meal", "meal": "dinner", "activity": "eating dinner", "tags": [], "required": false, "anchor": "dinner", "duration_minutes": 60, "min_minutes": 10 },
+      { "role": "hobby", "category": "hobby", "node": "$hobby", "activity": "hobby", "tags": [], "required": false, "optional_key": "hobby", "duration_minutes": 90, "min_minutes": 10 },
+      { "role": "home_evening", "category": "home", "node": "home", "activity": "relaxing at home", "tags": [], "required": false, "optional_key": "home_evening", "min_minutes": 10 }
+    ],
+    "hobby_day": [
+      { "role": "home_morning", "category": "home", "node": "home", "activity": "getting ready", "tags": [], "required": true, "anchor": "wake", "min_minutes": 10 },
+      { "role": "breakfast", "category": "meal", "node": "$meal", "meal": "breakfast", "activity": "eating breakfast", "tags": [], "required": false, "anchor": "breakfast", "duration_minutes": 20, "min_minutes": 10 },
+      { "role": "hobby", "category": "hobby", "node": "$hobby", "activity": "hobby", "tags": [], "required": true, "anchor": "sport", "duration_minutes": 120, "min_minutes": 10 },
+      { "role": "lunch", "category": "meal", "node": "$meal", "meal": "lunch", "activity": "eating lunch", "tags": [], "required": false, "anchor": "lunch", "duration_minutes": 45, "min_minutes": 10 },
+      { "role": "home_afternoon", "category": "home", "node": "home", "activity": "resting at home", "tags": [], "required": false, "min_minutes": 10 },
+      { "role": "dinner", "category": "meal", "node": "$meal", "meal": "dinner", "activity": "eating dinner", "tags": [], "required": false, "anchor": "dinner", "duration_minutes": 60, "min_minutes": 10 },
+      { "role": "home_evening", "category": "home", "node": "home", "activity": "relaxing at home", "tags": [], "required": false, "min_minutes": 10 }
+    ],
+    "home_day": [
+      { "role": "home_morning", "category": "home", "node": "home", "activity": "getting ready", "tags": [], "required": true, "anchor": "wake", "min_minutes": 10 },
+      { "role": "breakfast", "category": "meal", "node": "$meal", "meal": "breakfast", "activity": "eating breakfast", "tags": [], "required": false, "anchor": "breakfast", "duration_minutes": 20, "min_minutes": 10 },
+      { "role": "chores", "category": "home", "node": "home", "activity": "doing chores", "tags": ["cleaning", "chores"], "required": true, "min_minutes": 60 },
+      { "role": "lunch", "category": "meal", "node": "$meal", "meal": "lunch", "activity": "eating lunch", "tags": [], "required": false, "anchor": "lunch", "duration_minutes": 45, "min_minutes": 10 },
+      { "role": "home_afternoon", "category": "home", "node": "home", "activity": "resting at home", "tags": [], "required": false, "min_minutes": 10 },
+      { "role": "dinner", "category": "meal", "node": "$meal", "meal": "dinner", "activity": "eating dinner", "tags": [], "required": false, "anchor": "dinner", "duration_minutes": 60, "min_minutes": 10 },
+      { "role": "home_evening", "category": "home", "node": "home", "activity": "relaxing at home", "tags": [], "required": false, "min_minutes": 10 }
+    ]
+  }
+}

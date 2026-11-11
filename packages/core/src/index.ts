@@ -10,3 +10,5 @@ export * from "./donor.js";
 export * from "./gaps.js";
 export * from "./schedule/types.js";
 export * from "./schedule/decisions.js";
+export * from "./schedule/windows.js";
+export * from "./schedule/generate.js";

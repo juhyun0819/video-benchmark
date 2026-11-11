@@ -1,0 +1,241 @@
+import { readFileSync } from "node:fs";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  ExceptionCatalogSchema,
+  GapTableSchema,
+  OCCUPATION_CODES,
+  ScheduleDefaultsSchema,
+  ScheduleSchema,
+  TemplatesSchema,
+  TimelineError,
+  WorldSchema,
+  atus2025Source,
+  generateDay,
+  generateSchedule,
+  parseClock,
+  type DonorRow,
+  type GapTable,
+  type ScheduleInput,
+  type World,
+} from "../src/index.js";
+
+const readConfig = (rel: string): unknown =>
+  JSON.parse(readFileSync(new URL(`../../../config/${rel}`, import.meta.url), "utf8"));
+
+let counter = 0;
+function row(over: Partial<DonorRow> = {}): DonorRow {
+  counter += 1;
+  return {
+    id: `r${counter}`,
+    daytype: "weekday",
+    occ: OCCUPATION_CODES["professional"]!,
+    w: 1 + (counter % 3),
+    wake: 400 + (counter % 5) * 5,
+    bed: 1370,
+    work_start: 500 + (counter % 4) * 10,
+    work_end: 1010,
+    work_min: 480,
+    worked: true,
+    breakfast_time: 430,
+    breakfast_loc: 1,
+    lunch_time: 740,
+    lunch_loc: 2,
+    dinner_time: 1110,
+    dinner_loc: 1,
+    sport_has: false,
+    sport_time: null,
+    sport_outdoor: null,
+    house_min: 30,
+    social_out: false,
+    ...over,
+  };
+}
+
+function rows(weekend: Partial<DonorRow> = {}): DonorRow[] {
+  const weekday = Array.from({ length: 40 }, () => row());
+  const we = Array.from({ length: 40 }, () =>
+    row({
+      daytype: "weekend",
+      worked: false,
+      work_start: null,
+      work_end: null,
+      wake: 470,
+      bed: 1390,
+      breakfast_time: 500,
+      lunch_time: 760,
+      dinner_time: 1100,
+      ...weekend,
+    }),
+  );
+  return [...weekday, ...we];
+}
+
+type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number };
+
+function makeWorld(o: Over = {}): World {
+  return WorldSchema.parse({
+    person_id: "p-test",
+    attributes: { country: "US", occupation_group: "professional", work_pattern: "day_shift" },
+    distribution_source: "atus_2025",
+    nodes: {
+      home: { kind: "home" },
+      kitchen: { kind: "kitchen", default: "home" },
+      workplace: { kind: "workplace", job: "clerk" },
+      hobby_a: { kind: "hobby", activity: "climbing", setting: "venue_indoor", weekly_freq: 2, tags: ["sport_climbing"] },
+      hobby_b: { kind: "hobby", activity: "cycling", setting: "outdoor", weekly_freq: 1 },
+      diner: { kind: "frequent_place", setting: "venue_indoor", optional: true },
+      friend_home: { kind: "frequent_place", setting: "home_indoor", optional: true },
+    },
+    node_binding: {
+      home: { node: "h" },
+      workplace: { node: "w" },
+      hobby_a: { node: "a" },
+      hobby_b: { node: "b" },
+      diner: { node: "d" },
+      friend_home: { node: "f" },
+    },
+    meal_style: {
+      workday: { lunch: { workplace: 0.8, eat_out: 0.2 }, dinner: { home: 0.8, eat_out: 0.1, others_home: 0.1 } },
+      weekend: {
+        breakfast: { home: 0.9, eat_out: 0.1 },
+        lunch: { home: 0.6, eat_out: 0.3, others_home: 0.1 },
+        dinner: { home: 0.7, eat_out: 0.2, others_home: 0.1 },
+      },
+      breakfast_skip_prob: 0.3,
+      place_nodes: o.placeNodes ?? { eat_out: "diner", others_home: "friend_home" },
+    },
+    dials: {
+      length_days: 28,
+      routine_strength: o.routine ?? 0.6,
+      exception_rate: { slot: o.slot ?? 0.15, day: o.day ?? 0.1 },
+      wake_sleep: "default_v1",
+    },
+    seed: 20261112,
+  });
+}
+
+function input(o: Over = {}, weekend: Partial<DonorRow> = {}): ScheduleInput {
+  counter = 0;
+  const world = makeWorld(o);
+  return {
+    world,
+    templates: TemplatesSchema.parse(readConfig("timeline/templates.v1.json")),
+    gaps: GapTableSchema.parse(readConfig("timeline/gaps.v1.json")) as GapTable,
+    exceptions: ExceptionCatalogSchema.parse(readConfig("timeline/exceptions.v1.json")),
+    source: atus2025Source(rows(weekend)),
+    boundNodes: new Set(Object.keys(world.node_binding)),
+    defaults: ScheduleDefaultsSchema.parse(readConfig("schedule_defaults_atus2025.json")),
+  };
+}
+
+const json = (x: unknown) => JSON.stringify(x, null, 2);
+const ORIGINAL_TZ = process.env.TZ;
+afterEach(() => {
+  process.env.TZ = ORIGINAL_TZ;
+});
+
+describe("generateSchedule", () => {
+  it("byte-identical across runs and time zones", () => {
+    const a = json(generateSchedule(input()));
+    const b = json(generateSchedule(input()));
+    expect(a).toBe(b);
+    process.env.TZ = "UTC";
+    const utc = json(generateSchedule(input()));
+    process.env.TZ = "America/New_York";
+    const ny = json(generateSchedule(input()));
+    expect(utc).toBe(a);
+    expect(ny).toBe(a);
+  });
+
+  it("28 days, slot ids unique, windows inside [wake, sleep], transitions match node changes", () => {
+    const schedule = generateSchedule(input());
+    expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
+    expect(schedule.generator_version).toBe("schedule.v1");
+    expect(schedule.template_version).toBe("templates.v1");
+    expect(schedule.gap_table_version).toBe("gaps.v1");
+    expect(schedule.exception_catalog_version).toBe("exceptions.v1");
+    expect(schedule.days.map((d) => d.day_index)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
+
+    const ids = schedule.days.flatMap((d) => d.slots.map((s) => s.slot_id));
+    expect(new Set(ids).size).toBe(ids.length);
+
+    for (const day of schedule.days) {
+      const wake = parseClock(day.wake);
+      const sleep = parseClock(day.sleep);
+      const win = day.slots.map((s) => s.window.map(parseClock) as [number, number]);
+      expect(win[0]![0]).toBe(wake);
+      for (const [start, end] of win) {
+        expect(start).toBeGreaterThanOrEqual(wake);
+        expect(end).toBeLessThanOrEqual(sleep);
+        expect(end).toBeGreaterThan(start);
+      }
+      const expected: { from_slot: string; to_slot: string }[] = [];
+      for (let i = 1; i < day.slots.length; i++) {
+        const prev = day.slots[i - 1]!;
+        const next = day.slots[i]!;
+        expect(win[i]![0]).toBeGreaterThanOrEqual(win[i - 1]![1]);
+        if (prev.spec.node !== next.spec.node) expected.push({ from_slot: prev.slot_id, to_slot: next.slot_id });
+      }
+      expect(day.transitions.map(({ from_slot, to_slot }) => ({ from_slot, to_slot }))).toEqual(expected);
+      for (const t of day.transitions) {
+        const i = day.slots.findIndex((s) => s.slot_id === t.to_slot);
+        expect(win[i]![0] - win[i - 1]![1]).toBeGreaterThanOrEqual(t.minutes);
+        expect(t.minutes).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("generateDay at attempt 1 differs from attempt 0 and leaves the other days untouched", () => {
+    const inp = input();
+    const schedule = generateSchedule(inp);
+    const d = schedule.days.find((day) => day.day_type === "workday" && day.attempt === 0)!.day_index;
+    const retried = generateDay(inp, schedule.donors, d, 1);
+    expect(retried.attempt).toBe(1);
+    expect(retried.day_index).toBe(d);
+    expect(json(retried)).not.toBe(json(schedule.days[d - 1]));
+    for (const day of schedule.days) {
+      expect(json(generateDay(inp, schedule.donors, day.day_index, day.attempt))).toBe(json(day));
+    }
+    expect(json(generateSchedule(inp))).toBe(json(schedule));
+  });
+
+  it("meal_style_effective drops eat_out without place_nodes.eat_out and sums to 1", () => {
+    const schedule = generateSchedule(input({ placeNodes: { others_home: "friend_home" } }));
+    const eff = schedule.meal_style_effective;
+    const dists = [eff.workday.lunch, eff.workday.dinner, eff.weekend.breakfast, eff.weekend.lunch, eff.weekend.dinner];
+    for (const dist of dists) {
+      expect(dist).not.toHaveProperty("eat_out");
+      expect(Object.values(dist).reduce((s, p) => s + p, 0)).toBeCloseTo(1, 12);
+    }
+    expect(eff.workday.lunch).toEqual({ workplace: 1 });
+    for (const day of schedule.days) {
+      for (const slot of day.slots) expect(slot.spec.node).not.toBe("diner");
+    }
+  });
+
+  it("uses the weekend donor for leave days and records day exceptions", () => {
+    // Weekend donors wake at 10:00, weekday donors around 06:45; routine 1 keeps σ at 20 min.
+    const schedule = generateSchedule(input({ day: 1, routine: 1 }, { wake: 600, breakfast_time: 630 }));
+    const leave = schedule.days.filter((d) => d.day_type === "leave_day");
+    expect(leave.length).toBeGreaterThan(0);
+    for (const day of leave) {
+      expect(parseClock(day.wake)).toBeGreaterThan(540);
+      expect(day.exceptions).toEqual([{ scope: "day", type: "leave_day", replaces: "workday", day_range: [day.day_index, day.day_index] }]);
+      expect(day.slots.map((s) => s.role)).toContain("chores");
+      expect(day.slots.some((s) => s.spec.category === "work")).toBe(false);
+    }
+  });
+
+  it("rethrows SCHEDULE_INFEASIBLE naming the day after the 5th retry", () => {
+    let err: unknown;
+    try {
+      generateSchedule(input({ day: 0, slot: 0 }, { bed: 600 }));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TimelineError);
+    expect((err as TimelineError).code).toBe("SCHEDULE_INFEASIBLE");
+    expect((err as TimelineError).details).toMatchObject({ day: 6, attempts: 6 });
+    expect((err as TimelineError).message).toContain("day 6");
+  });
+});
