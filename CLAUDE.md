@@ -37,6 +37,7 @@
 - `883d71cd`는 이벤트가 3분 42초뿐이다
 - 같은 자전거 체인 클립이 `883d71cd`와 `8459376a`에 모두 있다
 - `8459376a`의 클라이밍 블록처럼 내부 task 이름이 그대로 요약인 경우가 있다
+- Ego4D summary 원문에는 `#Summary C ...`처럼 표기 접두어가 붙어 있다. 블록 요약과 QA에 쓸 때 다듬을지 정한다
 - 샘플마다 합성 QA 유형을 정해 두면 검증이 쉽다
 
 ## 원본 미디어
@@ -53,4 +54,8 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 대기 중인 일
 
-- Ego4D는 라이선스 승인을 기다린다. 승인되면 `scripts/download_lab22.sh ego4d`로 받고 `--list-scenarios`로 `config/categories.json`의 매핑을 확정한다.
+- 없음. Ego4D는 2026-11-10에 주석을 받아 ingest했다. 2026-11-11에 walking, transit에 키워드를 넣고 키워드를 단어 단위로 비교하도록 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). 순서는 README의 Ego4D 절을 따른다. Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
+
+## 서버 환경
+
+- Node 24는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`에 있다(홈은 서버를 옮기면 사라질 수 있어서 여기에 둔다). PATH에 없으면 `export PATH="/NHNHOME/langlab/zzuhyun/.node/current/bin:$PATH"`.

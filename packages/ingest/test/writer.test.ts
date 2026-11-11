@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -110,5 +110,50 @@ describe("CatalogWriter", () => {
     expect(existsSync(join(dir, "catalog/nextme800/days/2026-04-15.json"))).toBe(false);
     expect(() => w.writeAnnotations("nextme800", "../evil", [])).toThrow(/video id/i);
     expect(() => w.writeBaseDay({ ...baseDay, day: "../x" })).toThrow(/day/i);
+  });
+});
+
+describe("CatalogWriter.writeEventCatalog", () => {
+  const annDir = () => join(dir, "catalog", "ego4d", "annotations");
+  const anns = (...ids: string[]) => new Map<string, Annotation[]>(ids.map((id) => [id, [ann(`${id}:a`, id)]]));
+
+  it("writes candidates and annotations, and removes annotation files of videos it did not write", () => {
+    const w = new CatalogWriter(dir);
+    w.writeEventCatalog("ego4d", [cand("ego4d:u:0.000-60.000", "walking")], anns("old", "kept"));
+    w.writeEventCatalog("ego4d", [cand("ego4d:u:0.000-60.000", "walking")], anns("kept", "new"));
+    expect(readdirSync(annDir()).sort()).toEqual(["kept.jsonl", "new.jsonl"]);
+    expect(readFileSync(join(dir, "catalog/ego4d/candidates.jsonl"), "utf8").trimEnd().split("\n")).toHaveLength(1);
+  });
+
+  it("removes every annotation file when the catalog is empty, and leaves other files alone", () => {
+    const w = new CatalogWriter(dir);
+    w.writeEventCatalog("ego4d", [], anns("old"));
+    writeFileSync(join(annDir(), "notes.txt"), "keep me");
+    w.writeEventCatalog("ego4d", [], new Map());
+    expect(readdirSync(annDir())).toEqual(["notes.txt"]);
+    expect(readFileSync(join(dir, "catalog/ego4d/candidates.jsonl"), "utf8")).toBe("");
+  });
+
+  it("does not touch annotations of other datasets", () => {
+    const w = new CatalogWriter(dir);
+    w.writeAnnotations("hdepic", "P01-x", [ann("h", "x")]);
+    w.writeEventCatalog("ego4d", [], new Map());
+    expect(existsSync(join(dir, "catalog/hdepic/annotations/P01-x.jsonl"))).toBe(true);
+  });
+
+  it("validates everything before deleting anything", () => {
+    const w = new CatalogWriter(dir);
+    w.writeEventCatalog("ego4d", [], anns("old"));
+    expect(() => w.writeEventCatalog("ego4d", [], anns("../evil"))).toThrow(/video id/i);
+    expect(() =>
+      w.writeEventCatalog("ego4d", [{ nope: 1 } as unknown as BlockCandidate], new Map()),
+    ).toThrow();
+    expect(readdirSync(annDir())).toEqual(["old.jsonl"]);
+  });
+
+  it("refuses nextme800, whose ingest adds days one at a time", () => {
+    const w = new CatalogWriter(dir);
+    mkdirSync(join(dir, "catalog/nextme800/annotations"), { recursive: true });
+    expect(() => w.writeEventCatalog("nextme800", [], new Map())).toThrow(/nextme800/);
   });
 });

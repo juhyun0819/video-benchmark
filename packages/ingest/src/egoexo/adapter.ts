@@ -91,7 +91,7 @@ function takeSummary(take: EgoExoTake, segments: EgoExoKeystep[]): string {
 /**
  * Build Ego-Exo4D event candidates and per-take annotations.
  * - One take is one candidate, in the FIRST egoexo4d category (config order) whose scenarios contain the
- *   take's parent_task_name and whose keywords are empty or appear in task_name (case-insensitive).
+ *   take's parent_task_name and whose keywords are empty or appear in task_name as whole words (case-insensitive).
  * - Annotations are the first accepted atomic run (points; a second annotator would duplicate the
  *   timeline) and the keystep segments (intervals), copied verbatim; remap filters by span later.
  * Skip reasons: invalid_time (duration_sec not positive), too_short (span under minSec), no_ego_video,

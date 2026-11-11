@@ -103,7 +103,7 @@ export function listScenarios(meta: Ego4dMeta): Array<{ scenario: string; videos
  * Build Ego4D event candidates and per-video annotations.
  * - A video matches a category when its scenarios intersect the category's scenarios.
  * - Each narration_pass_1 summary of a matching video becomes one candidate in the FIRST category
- *   (config order) whose keywords are empty or appear in summary_text (case-insensitive).
+ *   (config order) whose keywords are empty or appear in summary_text as whole words (case-insensitive).
  * - Annotations (all pass-1 narrations as points, all valid summaries as intervals) are produced only
  *   for videos that yield at least one candidate; remap filters by span later.
  * - Candidate media fps is the video's video_metadata.fps (DEFAULT_FPS when absent). A candidate end past

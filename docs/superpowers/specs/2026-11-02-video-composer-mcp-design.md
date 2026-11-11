@@ -223,7 +223,7 @@ npm run ingest -- egoexo --root <egoexo 다운로드 경로> [--min-sec 60] [--c
 ### 6.4 Ego4D 어댑터 (산책·이동·취미 등)
 
 - 입력은 사용자가 `lab22` CLI로 받은 `ego4d.json`과 `narration.json`의 로컬 경로다.
-- `config/categories.json`의 매핑(카테고리 → scenario 목록 + summary 키워드)에 맞는 영상을 고른다. 그 영상의 `narration_pass_1.summaries[]` 각 구간이 이벤트 후보이고, summary는 `summary_text`다.
+- `config/categories.json`의 매핑(카테고리 → scenario 목록 + summary 키워드)에 맞는 영상을 고른다. 그 영상의 `narration_pass_1.summaries[]` 각 구간이 이벤트 후보이고, summary는 `summary_text`다. 키워드는 대소문자를 무시하고 단어 단위로 비교하며, summary는 config 순서에서 처음 맞는 카테고리로 간다.
 - 후보 구간에 들어가는 narration을 `level: "narration"` **시점형** 주석으로 만들고, 구간화하지 않는다. summary 자체도 `level: "summary"` 구간형 주석으로 넣는다.
 - `ego4d.json`의 영상 필드([형식 문서](https://ego4d-data.org/docs/data/metadata/))를 이렇게 쓴다.
   - 후보의 `media.fps`는 `video_metadata.fps`다. 값이 없거나 양수가 아니면 30이다.
@@ -250,6 +250,7 @@ data/catalog/
 ### 6.6 공통 규칙
 
 - 모든 출력은 zod 스키마로 검증한다. 같은 입력이면 같은 출력이 나온다(결정적, 멱등).
+- 이벤트 데이터셋(hdepic, ego4d, egoexo4d)은 실행마다 카탈로그를 통째로 바꾸고, 이번 실행에서 쓰지 않은 `annotations/*.jsonl`을 지운다. 모두 검증한 뒤에 쓰고 지운다. NextMe-800은 날짜별로 더해 가므로 지우지 않는다.
 - 실행이 끝나면 수집 수와 건너뛴 수(이유별)를 요약해 출력한다.
 
 ### 6.7 Ego-Exo4D 어댑터 (요리·건강·자전거 수리·취미·운동)

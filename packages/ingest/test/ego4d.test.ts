@@ -1,10 +1,10 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AnnotationSchema, BlockCandidateSchema } from "@vb/core";
-import { loadCategories } from "../src/categories.js";
+import { keywordMatches, loadCategories, type Category } from "../src/categories.js";
 import { ingestEgo4d, main } from "../src/cli.js";
 import {
   buildEgo4dCatalog,
@@ -40,9 +40,18 @@ afterEach(() => {
 describe("loadCategories", () => {
   it("loads the shipped config with its labels", () => {
     const cats = categories().categories.filter((c) => c.dataset === "ego4d");
-    expect(cats.map((c) => c.id)).toEqual(["walking", "transit", "hobby_lego", "hobby_tent"]);
-    expect(cats.map((c) => c.label)).toEqual(["Walking", "Driving and transit", "Hobby: Lego", "Hobby: Tent"]);
-    expect(cats[2]).toMatchObject({ scenarios: ["Playing board games"], keywords: ["lego"] });
+    // Most specific first: a summary goes to the first matching category in config order.
+    expect(cats.map((c) => c.id)).toEqual(["hobby_lego", "hobby_tent", "transit", "walking"]);
+    expect(cats.map((c) => c.label)).toEqual(["Hobby: Lego", "Hobby: Tent", "Driving and transit", "Walking"]);
+    expect(cats[0]).toMatchObject({
+      scenarios: ["building lego models / plastic models", "Playing board games", "DEPRECATED : Playing board games"],
+      keywords: ["lego", "legos"],
+    });
+    expect(cats[1]).toMatchObject({ scenarios: ["Camp setup/pack-up/chores"], keywords: ["tent", "tents"] });
+    expect(cats[2]?.scenarios).toEqual(["Car - commuting, road trip", "Bus", "Train"]);
+    expect(cats[2]?.keywords).toEqual(expect.arrayContaining(["drove", "car", "bus", "train", "vehicle"]));
+    expect(cats[3]?.scenarios).toEqual(["Walking on street"]);
+    expect(cats[3]?.keywords).toEqual(expect.arrayContaining(["walked", "walking", "street", "sidewalk", "road"]));
   });
 
   it("rejects categories.json with empty scenarios, naming the file", () => {
@@ -53,6 +62,77 @@ describe("loadCategories", () => {
     );
     expect(() => loadCategories(bad)).toThrow(bad);
     expect(() => loadCategories(bad)).toThrow(/categories\.0\.scenarios/);
+  });
+});
+
+describe("keywordMatches", () => {
+  const cat = (keywords: string[]): Category => ({ id: "x", label: "X", dataset: "ego4d", scenarios: ["S"], keywords });
+
+  it("matches any text when the category has no keywords", () => {
+    expect(keywordMatches(cat([]), "anything")).toBe(true);
+  });
+
+  it("matches whole words only, ignoring case", () => {
+    expect(keywordMatches(cat(["car"]), "C parked the Car.")).toBe(true);
+    expect(keywordMatches(cat(["car"]), "C carried a card to the cart.")).toBe(false);
+    expect(keywordMatches(cat(["tent"]), "C read the content intently.")).toBe(false);
+    expect(keywordMatches(cat(["lego"]), "C picked a LEGO brick")).toBe(true);
+  });
+
+  it("matches a keyword at the start or end of the text and next to punctuation", () => {
+    expect(keywordMatches(cat(["bus"]), "Bus stop")).toBe(true);
+    expect(keywordMatches(cat(["bus"]), "C boarded the bus")).toBe(true);
+    expect(keywordMatches(cat(["bus"]), "#Summary C (on the bus), sat")).toBe(true);
+  });
+
+  it("treats keyword characters literally and allows multi-word keywords", () => {
+    expect(keywordMatches(cat(["traffic light"]), "C waited at a traffic light.")).toBe(true);
+    expect(keywordMatches(cat(["a.b"]), "axb")).toBe(false);
+  });
+});
+
+describe("shipped ego4d categories", () => {
+  function categoriesOf(scenarios: string[], texts: string[]) {
+    const m = parseEgo4dMeta({ videos: [{ video_uid: "v", scenarios }] }, "m.json");
+    const n = parseEgo4dNarrations(
+      {
+        v: {
+          narration_pass_1: {
+            narrations: [],
+            summaries: texts.map((summary_text, i) => ({ start_sec: i * 100, end_sec: i * 100 + 90, summary_text })),
+          },
+        },
+      },
+      "n.json",
+    );
+    const { candidates } = buildEgo4dCatalog(m, n, categories(), newReport());
+    return texts.map((t) => candidates.find((c) => c.summary === t)?.category ?? null);
+  }
+
+  it("drops walking and transit summaries that do not describe walking or travel", () => {
+    expect(
+      categoriesOf(
+        ["Walking on street", "Bus"],
+        [
+          "#Summary C was at a climbing center, she attempted to climb a bouldering wall.",
+          "#Summary C was in an aquarium and stared at fish.",
+          "#Summary C walked on the streets with lady X.",
+          "#Summary C drove a car on a highway.",
+        ],
+      ),
+    ).toEqual([null, null, "walking", "transit"]);
+  });
+
+  it("puts a summary that mentions both travel and walking in transit", () => {
+    expect(
+      categoriesOf(["Walking on street", "Bus"], ["#Summary C was in a bus, got off the bus and walked along a street."]),
+    ).toEqual(["transit"]);
+  });
+
+  it("puts a tent summary of a video that is also a walking video in hobby_tent", () => {
+    expect(
+      categoriesOf(["Walking on street", "Camp setup/pack-up/chores"], ["#Summary C walked to the tent and folded the tents."]),
+    ).toEqual(["hobby_tent"]);
   });
 });
 
@@ -157,7 +237,7 @@ describe("buildEgo4dCatalog", () => {
             { timestamp_sec: Number.NaN, narration_text: "bad" },
             { timestamp_sec: 3, narration_text: "good" },
           ],
-          summaries: [{ start_sec: 0, end_sec: 10, summary_text: "s" }],
+          summaries: [{ start_sec: 0, end_sec: 10, summary_text: "C walked" }],
         },
       },
     } as unknown as ReturnType<typeof narrations>;
@@ -277,6 +357,21 @@ describe("ingestEgo4d / CLI", () => {
     expect(index.categories).toMatchObject({ walking: 2, hobby_lego: 2, hobby_tent: 1 });
   });
 
+  it("removes annotation files left by an earlier run for videos that are no longer candidates", () => {
+    const stale = join(dir, "catalog", "ego4d", "annotations", "dddddddd-0000-0000-0000-000000000004.jsonl");
+    mkdirSync(dirname(stale), { recursive: true });
+    writeFileSync(stale, "");
+    ingestEgo4d({
+      metadataPath: META_PATH,
+      narrationsPath: NARR_PATH,
+      categoriesPath: CATS_PATH,
+      dataDir: dir,
+      now: new Date("2026-11-03T00:00:00Z"),
+    });
+    expect(existsSync(stale)).toBe(false);
+    expect(readdirSync(dirname(stale)).sort()).toEqual([`${V1}.jsonl`, `${V2}.jsonl`]);
+  });
+
   it("main --list-scenarios prints scenario<TAB>count and writes nothing", async () => {
     const out: string[] = [];
     vi.spyOn(console, "log").mockImplementation((s: unknown) => {
@@ -285,7 +380,7 @@ describe("ingestEgo4d / CLI", () => {
     const code = await main(["ego4d", "--list-scenarios", "--metadata", META_PATH, "--data", dir], {});
     expect(code).toBe(0);
     expect(out).toEqual([
-      "Camping\t1",
+      "Camp setup/pack-up/chores\t1",
       "Car - commuting, road trip\t1",
       "Cooking\t1",
       "Playing board games\t1",

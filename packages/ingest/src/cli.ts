@@ -157,8 +157,7 @@ export function ingestHdepic(opts: IngestHdepicOptions): IngestReport {
   const { candidates, annotations } = buildHdepicCatalog(segments, narrations, recipes, report, erratum, opts.minSec);
 
   const writer = new CatalogWriter(opts.dataDir);
-  writer.writeCandidates("hdepic", candidates);
-  for (const [videoId, anns] of annotations) writer.writeAnnotations("hdepic", videoId, anns);
+  writer.writeEventCatalog("hdepic", candidates, annotations);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
 }
@@ -182,8 +181,7 @@ export function ingestEgo4d(opts: IngestEgo4dOptions): IngestReport {
   const { candidates, annotations } = buildEgo4dCatalog(meta, narrations, categories, report);
 
   const writer = new CatalogWriter(opts.dataDir);
-  writer.writeCandidates("ego4d", candidates);
-  for (const [videoUid, anns] of annotations) writer.writeAnnotations("ego4d", videoUid, anns);
+  writer.writeEventCatalog("ego4d", candidates, annotations);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
 }
@@ -222,8 +220,7 @@ export function ingestEgoExo(opts: IngestEgoExoOptions): IngestReport {
   const { candidates, annotations } = buildEgoExoCatalog(takes, atomic, keysteps, categories, report, opts.minSec);
 
   const writer = new CatalogWriter(opts.dataDir);
-  writer.writeCandidates("egoexo4d", candidates);
-  for (const [takeUid, anns] of annotations) writer.writeAnnotations("egoexo4d", takeUid, anns);
+  writer.writeEventCatalog("egoexo4d", candidates, annotations);
   rebuildIndex(opts.dataDir, opts.now);
   return report;
 }

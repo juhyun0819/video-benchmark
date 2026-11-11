@@ -1,9 +1,9 @@
 {
   "categories": [
-    { "id": "walking", "label": "Walking", "dataset": "ego4d", "scenarios": ["Walking on street"], "keywords": [] },
-    { "id": "transit", "label": "Driving and transit", "dataset": "ego4d", "scenarios": ["Car - commuting, road trip"], "keywords": [] },
-    { "id": "hobby_lego", "label": "Hobby: Lego", "dataset": "ego4d", "scenarios": ["Playing board games"], "keywords": ["lego"] },
-    { "id": "hobby_tent", "label": "Hobby: Tent", "dataset": "ego4d", "scenarios": ["Camping"], "keywords": ["tent"] },
+    { "id": "hobby_lego", "label": "Hobby: Lego", "dataset": "ego4d", "scenarios": ["building lego models / plastic models", "Playing board games", "DEPRECATED : Playing board games"], "keywords": ["lego", "legos"] },
+    { "id": "hobby_tent", "label": "Hobby: Tent", "dataset": "ego4d", "scenarios": ["Camp setup/pack-up/chores"], "keywords": ["tent", "tents"] },
+    { "id": "transit", "label": "Driving and transit", "dataset": "ego4d", "scenarios": ["Car - commuting, road trip", "Bus", "Train"], "keywords": ["drive", "drives", "drove", "driving", "driven", "car", "cars", "bus", "buses", "train", "trains", "vehicle", "vehicles", "taxi", "cab", "subway", "metro", "tram", "truck", "van", "motorcycle", "motorbike", "highway"] },
+    { "id": "walking", "label": "Walking", "dataset": "ego4d", "scenarios": ["Walking on street"], "keywords": ["walk", "walks", "walked", "walking", "stroll", "strolls", "strolled", "strolling", "street", "streets", "sidewalk", "pavement", "road", "roads", "path", "pathway", "crosswalk", "jog", "jogged", "jogging"] },
     { "id": "cooking", "label": "Cooking", "dataset": "egoexo4d", "scenarios": ["Cooking"], "keywords": [] },
     { "id": "health", "label": "Health: COVID test and CPR", "dataset": "egoexo4d", "scenarios": ["Health"], "keywords": [] },
     { "id": "bike_repair", "label": "Bike repair", "dataset": "egoexo4d", "scenarios": ["Bike Repair"], "keywords": [] },

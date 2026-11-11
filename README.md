@@ -28,6 +28,8 @@ npm install
 
 모든 명령은 `npm run ingest -- <데이터셋> ...` 형태다. 도움말은 `npm run ingest -- --help`.
 
+이벤트 데이터셋(HD-EPIC, Ego4D, Ego-Exo4D)은 실행할 때마다 그 데이터셋의 카탈로그를 통째로 바꾼다. 이번 실행에서 주석을 쓰지 않은 영상의 `annotations/<id>.jsonl`도 지운다. NextMe-800은 날짜별로 더해 가므로 지우지 않는다.
+
 ### NextMe-800 (base day)
 
 NextMe-800은 Hugging Face의 gated 데이터셋(`mmm8383/NextMe-800`)이다. 먼저 접근 승인을 받아야 한다. 토큰은 둘 중 하나로 준다.
@@ -77,10 +79,10 @@ npm run ingest -- hdepic \
 
 Ego4D와 Ego-Exo4D 접근은 [Lab22](https://lab22.ai)로 옮겨졌다. 라이선스 승인 후 [Lab22 CLI](https://lab22.ai/docs/cli)로 annotations를 내려받는다. Ego4D에 필요한 파일은 메타데이터(`ego4d.json`)와 narration(`narration.json`)이고, 영상은 받지 않는다.
 
-1. Lab22의 API Keys 페이지에서 키를 만들어 `~/.config/lab22/env`에 넣는다. 파일 권한은 600으로 두고, 저장소에는 넣지 않는다. 환경 변수 `LAB22_API_KEY`가 이미 있으면 그 값을 쓴다.
+1. Lab22의 API Keys 페이지에서 키를 만들어 저장소 루트의 `.env`에 넣는다. `.env`는 git이 무시하고, 파일 권한은 600으로 둔다. 스크립트는 이 파일에서 `LAB22_API_KEY` 줄만 읽는다. 환경 변수 `LAB22_API_KEY`가 이미 있으면 그 값을 쓰고, 다른 파일을 쓰려면 `LAB22_ENV_FILE=<path>`를 준다.
 
    ```bash
-   export LAB22_API_KEY='<API 키>'
+   LAB22_API_KEY=<API 키>
    ```
 
 2. 다운로드 스크립트를 실행한다. CLI는 `uvx`로 그때그때 받아 실행하므로 따로 설치하지 않아도 된다.
@@ -89,13 +91,26 @@ Ego4D와 Ego-Exo4D 접근은 [Lab22](https://lab22.ai)로 옮겨졌다. 라이�
    scripts/download_lab22.sh ego4d      # 기본 출력 경로: data/raw/ego4d
    ```
 
-3. 받은 파일로 ingest한다.
+   Lab22는 현재 릴리스 하나(지금은 `v2_1`)만 제공하므로 버전을 지정하지 않는다. 받은 파일의 폴더 구조는 릴리스를 따라 바뀔 수 있어서, 스크립트가 끝나면서 실제 경로로 다음 명령을 출력한다. `v2_1`에서는 `ego4d.json`이 출력 폴더 바로 아래에, narration이 `v2/annotations/narration.json`에 있다.
+
+3. narration을 줄인다. `narration.json`은 1GB가 넘어 Node가 한 번에 읽을 수 없다. 이 스크립트는 `config/categories.json`의 ego4d scenario에 해당하는 영상의 `narration_pass_1`만 남긴다(`v2_1`에서 642개 영상, 약 55MB). ego4d scenario를 바꾸면 다시 실행한다.
 
    ```bash
-   npm run ingest -- ego4d --metadata data/raw/ego4d/v2/ego4d.json --narrations data/raw/ego4d/v2/annotations/narration.json
+   python3 scripts/convert_ego4d_narrations.py \
+     --metadata data/raw/ego4d/ego4d.json \
+     --narrations data/raw/ego4d/v2/annotations/narration.json \
+     --out data/raw/ego4d/narration_selected.json
    ```
 
-카테고리 정의는 `config/categories.json`이다. 이 파일의 `scenarios` 값은 임시값이다. 실제 메타데이터에 있는 scenario 이름과 맞는지 먼저 확인하고, 다르면 파일을 고친다. 메타데이터에 있는 scenario와 video 수는 아래 명령으로 볼 수 있다.
+4. 줄인 파일로 ingest한다.
+
+   ```bash
+   npm run ingest -- ego4d --metadata data/raw/ego4d/ego4d.json --narrations data/raw/ego4d/narration_selected.json
+   ```
+
+카테고리 정의는 `config/categories.json`이다. ego4d 카테고리의 `scenarios`는 `v2_1` 메타데이터의 실제 scenario 이름으로 확정했다(2026-11-10). 메타데이터에 있는 scenario와 video 수는 아래 명령으로 볼 수 있다.
+
+scenario가 맞는 영상의 summary 중에서 `keywords`의 단어가 들어 있는 것만 후보가 된다. 키워드는 대소문자를 가리지 않고 단어 단위로 비교한다(`car`는 `carried`, `card`에 걸리지 않는다). 그래서 활용형은 `tent`, `tents`처럼 따로 적는다. `keywords`가 비어 있으면 모든 summary가 후보다. summary 하나가 여러 카테고리에 맞으면 파일에서 먼저 나오는 카테고리로 간다. 그래서 ego4d 카테고리는 구체적인 것부터 둔다(lego, tent, transit, walking 순). Ego4D summary는 5분 단위라 여러 행동이 섞이므로, 실내에서 걷는 장면처럼 키워드로 거르지 못하는 후보가 남는다.
 
 ```bash
 npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
@@ -192,5 +207,5 @@ python3 scripts/sync_data.py pull   # 로컬 compositions가 있으면 --overwri
 ```bash
 npm test
 npm run typecheck
-python3 -m pytest scripts/test_sync_data.py
+python3 -m pytest scripts/test_sync_data.py scripts/test_convert_ego4d_narrations.py
 ```

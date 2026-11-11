@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   AnnotationSchema,
@@ -60,6 +60,31 @@ export class CatalogWriter {
     const ds = DatasetSchema.parse(dataset);
     const rows = c.map((x) => BlockCandidateSchema.parse(x));
     writeFileAtomic(join(this.root, ds, "candidates.jsonl"), jsonl(rows));
+  }
+
+  /**
+   * Replaces an event dataset's catalog: candidates.jsonl, one annotation file per video in `annotations`,
+   * and removal of `<id>.jsonl` annotation files for videos not in `annotations` (left by an earlier run).
+   * Everything is validated before any file is written or removed. nextme800 is refused because its ingest
+   * adds days one at a time, so its other annotation files are still in use.
+   */
+  writeEventCatalog(dataset: Dataset, candidates: BlockCandidate[], annotations: Map<string, Annotation[]>): void {
+    const ds = DatasetSchema.parse(dataset);
+    if (ds === "nextme800") throw new Error("writeEventCatalog: nextme800 is not an event dataset");
+    const candRows = candidates.map((x) => BlockCandidateSchema.parse(x));
+    const annRows = [...annotations].map(
+      ([videoId, a]) => [safeSegment("video id", videoId), a.map((x) => AnnotationSchema.parse(x))] as const,
+    );
+
+    writeFileAtomic(join(this.root, ds, "candidates.jsonl"), jsonl(candRows));
+    const annDir = join(this.root, ds, "annotations");
+    for (const [id, rows] of annRows) writeFileAtomic(join(annDir, `${id}.jsonl`), jsonl(rows));
+
+    if (!existsSync(annDir)) return;
+    const keep = new Set(annRows.map(([id]) => `${id}.jsonl`));
+    for (const f of readdirSync(annDir)) {
+      if (f.endsWith(".jsonl") && !keep.has(f)) unlinkSync(join(annDir, f));
+    }
   }
 }
 

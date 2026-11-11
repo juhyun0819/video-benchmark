@@ -10,8 +10,8 @@
       "summaries": [
         { "start_sec": 0.0, "end_sec": 30.0, "summary_text": "C walked along a quiet street.", "annotation_uid": "s-a-0" },
         { "start_sec": 0.0, "end_sec": 30.0, "summary_text": "C walked along a quiet street (dup).", "annotation_uid": "s-a-1" },
-        { "start_sec": 50.0, "end_sec": 50.0, "summary_text": "C stood still.", "annotation_uid": "s-a-2" },
-        { "start_sec": 60.0, "end_sec": 90.5, "summary_text": "C crossed at a traffic light.", "annotation_uid": "s-a-3" }
+        { "start_sec": 50.0, "end_sec": 50.0, "summary_text": "C stood still on the street.", "annotation_uid": "s-a-2" },
+        { "start_sec": 60.0, "end_sec": 90.5, "summary_text": "C crossed the road at a traffic light.", "annotation_uid": "s-a-3" }
       ]
     },
     "narration_pass_2": {
