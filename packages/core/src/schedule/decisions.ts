@@ -16,30 +16,38 @@ const WORKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 /** Presence probability of the optional workday home_evening slot (no source gives one). */
 const HOME_EVENING_PROB = 0.5;
 
-/** D4: eat_out / others_home are usable only when their place node exists and is bound. */
-function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>): boolean {
-  if (place === "home" || place === "workplace") return true;
+/**
+ * D4: eat_out / others_home are usable only when their place node exists and is bound.
+ * R16: workplace is usable only on workday templates.
+ */
+function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>, workday: boolean): boolean {
+  if (place === "home") return true;
+  if (place === "workplace") return workday;
   const node = world.meal_style.place_nodes[place];
   return node !== undefined && boundNodes.has(node);
 }
 
-function renormalize(weights: MealWeights, world: World, boundNodes: Set<string>): MealDistribution {
+function renormalize(weights: MealWeights, world: World, boundNodes: Set<string>, workday: boolean): MealDistribution {
   const kept: [MealPlace, number][] = [];
   for (const place of MealPlaceSchema.options) {
     const w = weights[place] ?? 0;
-    if (w > 0 && mealPlaceUsable(world, place, boundNodes)) kept.push([place, w]);
+    if (w > 0 && mealPlaceUsable(world, place, boundNodes, workday)) kept.push([place, w]);
   }
   const total = kept.reduce((s, [, w]) => s + w, 0);
   return Object.fromEntries(kept.map(([place, w]) => [place, w / total]));
 }
 
-/** meal_style after dropping unusable places and renormalizing (D4, R12). */
+/**
+ * meal_style after dropping unusable places and renormalizing (D4, R12, R16).
+ * Every non-workday template (hobby_day, home_day, leave_day) uses `weekend`.
+ */
 export function effectiveMealStyle(world: World, boundNodes: Set<string>): EffectiveMealStyle {
   const { workday, weekend } = world.meal_style;
-  const norm = (w: MealWeights) => renormalize(w, world, boundNodes);
+  const wd = (w: MealWeights) => renormalize(w, world, boundNodes, true);
+  const we = (w: MealWeights) => renormalize(w, world, boundNodes, false);
   return {
-    workday: { lunch: norm(workday.lunch), dinner: norm(workday.dinner) },
-    weekend: { breakfast: norm(weekend.breakfast), lunch: norm(weekend.lunch), dinner: norm(weekend.dinner) },
+    workday: { lunch: wd(workday.lunch), dinner: wd(workday.dinner) },
+    weekend: { breakfast: we(weekend.breakfast), lunch: we(weekend.lunch), dinner: we(weekend.dinner) },
   };
 }
 
@@ -53,6 +61,27 @@ type HobbyPlan = {
   weights: { value: string; weight: number }[];
 };
 
+/**
+ * R18: one week of hobby occurrences by smooth weighted round-robin over
+ * weekly_freq, so each hobby appears weekly_freq times, interleaved.
+ * `hobbies` is sorted by freq desc then name, which also breaks ties.
+ */
+function weeklyHobbyOrder(hobbies: { name: string; freq: number }[]): string[] {
+  const total = hobbies.reduce((s, h) => s + h.freq, 0);
+  const current = hobbies.map(() => 0);
+  const order: string[] = [];
+  for (let n = 0; n < total; n++) {
+    let best = 0;
+    hobbies.forEach((h, i) => {
+      current[i]! += h.freq;
+      if (current[i]! > current[best]!) best = i;
+    });
+    current[best]! -= total;
+    order.push(hobbies[best]!.name);
+  }
+  return order;
+}
+
 function hobbyPlan(world: World): HobbyPlan {
   const hobbies = Object.entries(world.nodes)
     .flatMap(([name, def]) => (def.kind === "hobby" && def.weekly_freq > 0 ? [{ name, freq: def.weekly_freq }] : []))
@@ -61,7 +90,8 @@ function hobbyPlan(world: World): HobbyPlan {
   const weekendDays = Math.min(budget, 2);
   const workdayCount = Math.min(budget - weekendDays, WORKDAYS.length);
   const occurrences: Weekday[] = [...(["Sat", "Sun"] as const).slice(0, weekendDays), ...WORKDAYS.slice(0, workdayCount)];
-  const byWeekday = new Map(occurrences.map((wd, i) => [wd, hobbies[i % hobbies.length]!.name]));
+  const order = weeklyHobbyOrder(hobbies);
+  const byWeekday = new Map(occurrences.map((wd, i) => [wd, order[i % order.length]!]));
   const weights = hobbies.map((h) => ({ value: h.name, weight: h.freq }));
   return { weekendDays, workdayCount, byWeekday, weights };
 }
@@ -145,13 +175,16 @@ export function decideDay(
 
   if (exceptions.length === 0) {
     const eligible = catalog.slot.filter(
-      (e) => e.day_types.includes(dayType) && mealPlaceUsable(world, e.meal_place, opts.boundNodes),
+      (e) =>
+        e.day_types.includes(dayType) &&
+        mealPlaceUsable(world, e.meal_place, opts.boundNodes, template === "workday"),
     );
     if (eligible.length > 0) {
       const rng = dayRng("slot_exception");
       if (rng.bernoulli(dials.exception_rate.slot)) {
         const entry = eligible[rng.int(0, eligible.length)]!;
         exceptions.push({ scope: "slot", type: entry.type, replaces: entry.replaces_role, day_range: [dayIndex, dayIndex] });
+        meal_place[entry.replaces_role] = entry.meal_place; // R19: overrides the routine draw or "skip"
       }
     }
   }

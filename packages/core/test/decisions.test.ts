@@ -142,10 +142,28 @@ describe("hobby budget (routine_strength = 1)", () => {
       const weekend = days.slice(week * 7 + 5, week * 7 + 7);
       expect(weekend.map((d) => d.day_type)).toEqual(["hobby_day", "hobby_day"]);
     }
-    // Cycling hobbies sorted by weekly_freq desc: Sat → hobby_a, Sun → hobby_b, Mon → hobby_a.
+    // Smooth weighted round-robin over (hobby_a:2, hobby_b:1): Sat → hobby_a, Sun → hobby_b, Mon → hobby_a.
     expect(days[5]!.hobby_node).toBe("hobby_a");
     expect(days[6]!.hobby_node).toBe("hobby_b");
     expect(days[0]!.hobby_node).toBe("hobby_a");
+  });
+});
+
+describe("hobby order (R18)", () => {
+  it("A:3, B:1 → A three times and B once per week, in order A, A, B, A", () => {
+    const days = run({ hobbies: { hobby_b: 1, hobby_a: 3 } });
+    for (let week = 0; week < 4; week++) {
+      const wk = days.slice(week * 7, week * 7 + 7);
+      const byWeekday = Object.fromEntries(wk.map((d) => [d.weekday, d.hobby_node]));
+      // Occurrence order is Sat, Sun, Mon, Tue.
+      expect([byWeekday.Sat, byWeekday.Sun, byWeekday.Mon, byWeekday.Tue]).toEqual([
+        "hobby_a",
+        "hobby_a",
+        "hobby_b",
+        "hobby_a",
+      ]);
+      expect(wk.filter((d) => d.hobby_node !== undefined)).toHaveLength(4);
+    }
   });
 });
 
@@ -223,6 +241,25 @@ describe("exceptions", () => {
     }
   });
 
+  it("a slot exception writes its place into meal_place of the replaced role (R19)", () => {
+    for (const seed of [1, 2, 3]) {
+      const w = makeWorld({ seed, routine: 0, slot: 1, bindFrequent: true, placeNodes: { eat_out: "diner" } });
+      const days = decideDays(w, catalog(), { boundNodes: bound(w) });
+      for (const d of days) {
+        expect(d.exceptions).toHaveLength(1);
+        const e = d.exceptions[0]!;
+        expect(["dinner_out", "lunch_out"]).toContain(e.type);
+        expect(d.meal_place[e.replaces as "lunch" | "dinner"]).toBe("eat_out");
+      }
+    }
+  });
+
+  it("a catalog with duplicate slot types fails to parse", () => {
+    const raw = JSON.parse(JSON.stringify(catalog()));
+    raw.slot.push({ ...raw.slot[0] });
+    expect(ExceptionCatalogSchema.safeParse(raw).success).toBe(false);
+  });
+
   it("no day has both a day and a slot exception", () => {
     let dayExc = 0;
     let slotExc = 0;
@@ -273,8 +310,29 @@ describe("meal places", () => {
         expect(meals).toEqual(["breakfast", "lunch", "dinner"]);
         expect(d.optional).toEqual({});
       }
-      for (const p of Object.values(d.meal_place)) expect(["home", "workplace", "skip"]).toContain(p);
+      const allowed = d.template === "workday" ? ["home", "workplace", "skip"] : ["home", "skip"];
+      for (const p of Object.values(d.meal_place)) expect(allowed).toContain(p);
     }
+  });
+
+  it("non-workday templates never eat at the workplace (R16)", () => {
+    const w = makeWorld({ routine: 0, day: 0.5, seed: 11 });
+    w.meal_style.weekend.breakfast = { home: 0.5, workplace: 0.5 };
+    w.meal_style.weekend.lunch = { home: 0.4, workplace: 0.6 };
+    w.meal_style.weekend.dinner = { workplace: 1 };
+    const eff = effectiveMealStyle(w, bound(w));
+    for (const dist of Object.values(eff.weekend)) expect(dist).not.toHaveProperty("workplace");
+    expect(eff.weekend.breakfast).toEqual({ home: 1 });
+    expect(eff.weekend.lunch).toEqual({ home: 1 });
+    expect(eff.weekend.dinner).toEqual({});
+    expect(eff.workday.lunch).toHaveProperty("workplace");
+
+    const days = decideDays(w, catalog(), { boundNodes: bound(w) });
+    expect(days.some((d) => d.day_type === "leave_day")).toBe(true);
+    for (const d of days.filter((x) => x.template !== "workday")) {
+      expect(Object.values(d.meal_place)).not.toContain("workplace");
+    }
+    expect(days.some((d) => d.template === "workday" && d.meal_place.lunch === "workplace")).toBe(true);
   });
 });
 

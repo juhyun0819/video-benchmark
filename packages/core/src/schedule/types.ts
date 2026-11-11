@@ -30,14 +30,18 @@ export const ExceptionCatalogSchema = z.object({
       template: z.literal("home_day"),
     }),
   ),
-  slot: z.array(
-    z.object({
-      type: z.string(),
-      replaces_role: z.string(),
-      meal_place: MealPlaceSchema,
-      day_types: z.array(DayTypeSchema).min(1),
+  slot: z
+    .array(
+      z.object({
+        type: z.string(),
+        replaces_role: MealSchema,
+        meal_place: MealPlaceSchema,
+        day_types: z.array(DayTypeSchema).min(1),
+      }),
+    )
+    .refine((entries) => new Set(entries.map((e) => e.type)).size === entries.length, {
+      message: "slot exception types must be unique",
     }),
-  ),
 });
 export type ExceptionCatalog = z.infer<typeof ExceptionCatalogSchema>;
 
