@@ -1,3 +1,5 @@
+대체됨: 2026-11-12-synthetic-timeline-generation-design.md
+
 # Video Composer MCP — 설계 스펙
 
 - 날짜: 2026-11-02

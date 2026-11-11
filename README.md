@@ -1,16 +1,16 @@
 # video-benchmark
 
-NextMe-800, HD-EPIC, Ego4D, Ego-Exo4D의 주석(caption)을 정규화한 카탈로그로 만들고, Claude Code에서 MCP 도구로 "하루짜리 영상 타임라인"을 합성한 뒤 manifest(JSON)로 내보내는 도구다. 영상 자체는 다루지 않고, 합성된 구간 구조와 시간 재매핑된 caption만 만든다.
+NextMe-800, Ego4D, Ego-Exo4D 같은 데이터셋과 직접 모은 YouTube 영상의 주석(caption)을 클립 bank로 정규화하고, "합성 사람 × N일" 타임라인(고정 루틴 + 변동 + 예외)을 만들어 manifest(JSON)로 내보내는 도구다. 영상 자체는 다루지 않고, 합성된 구간 구조와 시간 재매핑된 caption만 만든다. 영상 렌더링은 다음 계획(Plan 2)이다.
 
 구성은 npm workspaces 세 패키지다.
 
 | 패키지 | 역할 |
 |---|---|
-| `@vb/core` | 스키마, 타일링, 편집 연산, 타임라인 계산, caption 재매핑, manifest 생성 |
+| `@vb/core` | 스키마, world/schedule 생성, 클립 매칭, 규칙 검사, manifest 생성 |
 | `@vb/ingest` | 데이터셋별 어댑터와 `ingest` CLI. `data/catalog/`를 쓴다 |
-| `@vb/mcp` | stdio MCP 서버 `video-composer`. 카탈로그를 읽기 전용으로 쓴다 |
+| `@vb/mcp` | stdio MCP 서버 `video-composer`와 `generate` CLI |
 
-설계 문서는 `docs/superpowers/specs/2026-11-02-video-composer-mcp-design.md`에 있다.
+설계 문서는 `docs/superpowers/specs/2026-11-12-synthetic-timeline-generation-design.md`에 있다. 이전 스펙(`2026-11-02-video-composer-mcp-design.md`, `2026-11-07-video-render-design.md`)은 이 문서로 대체됐다.
 
 ## 1. 준비
 
@@ -22,15 +22,42 @@ nvm use
 npm install
 ```
 
-데이터 루트는 기본값이 `./data`다. `VIDEO_BENCH_DATA_DIR` 환경변수로 바꿀 수 있고, ingest CLI는 `--data <dir>` 플래그로도 지정할 수 있다(플래그가 환경변수보다 우선).
+데이터 루트는 기본값이 `./data`다. `VIDEO_BENCH_DATA_DIR` 환경변수로 바꿀 수 있고, ingest CLI는 `--data <dir>` 플래그로도 지정할 수 있다(플래그가 환경변수보다 우선). 설정 폴더(`config/`)는 `VIDEO_BENCH_CONFIG_DIR`로 바꾼다.
 
-## 2. 데이터 가져오기 (ingest)
+### 이전 버전에서 올린 뒤 정리
 
-모든 명령은 `npm run ingest -- <데이터셋> ...` 형태다. 도움말은 `npm run ingest -- --help`.
+예전 base day + 이벤트 방식에서 올리면 아래 로컬 파일이 낡은 채 남는다. 다음 `sync_data.py push` 전에 사용자가 직접 지운다(도구는 아무것도 지우지 않는다).
 
-이벤트 데이터셋(HD-EPIC, Ego4D, Ego-Exo4D)은 실행할 때마다 그 데이터셋의 카탈로그를 통째로 바꾼다. 이번 실행에서 주석을 쓰지 않은 영상의 `annotations/<id>.jsonl`도 지운다. NextMe-800은 날짜별로 더해 가므로 지우지 않는다.
+- `data/catalog/hdepic/`
+- `data/catalog/ego4d/candidates.jsonl`, `data/catalog/egoexo4d/candidates.jsonl`
+- `data/catalog/nextme800/days/`
+- `data/compositions/`
 
-### NextMe-800 (base day)
+## 2. 데이터 가져오기
+
+전체 순서는 다음과 같다. 도움말은 `npm run ingest -- --help`.
+
+1. ATUS 분포를 받거나 다시 계산한다(아래 "ATUS 분포").
+2. NextMe-800 초안을 만든다(`ingest nextme`).
+3. 초안을 사람이 검수한 뒤 bank에 넣는다(`ingest bank --dataset nextme800`).
+4. Ego-Exo4D, Ego4D를 ingest한다.
+5. YouTube 영상은 사용자가 내려받고 검수한 clips JSONL을 `ingest bank --dataset youtube`로 넣는다.
+6. 타임라인을 만든다(3절).
+
+Ego4D와 Ego-Exo4D는 실행할 때마다 그 데이터셋의 카탈로그를 통째로 바꾼다.
+
+### ATUS 분포
+
+`data/distributions/atus2025/`에 ATUS 2025에서 뽑은 시간 분포(`atus2025_stats.json` 등)가 있다. 이 폴더는 동기화 대상이라 `sync_data.py pull`로 받으면 된다. 다시 계산하려면 BLS 원자료(Activity, Respondent csv)를 받아 아래를 실행한다. pandas와 numpy가 필요하다.
+
+```bash
+uv run --isolated --no-project --with pandas --with numpy \
+  python scripts/atus/atus_stats.py <activity.csv> <respondent.csv> <out.json>
+```
+
+출력은 `data/distributions/atus2025/`에 둔다.
+
+### NextMe-800 (집·직장 클립)
 
 NextMe-800은 Hugging Face의 gated 데이터셋(`mmm8383/NextMe-800`)이다. 먼저 접근 승인을 받아야 한다. 토큰은 둘 중 하나로 준다.
 
@@ -42,38 +69,22 @@ huggingface-cli login           # 방법 2: 로그인 (토큰이 ~/.cache/huggin
 `HF_TOKEN`이 없으면 CLI가 `~/.cache/huggingface/token`을 읽는다. 둘 다 없으면 오류로 끝난다.
 
 ```bash
-npm run ingest -- nextme --days 2026-04-15
-npm run ingest -- nextme --days 2026-04-15,2026-04-16
+npm run ingest -- nextme --days 2026-04-15,2026-04-16 \
+  --out data/raw/bank/nextme800.draft.jsonl \
+  --rules config/nextme_label_rules.json
 ```
 
-`--days`는 `YYYY-MM-DD`를 쉼표로 이어서 준다. 한 날짜가 하나의 base day가 된다.
+`--days`는 `YYYY-MM-DD`를 쉼표로 이어서 준다. `--out`과 `--rules`는 위 값이 기본값이다. 이 명령은 카탈로그가 아니라 초안 JSONL만 만든다.
 
-### HD-EPIC (요리 이벤트)
-
-주석 저장소를 clone한다(`data/`는 커밋 대상이 아니다).
+초안의 장소(node)와 활동 분류는 `config/nextme_label_rules.json`의 키워드로 자동 붙인 것이라 틀릴 수 있다. 반드시 사람이 검수해 고친 뒤 bank에 넣는다.
 
 ```bash
-git clone --depth 1 https://github.com/hd-epic/hd-epic-annotations data/raw/hd-epic-annotations
+npm run ingest -- bank --input data/raw/bank/nextme800.draft.jsonl --dataset nextme800
 ```
 
-narration은 pkl로만 배포되고 numpy 2가 필요하다. 한 번만 JSONL로 변환한다. pkl은 clone한 저장소의 `narrations-and-action-segments/HD_EPIC_Narrations.pkl`이다.
+`--dataset`은 `nextme800`, `ego4d`, `egoexo4d`, `youtube` 중 하나다. 같은 형식의 JSONL(검수한 YouTube 클립 등)은 이 명령으로 넣는다.
 
-```bash
-uv run --isolated --no-project --with pandas --with "numpy>=2" \
-  python scripts/convert_hdepic.py \
-    data/raw/hd-epic-annotations/narrations-and-action-segments/HD_EPIC_Narrations.pkl \
-    data/raw/hdepic_narrations.jsonl
-```
-
-그 다음 ingest한다.
-
-```bash
-npm run ingest -- hdepic \
-  --annotations data/raw/hd-epic-annotations \
-  --narrations data/raw/hdepic_narrations.jsonl
-```
-
-`--annotations`는 clone한 저장소의 루트 디렉터리다. 60초보다 짧은 구간은 시간표 블록으로 쓰기에 짧아 건너뛴다. 기준을 바꾸려면 `--min-sec <초>`를 준다.
+타임라인에는 집(home)과 직장(workplace) 클립이 모두 있는 NextMe 날짜만 쓸 수 있다. 28일 타임라인은 서로 다른 NextMe 날짜가 28개 이상 있어야 한다(D7). 지금은 1일만 ingest했으므로 날짜를 더 받아야 한다.
 
 ### Ego4D (산책·이동·취미 등 이벤트)
 
@@ -130,74 +141,82 @@ scripts/download_lab22.sh egoexo     # 기본 출력 경로: data/raw/egoexo
 npm run ingest -- egoexo --root data/raw/egoexo
 ```
 
-블록이 될 구간이 60초보다 짧은 take는 건너뛴다. 기준을 바꾸려면 `--min-sec <초>`를 준다. 도메인과 카테고리 매핑은 `config/categories.json`의 `dataset: "egoexo4d"` 항목이고, Cooking은 HD-EPIC과 같은 `cooking` 카테고리로 들어간다. 다른 카테고리 파일을 쓰려면 `--categories <path>`를 준다.
+블록이 될 구간이 60초보다 짧은 take는 건너뛴다. 기준을 바꾸려면 `--min-sec <초>`를 준다. 도메인과 카테고리 매핑은 `config/categories.json`의 `dataset: "egoexo4d"` 항목이고, 다른 카테고리 파일을 쓰려면 `--categories <path>`를 준다.
 
-ingest가 끝나면 `data/catalog/` 아래에 카탈로그와 인덱스가 만들어지고, 건너뛴 항목의 사유별 개수가 JSON 리포트로 출력된다.
+ingest가 끝나면 `data/catalog/` 아래에 클립 카탈로그가 만들어지고, 건너뛴 항목의 사유별 개수가 JSON 리포트로 출력된다.
 
-## 3. MCP 서버 등록
+## 3. 타임라인 생성
+
+world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/worlds/example-nextme.json`이다. world는 노드(집, 직장, 취미), 노드와 bank 소스의 연결(`node_binding`), 식사 습관, 다이얼(`length_days`, `routine_strength`, `exception_rate`), seed를 담는다.
+
+규칙 설정은 `config/timeline/`에 있다.
+
+| 파일 | 내용 |
+|---|---|
+| `templates.v1.json` | 요일 유형별 하루 템플릿 |
+| `exceptions.v1.json` | 날 단위·슬롯 단위 예외 |
+| `gaps.v1.json` | 전환 사이 공백 시간 표. `reviewed: false`이므로 통근 외 전환은 사람이 검토해야 한다(스펙 13절 열린 항목 1) |
+
+`config/categories.json`의 `clip` 항목은 Ego4D 카테고리가 클립 bank에서 어떤 category, setting, node, tags로 쓰일지 정한다.
+
+### 한 번에 만들기 (CLI)
 
 ```bash
-claude mcp add video-composer -e VIDEO_BENCH_DATA_DIR=$PWD/data -- npx tsx $PWD/packages/mcp/src/main.ts
+npm run generate -- --world config/worlds/example-nextme.json [--data <dir>] [--config <dir>]
 ```
 
-저장소 루트에서 실행한다. 서버는 stdio로 동작하고, 데이터 루트를 `VIDEO_BENCH_DATA_DIR`(기본 `./data`)에서 읽는다.
+world를 `data/worlds/`에 저장하고(같은 `person_id`에 내용이 다르면 거부), 타임라인을 만들고, 자동 채움과 검증을 거쳐 manifest를 쓴 뒤 `timeline_id`, `revision`, `manifest` 경로, 일수, 클립 수, 평균 coverage를 JSON으로 출력한다. 실패하면 stderr에 오류 JSON을 쓰고 종료 코드 1로 끝난다.
 
-### 도구
+### MCP 서버로 고쳐 가며 만들기
 
-| 구분 | 도구 | 설명 |
-|---|---|---|
-| 탐색 | `list_base_days` | ingest된 base day와 블록 수, 총 길이 |
-| | `get_base_day` | base day의 블록 목록 |
-| | `list_categories` | 이벤트 카테고리와 후보 수 |
-| | `list_event_candidates` | 카테고리별 후보 (`query`, `min_sec`, `max_sec`, `limit`, `offset`) |
-| | `get_candidate` | 후보 상세와 caption 미리보기 |
-| 편집 | `create_composition` | base day 위에 빈 컴포지션 생성 |
-| | `list_compositions` | 저장된 컴포지션 목록 |
-| | `get_composition` | 현재 타임테이블 |
-| | `insert_event` | 슬롯에 이벤트 삽입 |
-| | `move_event` | 이벤트를 다른 슬롯/위치로 이동 |
-| | `remove_event` | 이벤트 제거 |
-| 내보내기 | `export_manifest` | manifest 파일 저장 |
+```bash
+claude mcp add video-composer \
+  -e VIDEO_BENCH_DATA_DIR=$PWD/data -e VIDEO_BENCH_CONFIG_DIR=$PWD/config \
+  -- npx tsx $PWD/packages/mcp/src/main.ts
+```
 
-편집 도구는 `expected_revision`을 받아, 다른 곳에서 먼저 바뀐 컴포지션을 덮어쓰지 않게 한다.
+저장소 루트에서 실행한다(`npm run mcp`로 직접 띄울 수도 있다). 서버는 stdio로 동작한다.
 
-### 사용 흐름
+| 도구 | 설명 |
+|---|---|
+| `list_worlds` | `data/worlds`의 world 목록 |
+| `create_timeline` | world로 타임라인(schedule과 빈 슬롯) 생성 |
+| `list_timelines` | 저장된 타임라인 목록 |
+| `get_timeline` | 현재 타임라인과 슬롯 상태 |
+| `list_slot_candidates` | 슬롯의 hard filter를 통과한 클립을 점수순으로 |
+| `assign_clip` | 슬롯에 클립 배정(완화 단계 지정 가능) |
+| `unassign_clip` | 슬롯에서 클립 하나 또는 전부 제거 |
+| `auto_fill` | 빈 슬롯을 자동으로 채우고, 못 채우는 날은 다시 생성 |
+| `verify_timeline` | 규칙 검사 후 `data/timelines/<id>.verifier_report.json` 작성 |
+| `export_manifest` | 검증된 타임라인의 manifest 저장 |
 
-1. `list_base_days`로 쓸 날짜를 고른다.
-2. `create_composition`으로 그 날짜의 컴포지션을 만든다.
-3. `list_categories`, `list_event_candidates`, `get_candidate`로 넣을 이벤트를 찾는다.
-4. `insert_event`로 슬롯에 넣는다. 슬롯 `i`는 base 블록 `i` 앞이다. 필요하면 `move_event`, `remove_event`로 고친다. 편집할 때마다 타임테이블이 돌아온다.
-5. `export_manifest`로 내보낸다.
+편집 도구는 `expected_revision`을 받아, 다른 곳에서 먼저 바뀐 타임라인을 덮어쓰지 않게 한다.
+
+흐름은 `list_worlds` → `create_timeline` → `auto_fill`(또는 `list_slot_candidates`와 `assign_clip`/`unassign_clip`으로 손질) → `verify_timeline` → `export_manifest`다. 이음새 VLM 검사(스펙 7.2)는 Plan 3이다.
 
 ## 4. Manifest
 
-`export_manifest`는 아래 경로에 파일을 쓴다(원자적 쓰기, 같은 revision을 다시 내보내면 같은 파일을 덮어쓴다).
+`export_manifest`(와 `generate`)는 아래 경로에 파일을 쓴다.
 
 ```
-data/exports/<composition_id>-r<revision>.manifest.json
+data/exports/<timeline_id>-r<revision>.manifest.json
 ```
 
-반환값은 파일 경로, 총 길이(`H:MM:SS`), 블록 수, 데이터셋별 caption 수다. 참조한 후보가 카탈로그에서 사라졌으면 `candidates not in catalog: …`로 실패하고 아무것도 쓰지 않는다.
-
-manifest에는 다음이 들어 있다.
-
-- `blocks`: 합성 타임라인의 블록(base/event), 합성 시간 구간, 원본 영상과 원본 구간
-- `tracks.captions`: 합성 시간으로 재매핑된 caption. 원본 구간과 원문은 `provenance`에 보존된다
-- `licenses`: 사용된 데이터셋의 라이선스
+manifest의 구조와 필드는 스펙 8절을 따른다. 검증을 통과하지 못한 타임라인은 내보내지 않는다.
 
 ## 5. 라이선스와 데이터 취급
 
 - NextMe-800은 CC BY-NC 4.0이다. 연구 목적으로만 쓴다.
-- HD-EPIC, Ego4D, Ego-Exo4D는 각 데이터셋의 약관·라이선스 계약을 따른다.
-- `data/`(원본 주석, 카탈로그, 컴포지션, export된 manifest)는 라이선스가 있는 데이터에서 파생된 것이므로 절대 커밋하지 않는다. `.gitignore`에 들어 있다.
+- Ego4D, Ego-Exo4D는 각 데이터셋의 약관·라이선스 계약을 따른다. YouTube 영상은 크리에이터와 플랫폼의 조건을 따른다.
+- `data/`(원본 주석, 카탈로그, 타임라인, export된 manifest)는 라이선스가 있는 데이터에서 파생된 것이므로 절대 커밋하지 않는다. `.gitignore`에 들어 있다.
 
 ## 6. 서버 간 데이터 동기화
 
-`data/`의 `catalog`, `compositions`, `exports`, `renders`는 비공개 Hugging Face 저장소 `zzu819/videomem`의 `data/` 폴더로 동기화한다. `huggingface-cli login`이나 `HF_TOKEN`으로 이 저장소에 접근할 수 있어야 한다.
+`data/`의 `catalog`, `worlds`, `timelines`, `exports`, `renders`, `distributions`는 비공개 Hugging Face 저장소 `zzu819/videomem`의 `data/` 폴더로 동기화한다. `huggingface-cli login`이나 `HF_TOKEN`으로 이 저장소에 접근할 수 있어야 한다.
 
 ```bash
 python3 scripts/sync_data.py push   # 저장소가 비공개가 아니면 올리지 않는다
-python3 scripts/sync_data.py pull   # 로컬 compositions가 있으면 --overwrite가 필요하다
+python3 scripts/sync_data.py pull   # 로컬 timelines가 있으면 --overwrite가 필요하다
 ```
 
 원본 미디어와 `data/raw`는 동기화하지 않는다. 각 데이터셋에서 직접 받는다.
@@ -207,5 +226,5 @@ python3 scripts/sync_data.py pull   # 로컬 compositions가 있으면 --overwri
 ```bash
 npm test
 npm run typecheck
-python3 -m pytest scripts/test_sync_data.py scripts/test_convert_ego4d_narrations.py
+python3 -m pytest scripts/
 ```

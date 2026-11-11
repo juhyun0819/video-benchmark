@@ -12,15 +12,15 @@
 
 - `data/`는 NextMe-800, HD-EPIC, Ego-Exo4D, Ego4D에서 파생된 라이선스 데이터다. 커밋하거나 공개하지 않는다.
 - 공개 저장소에 올리지 않는다. 서버 간 동기화는 비공개 저장소 `zzu819/videomem`과 `scripts/sync_data.py`로 한다. 이 스크립트는 저장소가 비공개가 아니면 올리지 않는다.
-- 동기화 대상은 `catalog`, `compositions`, `exports`, `renders`뿐이다. 원본 미디어와 `raw`는 올리지 않고 각 출처에서 받는다.
+- 동기화 대상은 `catalog`, `worlds`, `timelines`, `exports`, `renders`, `distributions`뿐이다. 원본 미디어와 `raw`는 올리지 않고 각 출처에서 받는다.
 - 테스트 fixture는 합성 데이터만 쓴다.
 - 토큰과 키 값은 출력하거나 기록하지 않는다. 있는지만 확인한다.
 - Lab22 CLI(`LAB22_API_KEY`)는 사용자가 직접 실행한다.
 
 ## 파이프라인
 
-1. manifest 생성 (완료)
-2. manifest로 영상 합성 (진행 중, 스펙: `2026-11-07-video-render-design.md`, 승인 대기)
+1. 합성 타임라인 manifest 생성: 합성 사람 × N일 타임라인 파이프라인 (구현 완료, 스펙: `2026-11-12-synthetic-timeline-generation-design.md`. 이전 base day 방식과 두 옛 스펙은 대체됐다)
+2. manifest로 영상 렌더링 (다음 계획 Plan 2). 이음새 VLM 검사는 Plan 3
 3. 영상을 보고 샘플을 수정한 뒤 5개를 고정한다
 4. 합성으로 생기는 QA를 자동으로 만들기 위한 QA 카테고리를 정한다
 5. 샘플 QA를 생성하고 사용자가 직접 검증한다
@@ -48,13 +48,16 @@
 |---|---|
 | NextMe-800 | `huggingface-cli download mmm8383/NextMe-800 raw/2026-04-15/2026-04-15_1323-1709.tar --repo-type dataset --local-dir data/media/nextme` |
 | Ego-Exo4D | `lab22 egoexo -o data/media/egoexo --parts takes --views ego --uids <16개 take uid>` |
-| HD-EPIC | `hd-epic-downloader.py <data/media/hdepic 절대 경로> --videos --video-id P03-20240217-192543,P09-20240623-120359` |
 
 Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 블록의 `video_id`다.
 
 ## 대기 중인 일
 
-- 없음. Ego4D는 2026-11-10에 주석을 받아 ingest했다. 2026-11-11에 walking, transit에 키워드를 넣고 키워드를 단어 단위로 비교하도록 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). 순서는 README의 Ego4D 절을 따른다. Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
+- NextMe-800 날짜를 더 ingest한다. 지금은 1일뿐이고, 28일 타임라인은 집과 직장 클립이 모두 있는 서로 다른 날짜가 28개 이상 필요하다(D7). `ingest nextme`로 초안을 만들고 검수한 뒤 `ingest bank --dataset nextme800`을 한다. 순서는 README 2절을 따른다.
+- `config/timeline/gaps.v1.json`은 `reviewed: false`다. 통근 외 전환의 공백 시간 표를 사람이 검토한다(스펙 13절 열린 항목 1).
+- YouTube 영상 10+10개(집 10, 직장 10)를 사용자가 내려받고 검수한 뒤 `ingest bank --dataset youtube`로 넣는다.
+- 예전 로컬 파일(`data/catalog/hdepic/`, `data/catalog/{ego4d,egoexo4d}/candidates.jsonl`, `data/catalog/nextme800/days/`, `data/compositions/`)은 사용자가 지운 뒤 push한다.
+- Ego4D는 2026-11-10에 주석을 받아 ingest했고, 2026-11-11에 walking, transit 키워드를 넣고 단어 단위 비교로 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
 
 ## 서버 환경
 

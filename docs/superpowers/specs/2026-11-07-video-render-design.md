@@ -1,3 +1,5 @@
+대체됨: 2026-11-12-synthetic-timeline-generation-design.md
+
 # Video Render — 설계 스펙
 
 - 날짜: 2026-11-07 (2026-11-09 리뷰 반영)
