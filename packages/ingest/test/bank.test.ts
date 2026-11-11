@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ingestBank } from "../src/bank.js";
 import { IngestFormatError } from "../src/jsonl.js";
-import { CatalogWriter, rebuildIndex } from "../src/writer.js";
+import { CatalogWriter, isSafeVideoIdSegment, rebuildIndex } from "../src/writer.js";
 
 let dir: string;
 beforeEach(() => {
@@ -101,5 +101,18 @@ describe("ingestBank", () => {
     rebuildIndex(dir, new Date(0));
     const idx = JSON.parse(readFileSync(join(dir, "catalog/index.json"), "utf8")) as { clips: Record<string, Record<string, number>> };
     expect(idx.clips.youtube?.home).toBe(1);
+  });
+
+  it("a video id with leading '-' or '_' round-trips; path-like ids are rejected", () => {
+    const id = "-abc_DEF123";
+    const src = { source: { dataset: "youtube", video_id: id, media: { kind: "video", fps: 30 } } };
+    const { clips, annotations } = ingestBank(text(row("c1", src, [cap("k1", "a")])), "b.jsonl", "youtube");
+    new CatalogWriter(dir).writeClipCatalog("youtube", clips, annotations);
+    expect(readdirSync(join(dir, "catalog/youtube/annotations"))).toEqual([`${id}.jsonl`]);
+    expect(isSafeVideoIdSegment("_x-1")).toBe(true);
+    expect(isSafeVideoIdSegment("../x")).toBe(false);
+    expect(isSafeVideoIdSegment("a..b")).toBe(false);
+    const bad = ingestBank(text(row("c1", { source: { ...src.source, video_id: "../x" } })), "b.jsonl", "youtube");
+    expect(() => new CatalogWriter(dir).writeClipCatalog("youtube", bad.clips, bad.annotations)).toThrow(/Unsafe video id/);
   });
 });

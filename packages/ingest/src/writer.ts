@@ -20,6 +20,18 @@ function safeSegment(kind: string, value: string): string {
   return value;
 }
 
+const SAFE_VIDEO_ID = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
+
+/** Video ids become annotation file names; YouTube ids may start with '-' or '_' (R28). */
+export function isSafeVideoIdSegment(id: string): boolean {
+  return SAFE_VIDEO_ID.test(id) && !id.includes("..");
+}
+
+function safeVideoId(value: string): string {
+  if (!isSafeVideoIdSegment(value)) throw new Error(`Unsafe video id for catalog path: ${JSON.stringify(value)}`);
+  return value;
+}
+
 function writeFileAtomic(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
@@ -50,7 +62,7 @@ export class CatalogWriter {
 
   writeAnnotations(dataset: Dataset, videoId: string, a: Annotation[]): void {
     const ds = DatasetSchema.parse(dataset);
-    const id = safeSegment("video id", videoId);
+    const id = safeVideoId(videoId);
     const rows = a.map((x) => AnnotationSchema.parse(x));
     writeFileAtomic(join(this.root, ds, "annotations", `${id}.jsonl`), jsonl(rows));
   }
@@ -92,7 +104,7 @@ export class CatalogWriter {
     annotations: Map<string, Annotation[]>,
   ): void {
     const annRows = [...annotations].map(
-      ([videoId, a]) => [safeSegment("video id", videoId), a.map((x) => AnnotationSchema.parse(x))] as const,
+      ([videoId, a]) => [safeVideoId(videoId), a.map((x) => AnnotationSchema.parse(x))] as const,
     );
 
     writeFileAtomic(join(this.root, ds, listFile), jsonl(rows));
