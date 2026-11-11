@@ -19,7 +19,7 @@
 
 ## 파이프라인
 
-1. 합성 타임라인 manifest 생성: 합성 사람 × N일 타임라인 파이프라인 (구현 완료, 스펙: `2026-11-12-synthetic-timeline-generation-design.md`. 이전 base day 방식과 두 옛 스펙은 대체됐다)
+1. 합성 타임라인 manifest 생성: 합성 사람 × N일 타임라인 파이프라인 (구현 중, Plan 1 완료. 스펙: `2026-11-12-synthetic-timeline-generation-design.md`. 이전 base day 방식과 두 옛 스펙은 대체됐다)
 2. manifest로 영상 렌더링 (다음 계획 Plan 2). 이음새 VLM 검사는 Plan 3
 3. 영상을 보고 샘플을 수정한 뒤 5개를 고정한다
 4. 합성으로 생기는 QA를 자동으로 만들기 위한 QA 카테고리를 정한다
@@ -57,7 +57,8 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 - `config/timeline/gaps.v1.json`은 `reviewed: false`다. 통근 외 전환의 공백 시간 표를 사람이 검토한다(스펙 13절 열린 항목 1).
 - YouTube 영상 10+10개(집 10, 직장 10)를 사용자가 내려받고 검수한 뒤 `ingest bank --dataset youtube`로 넣는다.
 - 예전 로컬 파일(`data/catalog/hdepic/`, `data/catalog/{ego4d,egoexo4d}/candidates.jsonl`, `data/catalog/nextme800/days/`, `data/compositions/`)은 사용자가 지운 뒤 push한다.
-- Ego4D는 2026-11-10에 주석을 받아 ingest했고, 2026-11-11에 walking, transit 키워드를 넣고 단어 단위 비교로 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
+- 새 CLI로 `ingest ego4d`와 `ingest egoexo`를 다시 실행해 클립 카탈로그를 만든다. 지금 로컬에는 예전 `annotations/`와 `candidates.jsonl`만 있고 클립 카탈로그가 없어서 bank가 비어 있다. 순서는 README 2절의 Ego4D, Ego-Exo4D 절을 따른다.
+- 이력(클립 bank 이전): Ego4D는 2026-11-10에 주석을 받아 ingest했고, 2026-11-11에 walking, transit 키워드를 넣고 단어 단위 비교로 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). 이 결과는 예전 `candidates.jsonl`이며 새 bank에는 없다. 주석 다운로드 절차는 README의 Ego4D 절이고, Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
 
 ## 서버 환경
 
