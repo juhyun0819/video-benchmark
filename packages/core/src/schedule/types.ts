@@ -124,6 +124,10 @@ export const SlotTransitionSchema = z.object({
 });
 export type SlotTransition = z.infer<typeof SlotTransitionSchema>;
 
+/** An optional slot removed because the day had no time for it (R21). */
+export const DroppedSlotSchema = z.object({ role: z.string(), reason: z.literal("no_time") });
+export type DroppedSlot = z.infer<typeof DroppedSlotSchema>;
+
 export const ScheduleDaySchema = z.object({
   day_index: z.number().int().min(1),
   weekday: WeekdaySchema,
@@ -133,6 +137,7 @@ export const ScheduleDaySchema = z.object({
   sleep: ClockSchema,
   exceptions: z.array(ExceptionSchema),
   slots: z.array(SlotSchema),
+  dropped_slots: z.array(DroppedSlotSchema),
   transitions: z.array(SlotTransitionSchema),
 });
 export type ScheduleDay = z.infer<typeof ScheduleDaySchema>;

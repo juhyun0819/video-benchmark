@@ -3,7 +3,7 @@ import { formatClock, timeOfDayAt } from "../clock.js";
 import { TimelineError } from "../errors.js";
 import { placeKindOf, type PlaceKind } from "../gaps.js";
 import type { NodeDef, World } from "../world.js";
-import type { AnchorName, DayAnchors, DayDecisions, Slot, SlotTransition, TemplateSlot } from "./types.js";
+import type { AnchorName, DayAnchors, DayDecisions, DroppedSlot, Slot, SlotTransition, TemplateSlot } from "./types.js";
 
 /** Transition gap in minutes between two place kinds; `index` is the kept-slot index of the later slot. */
 export type GapFn = (from: PlaceKind, to: PlaceKind, index: number) => number;
@@ -34,11 +34,65 @@ function resolveNode(slot: TemplateSlot, decisions: DayDecisions, world: World):
   return world.meal_style.place_nodes[place];
 }
 
+type Layout = { start: number[]; end: number[]; gaps: number[] };
+type Failure = { role: string; reason: string };
+
+/**
+ * Times for the kept slots: each starts at max(anchor, previous end + gap); it
+ * ends at its end anchor, after its duration, or where the next slot's gap
+ * begins; the last one at sleep. Returns the first slot that does not fit.
+ */
+function layout(kept: Kept[], anchors: DayAnchors, gap: GapFn): Layout | Failure {
+  const anchor = (name: AnchorName): number => anchors[name]!;
+  const n = kept.length;
+  // gaps[i]: transition before kept[i] (0 when the node does not change).
+  const gaps: number[] = kept.map((k, i) => {
+    if (i === 0) return 0;
+    const prev = kept[i - 1]!;
+    return prev.node === k.node ? 0 : gap(placeKindOf(prev.def.kind), placeKindOf(k.def.kind), i);
+  });
+
+  const start: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const { slot } = kept[i]!;
+    if (i === 0) {
+      start.push(anchors.wake);
+      continue;
+    }
+    const prev = kept[i - 1]!.slot;
+    const prevStart = start[i - 1]!;
+    const prevEnd =
+      prev.end_anchor !== undefined
+        ? anchor(prev.end_anchor)
+        : prev.duration_minutes !== undefined
+          ? prevStart + prev.duration_minutes
+          : prevStart + prev.min_minutes;
+    const earliest = prevEnd + gaps[i]!;
+    start.push(slot.anchor !== undefined ? Math.max(anchor(slot.anchor), earliest) : earliest);
+  }
+  const end: number[] = kept.map(({ slot }, i) => {
+    if (slot.end_anchor !== undefined) return anchor(slot.end_anchor);
+    if (slot.duration_minutes !== undefined) return start[i]! + slot.duration_minutes;
+    if (i < n - 1) return start[i + 1]! - gaps[i + 1]!;
+    return anchors.sleep;
+  });
+
+  for (let i = 0; i < n; i++) {
+    const { slot } = kept[i]!;
+    const s = start[i]!;
+    const e = end[i]!;
+    if (e - s < slot.min_minutes) return { role: slot.role, reason: `${e - s} min is shorter than ${slot.min_minutes}` };
+    if (i < n - 1 && e > start[i + 1]! - gaps[i + 1]!) return { role: slot.role, reason: "overlaps the next slot" };
+    if (e > anchors.sleep) return { role: slot.role, reason: `ends after sleep ${formatClock(anchors.sleep)}` };
+  }
+  return { start, end, gaps };
+}
+
 /**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
- * "skip" meals, absent optional keys and unresolved optional nodes. Each slot
- * starts at max(anchor, previous end + gap); it ends at its end anchor, after
- * its duration, or where the next slot's gap begins; the last one at sleep.
+ * "skip" meals, absent optional keys and unresolved optional nodes. While the
+ * windows do not fit, the last optional slot in template order is dropped and
+ * recorded (R21); only when no optional slot is left does it throw.
  */
 export function resolveDayWindows(
   template: TemplateSlot[],
@@ -46,15 +100,10 @@ export function resolveDayWindows(
   decisions: DayDecisions,
   world: World,
   gap: GapFn,
-): { slots: Slot[]; transitions: SlotTransition[] } {
+): { slots: Slot[]; transitions: SlotTransition[]; dropped: DroppedSlot[] } {
   const day = decisions.day_index;
   const infeasible = (role: string, reason: string): TimelineError =>
     new TimelineError("SCHEDULE_INFEASIBLE", `day ${day}: slot ${role} is infeasible (${reason})`, { day, role, reason });
-  const anchor = (name: AnchorName, role: string): number => {
-    const v = anchors[name];
-    if (v === undefined) throw infeasible(role, `anchor ${name} is missing`);
-    return v;
-  };
 
   const kept: Kept[] = [];
   for (const slot of template) {
@@ -66,54 +115,24 @@ export function resolveDayWindows(
       if (slot.required) throw infeasible(slot.role, `node ${slot.node} resolves to nothing`);
       continue;
     }
+    for (const name of [slot.anchor, slot.end_anchor]) {
+      if (name !== undefined && anchors[name] === undefined) throw infeasible(slot.role, `anchor ${name} is missing`);
+    }
     kept.push({ slot, node, def });
   }
   if (kept.length === 0) throw infeasible("-", "no slots");
 
-  const n = kept.length;
-  // gaps[i]: transition before kept[i] (0 when the node does not change).
-  const gaps: number[] = kept.map((k, i) => {
-    if (i === 0) return 0;
-    const prev = kept[i - 1]!;
-    return prev.node === k.node ? 0 : gap(placeKindOf(prev.def.kind), placeKindOf(k.def.kind), i);
-  });
-
-  const start: number[] = [];
-  const end: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const { slot } = kept[i]!;
-    if (i === 0) {
-      start.push(anchors.wake);
-    } else {
-      const prev = kept[i - 1]!.slot;
-      const prevStart = start[i - 1]!;
-      const prevEnd =
-        prev.end_anchor !== undefined
-          ? anchor(prev.end_anchor, prev.role)
-          : prev.duration_minutes !== undefined
-            ? prevStart + prev.duration_minutes
-            : prevStart + prev.min_minutes;
-      const earliest = prevEnd + gaps[i]!;
-      start.push(slot.anchor !== undefined ? Math.max(anchor(slot.anchor, slot.role), earliest) : earliest);
-    }
+  const dropped: DroppedSlot[] = [];
+  let result = layout(kept, anchors, gap);
+  while ("role" in result) {
+    let last = kept.length - 1;
+    while (last >= 0 && kept[last]!.slot.required) last--;
+    if (last < 0) throw infeasible(result.role, result.reason);
+    dropped.push({ role: kept[last]!.slot.role, reason: "no_time" });
+    kept.splice(last, 1);
+    result = layout(kept, anchors, gap);
   }
-  for (let i = 0; i < n; i++) {
-    const { slot } = kept[i]!;
-    const s = start[i]!;
-    if (slot.end_anchor !== undefined) end.push(anchor(slot.end_anchor, slot.role));
-    else if (slot.duration_minutes !== undefined) end.push(s + slot.duration_minutes);
-    else if (i < n - 1) end.push(start[i + 1]! - gaps[i + 1]!);
-    else end.push(anchors.sleep);
-  }
-
-  for (let i = 0; i < n; i++) {
-    const { slot } = kept[i]!;
-    const s = start[i]!;
-    const e = end[i]!;
-    if (e - s < slot.min_minutes) throw infeasible(slot.role, `${e - s} min is shorter than ${slot.min_minutes}`);
-    if (i < n - 1 && e > start[i + 1]! - gaps[i + 1]!) throw infeasible(slot.role, "overlaps the next slot");
-    if (e > anchors.sleep) throw infeasible(slot.role, `ends after sleep ${formatClock(anchors.sleep)}`);
-  }
+  const { start, end, gaps } = result;
 
   const slots: Slot[] = kept.map(({ slot, node, def }, i) => {
     const hobby = def.kind === "hobby" ? def : undefined;
@@ -135,9 +154,9 @@ export function resolveDayWindows(
   });
 
   const transitions: SlotTransition[] = [];
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i < kept.length; i++) {
     if (kept[i - 1]!.node === kept[i]!.node) continue;
     transitions.push({ from_slot: slots[i - 1]!.slot_id, to_slot: slots[i]!.slot_id, minutes: gaps[i]! });
   }
-  return { slots, transitions };
+  return { slots, transitions, dropped };
 }

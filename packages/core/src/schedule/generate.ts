@@ -62,7 +62,9 @@ function dayAnchors(input: ScheduleInput, profile: DayProfile, decisions: DayDec
   a.breakfast = Math.max(a.breakfast!, a.wake + 10);
   if (workday && a.work_start !== undefined && a.work_end !== undefined) {
     a.work_end = Math.max(a.work_end, a.work_start + 240);
-    a.lunch = Math.min(Math.max(a.lunch!, a.work_start + 60), a.work_end - 60);
+    // R22: lunch ends at least 60 min before work_end, so work_pm keeps ≥ 60 min.
+    const lunchMinutes = input.templates.day_types.workday.find((s) => s.anchor === "lunch")?.duration_minutes ?? 0;
+    a.lunch = Math.min(Math.max(a.lunch!, a.work_start + 60), a.work_end - 60 - lunchMinutes);
   }
   a.dinner = Math.min(a.dinner!, a.sleep - 60);
   return a;
@@ -73,7 +75,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
   const d = decisions.day_index;
   const profile = decisions.template === "workday" ? donors.weekday.profile : donors.weekend.profile;
   const anchors = dayAnchors(input, profile, decisions, attempt);
-  const { slots, transitions } = resolveDayWindows(
+  const { slots, transitions, dropped } = resolveDayWindows(
     templates.day_types[decisions.template],
     anchors,
     decisions,
@@ -89,6 +91,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
     sleep: formatClock(anchors.sleep),
     exceptions: decisions.exceptions,
     slots,
+    dropped_slots: dropped,
     transitions,
   };
 }
