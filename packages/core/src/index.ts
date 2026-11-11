@@ -6,3 +6,4 @@ export * from "./clock.js";
 export * from "./rng.js";
 export * from "./clip.js";
 export * from "./world.js";
+export * from "./donor.js";
