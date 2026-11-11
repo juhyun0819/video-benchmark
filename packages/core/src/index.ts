@@ -12,3 +12,6 @@ export * from "./schedule/types.js";
 export * from "./schedule/decisions.js";
 export * from "./schedule/windows.js";
 export * from "./schedule/generate.js";
+export * from "./timeline.js";
+export * from "./match.js";
+export * from "./layout.js";
