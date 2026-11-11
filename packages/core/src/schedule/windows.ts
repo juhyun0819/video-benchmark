@@ -35,7 +35,7 @@ function resolveNode(slot: TemplateSlot, decisions: DayDecisions, world: World):
 }
 
 type Layout = { start: number[]; end: number[]; gaps: number[] };
-type Failure = { role: string; reason: string };
+type Failure = { index: number; role: string; reason: string };
 
 /**
  * Times for the kept slots: each starts at max(anchor, previous end + gap); it
@@ -81,18 +81,29 @@ function layout(kept: Kept[], anchors: DayAnchors, gap: GapFn): Layout | Failure
     const { slot } = kept[i]!;
     const s = start[i]!;
     const e = end[i]!;
-    if (e - s < slot.min_minutes) return { role: slot.role, reason: `${e - s} min is shorter than ${slot.min_minutes}` };
-    if (i < n - 1 && e > start[i + 1]! - gaps[i + 1]!) return { role: slot.role, reason: "overlaps the next slot" };
-    if (e > anchors.sleep) return { role: slot.role, reason: `ends after sleep ${formatClock(anchors.sleep)}` };
+    const fail = (reason: string): Failure => ({ index: i, role: slot.role, reason });
+    if (e - s < slot.min_minutes) return fail(`${e - s} min is shorter than ${slot.min_minutes}`);
+    if (i < n - 1 && e > start[i + 1]! - gaps[i + 1]!) return fail("overlaps the next slot");
+    if (e > anchors.sleep) return fail(`ends after sleep ${formatClock(anchors.sleep)}`);
   }
   return { start, end, gaps };
 }
 
 /**
+ * R24: the failing slot itself when optional, else the nearest optional slot
+ * before it, else the last optional slot after it; -1 when none is optional.
+ */
+function slotToDrop(kept: Kept[], failing: number): number {
+  for (let i = failing; i >= 0; i--) if (!kept[i]!.slot.required) return i;
+  for (let i = kept.length - 1; i > failing; i--) if (!kept[i]!.slot.required) return i;
+  return -1;
+}
+
+/**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
  * "skip" meals, absent optional keys and unresolved optional nodes. While the
- * windows do not fit, the last optional slot in template order is dropped and
- * recorded (R21); only when no optional slot is left does it throw.
+ * windows do not fit, an optional slot is dropped and recorded (R21, R24);
+ * only when no optional slot is left does it throw.
  */
 export function resolveDayWindows(
   template: TemplateSlot[],
@@ -125,11 +136,10 @@ export function resolveDayWindows(
   const dropped: DroppedSlot[] = [];
   let result = layout(kept, anchors, gap);
   while ("role" in result) {
-    let last = kept.length - 1;
-    while (last >= 0 && kept[last]!.slot.required) last--;
-    if (last < 0) throw infeasible(result.role, result.reason);
-    dropped.push({ role: kept[last]!.slot.role, reason: "no_time" });
-    kept.splice(last, 1);
+    const victim = slotToDrop(kept, result.index);
+    if (victim < 0) throw infeasible(result.role, result.reason);
+    dropped.push({ role: kept[victim]!.slot.role, reason: "no_time" });
+    kept.splice(victim, 1);
     result = layout(kept, anchors, gap);
   }
   const { start, end, gaps } = result;

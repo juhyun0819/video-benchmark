@@ -260,10 +260,22 @@ describe("generateSchedule", () => {
     expect(workplaceLunches).toBeGreaterThan(0);
   });
 
+  it("a weekend donor with sport at 22:00 and bed at 22:50 yields feasible hobby days (R25)", () => {
+    const schedule = generateSchedule(
+      input({ day: 0, slot: 0, routine: 1 }, { sport_has: true, sport_time: 1320, bed: 1370 }),
+    );
+    const hobbyDays = schedule.days.filter((d) => d.day_type === "hobby_day");
+    expect(hobbyDays.length).toBe(8);
+    for (const day of hobbyDays) {
+      const hobby = day.slots.find((s) => s.role === "hobby")!;
+      expect(parseClock(hobby.window[1])).toBeLessThanOrEqual(parseClock(day.sleep) - 60);
+    }
+  });
+
   it("rethrows SCHEDULE_INFEASIBLE naming the day after the 5th retry", () => {
     let err: unknown;
     try {
-      generateSchedule(input({ day: 0, slot: 0 }, { bed: 600 }));
+      generateSchedule(input({ day: 0, slot: 0 }, { bed: 480 }));
     } catch (e) {
       err = e;
     }

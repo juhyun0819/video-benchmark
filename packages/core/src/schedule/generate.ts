@@ -39,7 +39,7 @@ function daySigma(input: ScheduleInput): number {
   return s0 + (s1 - s0) * input.world.dials.routine_strength;
 }
 
-/** Donor times jittered per day, rounded, then bent into a plausible order (R14). */
+/** Donor times jittered per day, rounded, then bent into a plausible order (R14, R22, R25). */
 function dayAnchors(input: ScheduleInput, profile: DayProfile, decisions: DayDecisions, attempt: number): DayAnchors {
   const { seed } = input.world;
   const d = decisions.day_index;
@@ -67,6 +67,9 @@ function dayAnchors(input: ScheduleInput, profile: DayProfile, decisions: DayDec
     a.lunch = Math.min(Math.max(a.lunch!, a.work_start + 60), a.work_end - 60 - lunchMinutes);
   }
   a.dinner = Math.min(a.dinner!, a.sleep - 60);
+  // R25: the weekend hobby (anchored at sport) must end at least 60 min before sleep.
+  const hobbyMinutes = input.templates.day_types.hobby_day.find((s) => s.anchor === "sport")?.duration_minutes ?? 0;
+  a.sport = Math.min(a.sport!, a.sleep - hobbyMinutes - 60);
   return a;
 }
 

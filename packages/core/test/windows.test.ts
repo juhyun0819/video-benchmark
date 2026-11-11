@@ -127,17 +127,15 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     ]);
   });
 
-  it("work_end before lunch + 45 drops optional slots from the end until work_pm fits (R21)", () => {
+  it("work_end before lunch + 45 drops lunch, the nearest optional slot before work_pm (R24)", () => {
     const { slots, dropped } = resolveWorkday(workday(), { ...ANCHORS, work_end: 750 });
-    expect(dropped).toEqual([
-      { role: "home_evening", reason: "no_time" },
-      { role: "dinner", reason: "no_time" },
-      { role: "lunch", reason: "no_time" },
-    ]);
+    expect(dropped).toEqual([{ role: "lunch", reason: "no_time" }]);
     expect(table(slots)).toEqual([
       "home_morning 06:30-07:14 home",
       "work_am 07:34-08:34 workplace",
       "work_pm 08:34-12:30 workplace",
+      "dinner 18:30-19:30 home",
+      "home_evening 19:30-22:18 home",
     ]);
   });
 
@@ -153,12 +151,22 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     expect((err as TimelineError).details).toMatchObject({ day: 1, role: "work_pm" });
   });
 
-  it("a 90-min workday hobby that cannot end before sleep is dropped; required slots stay", () => {
-    const decisions = workday({ optional: { hobby: true, home_evening: false }, hobby_node: "hobby_a" });
+  it("a 90-min workday hobby that cannot end before sleep is the only slot dropped (R24)", () => {
+    const decisions = workday({ optional: { hobby: true, home_evening: true }, hobby_node: "hobby_a" });
     const { slots, dropped } = resolveWorkday(decisions, { ...ANCHORS, sleep: 1260 });
     expect(dropped).toEqual([{ role: "hobby", reason: "no_time" }]);
-    expect(slots.map((s) => s.role)).toEqual(["home_morning", "work_am", "lunch", "work_pm", "dinner"]);
-    expect(slots.at(-1)!.window).toEqual(["18:30", "19:30"]);
+    expect(table(slots).slice(3)).toEqual([
+      "work_pm 12:45-17:00 workplace",
+      "dinner 18:30-19:30 home",
+      "home_evening 19:30-21:00 home",
+    ]);
+  });
+
+  it("a hobby that fits before sleep is kept", () => {
+    const decisions = workday({ optional: { hobby: true, home_evening: false }, hobby_node: "hobby_a" });
+    const { slots, dropped } = resolveWorkday(decisions, { ...ANCHORS, sleep: 1300 });
+    expect(dropped).toEqual([]);
+    expect(slots.at(-1)!.window).toEqual(["19:50", "21:20"]);
   });
 
   it("nothing is dropped when the day fits", () => {
