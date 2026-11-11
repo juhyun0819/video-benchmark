@@ -67,6 +67,8 @@ export const ManifestDaySchema = z.object({
   coverage_ratio: z.number(),
   exceptions: z.array(ExceptionSchema),
   dropped_slots: ScheduleSchema.shape.days.element.shape.dropped_slots,
+  /** Roles of slots left empty at matching time (relaxation "dropped_optional", D10, R27, R48). */
+  dropped_optional: z.array(z.string()),
   clips: z.array(ManifestClipSchema),
 });
 export type ManifestDay = z.infer<typeof ManifestDaySchema>;
@@ -186,6 +188,9 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       coverage_ratio: awake > 0 ? round3(seconds / awake) : 0,
       exceptions: day.exceptions,
       dropped_slots: day.dropped_slots,
+      dropped_optional: day.slots
+        .filter((s) => t.slots[s.slot_id]?.relaxations.includes("dropped_optional"))
+        .map((s) => s.role),
       clips,
     };
   });

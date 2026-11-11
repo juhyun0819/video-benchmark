@@ -78,10 +78,11 @@ describe("buildTimelineManifest", () => {
     expect(m.created_at).toBe("2026-11-12T00:00:00.000Z");
     expect(m.days.map((d) => d.clips.length)).toEqual([4, 4]);
     const text = JSON.stringify(m, null, 2) + "\n";
-    if (!existsSync(SNAPSHOT)) {
+    if (process.env.UPDATE_GOLDEN === "1") {
       mkdirSync(dirname(SNAPSHOT), { recursive: true });
       writeFileSync(SNAPSHOT, text);
     }
+    expect(existsSync(SNAPSHOT), `${SNAPSHOT} is missing; run with UPDATE_GOLDEN=1 to write it`).toBe(true);
     expect(text).toBe(readFileSync(SNAPSHOT, "utf8"));
   });
 
@@ -94,6 +95,15 @@ describe("buildTimelineManifest", () => {
     const first = m.days[0]!.clips[0]!;
     expect(cap?.block_id).toBe(`clip:${first.slot_id}:d1-home`);
     expect(cap?.time).toEqual({ kind: "interval", start: first.synthetic_start_s, end: Math.round((first.synthetic_start_s + 100) * 1000) / 1000 });
+  });
+
+  it("lists the roles of slots dropped at matching time as dropped_optional (R48)", () => {
+    const { t, clips } = build(2);
+    t.slots["d2-s3"] = { clip_ids: [], relaxations: ["dropped_optional"] };
+    const m = buildTimelineManifest(t, catalogOf(clips.filter((c) => c.clip_id !== "d2-lunch")), NOW);
+    expect(TimelineManifestSchema.parse(m)).toEqual(m);
+    expect(m.days.map((d) => d.dropped_optional)).toEqual([[], ["lunch"]]);
+    expect(m.days[1]!.clips.map((c) => c.slot_id)).toEqual(["d2-s1", "d2-s2", "d2-s4"]);
   });
 
   it("catalog missing two clips -> MISSING_CLIPS lists both", () => {

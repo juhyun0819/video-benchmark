@@ -203,6 +203,7 @@
       "coverage_ratio": 0.25,
       "exceptions": [],
       "dropped_slots": [],
+      "dropped_optional": [],
       "clips": [
         {
           "source": {
@@ -348,6 +349,7 @@
       "coverage_ratio": 0.25,
       "exceptions": [],
       "dropped_slots": [],
+      "dropped_optional": [],
       "clips": [
         {
           "source": {
