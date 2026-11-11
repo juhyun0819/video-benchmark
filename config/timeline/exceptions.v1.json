@@ -1,0 +1,11 @@
+{
+  "version": "exceptions.v1",
+  "day": [
+    { "type": "leave_day", "from_day_type": "workday", "template": "home_day" }
+  ],
+  "slot": [
+    { "type": "dinner_out", "replaces_role": "dinner", "meal_place": "eat_out", "day_types": ["workday", "hobby_day", "home_day"] },
+    { "type": "lunch_out", "replaces_role": "lunch", "meal_place": "eat_out", "day_types": ["workday"] },
+    { "type": "lunch_at_friend", "replaces_role": "lunch", "meal_place": "others_home", "day_types": ["hobby_day", "home_day"] }
+  ]
+}

@@ -7,3 +7,6 @@ export * from "./rng.js";
 export * from "./clip.js";
 export * from "./world.js";
 export * from "./donor.js";
+export * from "./gaps.js";
+export * from "./schedule/types.js";
+export * from "./schedule/decisions.js";

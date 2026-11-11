@@ -1,0 +1,18 @@
+{
+  "version": "gaps.v1",
+  "reviewed": false,
+  "transitions": {
+    "home->workplace": {"p10": 7, "p25": 15, "p50": 20, "p75": 35, "p90": 60},
+    "workplace->home": {"p10": 6, "p25": 15, "p50": 20, "p75": 30, "p90": 55},
+    "home->hobby": {"p10": 8, "p25": 14, "p50": 20, "p75": 32, "p90": 50},
+    "hobby->home": {"p10": 8, "p25": 14, "p50": 20, "p75": 32, "p90": 50},
+    "home->frequent_place": {"p10": 8, "p25": 14, "p50": 20, "p75": 32, "p90": 50},
+    "frequent_place->home": {"p10": 8, "p25": 14, "p50": 20, "p75": 32, "p90": 50},
+    "workplace->frequent_place": {"p10": 4, "p25": 7, "p50": 10, "p75": 16, "p90": 25},
+    "frequent_place->workplace": {"p10": 4, "p25": 7, "p50": 10, "p75": 16, "p90": 25},
+    "workplace->hobby": {"p10": 10, "p25": 18, "p50": 25, "p75": 40, "p90": 63},
+    "hobby->workplace": {"p10": 10, "p25": 18, "p50": 25, "p75": 40, "p90": 63},
+    "hobby->frequent_place": {"p10": 6, "p25": 11, "p50": 15, "p75": 24, "p90": 38},
+    "frequent_place->hobby": {"p10": 6, "p25": 11, "p50": 15, "p75": 24, "p90": 38}
+  }
+}
