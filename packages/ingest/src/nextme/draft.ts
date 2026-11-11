@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ClipCategorySchema,
   SettingSchema,
+  overlapsSpan,
   timeOfDayAt,
   type Annotation,
   type ClipContractRow,
@@ -50,9 +51,6 @@ function hktMinuteOfDay(wallclock: string, offsetSec: number): number {
   return Math.floor((((epoch % 86400) + 86400) % 86400) / 60);
 }
 
-const overlaps = (a: Annotation, start: number, end: number): boolean =>
-  a.time.kind === "interval" ? a.time.start < end && a.time.end > start : a.time.t >= start && a.time.t < end;
-
 /** One draft clip row per L4-tiled block of the built day, labeled by keyword rules (spec: NextMe draft). */
 export function nextmeDraftRows(day: string, built: ReturnType<typeof buildNextmeDay>, rules: LabelRules): DraftRow[] {
   const rows: DraftRow[] = [];
@@ -89,7 +87,7 @@ export function nextmeDraftRows(day: string, built: ReturnType<typeof buildNextm
       fingerprint: null,
       extractor_version: "nextme-draft.v1",
       captions: anns
-        .filter((a) => overlaps(a, block.src_start, block.src_end))
+        .filter((a) => overlapsSpan(a.time, block.src_start, block.src_end))
         .map((a) => ({
           id: a.id.startsWith(prefix) ? a.id.slice(prefix.length) : a.id,
           level: a.level,

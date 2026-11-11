@@ -27,7 +27,9 @@ function draft(start: string, l4: string[], l5: string) {
     if (name === "L4") return l4Rows.join("\n");
     if (name === "L5") return line({ id: "L5_0", start: hhmm(0), end: hhmm(l4.length * 10), text: l5 });
     if (name === "raw_caption") return "";
-    return line({ id: `${name}_0`, start: hhmm(0), end: hhmm(0), text: `${name} text` });
+    const rows = [line({ id: `${name}_0`, start: hhmm(0), end: hhmm(0), text: `${name} text` })];
+    if (name === "L2") rows.push(line({ id: "L2_1", start: hhmm(10), end: hhmm(10), text: "L2 at second block start" }));
+    return rows.join("\n");
   };
   const recordings = parseRecordingsCsv(CSV);
   const built = buildNextmeDay(DAY, recordings, files, newReport());
@@ -87,6 +89,14 @@ describe("nextmeDraftRows", () => {
     expect(draft("2026-04-15 14:23:00", ["I cook at home."], "x").rows[0]?.time_of_day).toBe("afternoon");
     const late = draft("2026-04-15 13:55:00", ["I cook at home.", "I cook at home."], "x");
     expect(late.rows.map((r) => r.time_of_day)).toEqual(["midday", "afternoon"]);
+  });
+
+  it("includes a zero-length caption at a block start in that block only (remap semantics)", () => {
+    const { rows } = draft("2026-04-15 09:00:00", ["I cook at home.", "I cook at home."], "x");
+    const l2 = (r: (typeof rows)[number]) => r.captions.filter((c) => c.level === "L2").map((c) => c.id);
+    expect(rows[1]?.source_start_s).toBe(600);
+    expect(l2(rows[0]!)).toEqual(["L2:L2_0"]);
+    expect(l2(rows[1]!)).toEqual(["L2:L2_1"]);
   });
 
   it("feeds ingestBank, which skips exactly the unlabeled rows", () => {

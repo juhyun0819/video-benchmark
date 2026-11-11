@@ -9,6 +9,16 @@ export type PlacedSpan = {
 };
 
 /**
+ * True when `time` falls in the half-open source span [start, end): a point (or zero-length interval)
+ * counts when start <= t < end, any other interval when it overlaps the span.
+ */
+export function overlapsSpan(time: TimeSpan, start: number, end: number): boolean {
+  if (time.kind === "point") return time.t >= start && time.t < end;
+  if (time.start === time.end) return time.start >= start && time.start < end;
+  return time.start < end && time.end > start;
+}
+
+/**
  * Maps source annotations into composed time for one placed span.
  * Values are unrounded; Task 6 rounds. Output follows annotation input order.
  */
@@ -22,15 +32,15 @@ export function remapAnnotations(block: PlacedSpan, annotations: Annotation[]): 
 
     const isPoint = a.time.kind === "point" || a.time.start === a.time.end;
     if (a.time.kind === "point") {
-      if (!(a.time.t >= block.src_start && a.time.t < block.src_end)) continue;
+      if (!overlapsSpan(a.time, block.src_start, block.src_end)) continue;
       time = { kind: "point", t: shift(a.time.t) };
     } else if (isPoint) {
       const t = a.time.start;
-      if (!(t >= block.src_start && t < block.src_end)) continue;
+      if (!overlapsSpan(a.time, block.src_start, block.src_end)) continue;
       time = { kind: "interval", start: shift(t), end: shift(t) };
     } else {
       const { start, end } = a.time;
-      if (!(start < block.src_end && end > block.src_start)) continue;
+      if (!overlapsSpan(a.time, block.src_start, block.src_end)) continue;
       const cs = Math.max(start, block.src_start);
       const ce = Math.min(end, block.src_end);
       time = { kind: "interval", start: shift(cs), end: shift(ce) };
