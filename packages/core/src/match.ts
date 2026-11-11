@@ -26,7 +26,10 @@ export const SELECTOR_TOP_K = 10;
 const RECENT_DAYS = 3;
 /** Day regenerations after the first fill fails (§6.4 step 3). */
 export const MAX_REGEN_ATTEMPTS = 5;
+/** The clip's day_group already fills another slot of the same day at the same node. */
 const SAME_GROUP_BONUS = 0.5;
+/** The clip's day_group already fills a slot of the same day at any node (R43): one synthetic day should retire one source day. */
+const SAME_DAY_GROUP_BONUS = 0.25;
 /** §6.4 steps 0–2; filters 1, 3, 4 are never relaxed. */
 const LADDER: readonly Relaxation[][] = [[], ["ignore_tags"], ["ignore_tags", "widen_window_30m"]];
 
@@ -55,6 +58,7 @@ function rank(t: Timeline, catalog: ClipCatalog, at: LocatedSlot, relax: readonl
   const slotWords = textOf(slot.spec.activity, slot.spec.tags);
   const sameNode = day.slots.filter((s) => s.spec.node === slot.spec.node);
   const todayGroups = new Set(clipsIn(t, catalog, sameNode).map((c) => c.day_group));
+  const todayAnyNode = new Set(clipsIn(t, catalog, day.slots).map((c) => c.day_group));
   const yesterday = t.schedule.days.find((d) => d.day_index === day.day_index - 1);
   const yesterdayWords = clipsIn(t, catalog, yesterday?.slots.filter((s) => s.role === slot.role) ?? []).map((c) =>
     textOf(c.activity, c.tags),
@@ -71,6 +75,10 @@ function rank(t: Timeline, catalog: ClipCatalog, at: LocatedSlot, relax: readonl
     if (todayGroups.has(clip.day_group)) {
       score += SAME_GROUP_BONUS;
       reasons.push(`day_group ${clip.day_group} already used today at ${slot.spec.node}`);
+    }
+    if (todayAnyNode.has(clip.day_group)) {
+      score += SAME_DAY_GROUP_BONUS;
+      reasons.push(`day_group ${clip.day_group} already used today`);
     }
     const similarity = Math.max(0, ...yesterdayWords.map((w) => jaccard(clipWords, w)));
     if (routine * similarity > 0) {

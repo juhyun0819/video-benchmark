@@ -80,6 +80,22 @@ describe("fillTimeline", () => {
     for (const [key, set] of groups) expect([...set], key).toHaveLength(1);
   });
 
+  it("a day prefers a day_group already used at another node, so 30 groups fill 28 days with non-aligned ids", () => {
+    // Work clip ids sort in reverse group order, so home and work ranking ties break toward different groups.
+    const clips = makeClips().map((c) =>
+      c.node === "work" ? { ...c, clip_id: `w${String(100 - Number(c.clip_id.slice(1, 3))).padStart(2, "0")}${c.clip_id.slice(3)}` } : c,
+    );
+    const cat = memoryCatalog(clips);
+    const t = fillTimeline(createTimeline(makeWorld(), makeSchedule(28), genId), cat, rankSelector, neverRegen);
+    const groupsOfDay = new Map<number, Set<string>>();
+    for (const a of assignments(t, cat)) {
+      if (a.clip.source.dataset !== "nextme800") continue;
+      groupsOfDay.set(a.day, (groupsOfDay.get(a.day) ?? new Set()).add(a.clip.day_group));
+    }
+    expect(groupsOfDay.size).toBe(28);
+    for (const [day, set] of groupsOfDay) expect([...set], `day ${day}`).toHaveLength(1);
+  });
+
   it("tags filter drops at level 0 and passes with ignore_tags (recorded)", () => {
     const chores: SlotDef = { role: "chores", category: "home", setting: "home_indoor", node: "home", activity: "doing chores", tags: ["chores"], required: true, window: ["07:00", "08:00"] };
     const t0 = createTimeline(makeWorld(), makeSchedule(1, () => [chores]), genId);
@@ -210,12 +226,32 @@ describe("candidatesFor", () => {
     t0.slots["d2-s1"] = { clip_ids: ["morning-a"], relaxations: [] };
     const ranked = candidatesFor(t0, cat, "d2-s2", []);
     expect(ranked.map((r) => [r.clip.clip_id, r.score])).toEqual([
-      // jaccard({relaxing},{reading,a,book}) = 0, +0.5 day_group g-a used today by home, +1 × 1.0 routine
-      ["read-today", 1.5],
+      // jaccard({relaxing},{reading,a,book}) = 0, +0.5 day_group g-a used today by home, +0.25 used today at any node,
+      // +1 × 1.0 routine
+      ["read-today", 1.75],
       // jaccard({relaxing},{relaxing,with,tv}) = 1/3, routine jaccard 0
       ["tv", 1 / 3],
     ]);
-    expect(ranked[0]!.reasons.length).toBe(2);
+    expect(ranked[0]!.reasons.length).toBe(3);
+  });
+
+  it("score adds +0.25 when the day_group is used today at another node only", () => {
+    const work = clip({ clip_id: "work-a", category: "work", setting: "venue_indoor", node: "work", activity: "work at desk", day_group: "g-a" });
+    const cat = memoryCatalog([
+      clip({ clip_id: "morning-a", day_group: "g-a" }),
+      clip({ clip_id: "morning-b", day_group: "g-b" }),
+      work,
+      { ...work, clip_id: "work-b", day_group: "g-b" },
+    ]);
+    const t0 = createTimeline(makeWorld(), makeSchedule(1, () => [WORKDAY[0]!, WORKDAY[1]!]), genId);
+    t0.slots["d1-s1"] = { clip_ids: ["morning-b"], relaxations: [] };
+    const ranked = candidatesFor(t0, cat, "d1-s2", []);
+    // jaccard 1 for both; g-b is used today at home, not at the workplace
+    expect(ranked.map((r) => [r.clip.clip_id, r.score])).toEqual([
+      ["work-b", 1.25],
+      ["work-a", 1],
+    ]);
+    expect(ranked[0]!.reasons).toEqual(["activity/tags overlap 1.00", "day_group g-b already used today"]);
   });
 });
 

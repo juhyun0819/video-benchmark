@@ -84,7 +84,7 @@ npm run ingest -- bank --input data/raw/bank/nextme800.draft.jsonl --dataset nex
 
 `--dataset`은 `nextme800`, `ego4d`, `egoexo4d`, `youtube` 중 하나다. 같은 형식의 JSONL(검수한 YouTube 클립 등)은 이 명령으로 넣는다.
 
-타임라인에는 집(home)과 직장(workplace) 클립이 모두 있는 NextMe 날짜만 쓸 수 있다. 28일 타임라인은 서로 다른 NextMe 날짜가 28개 이상 있어야 한다(D7). 지금은 1일만 ingest했으므로 날짜를 더 받아야 한다.
+타임라인에는 집(home)과 직장(workplace) 클립이 모두 있는 NextMe 날짜만 쓸 수 있다. 쓸 수 있는 날짜는 출근 전 `home_morning` 창(대개 1시간 안팎)에 들어갈 만큼 짧은 아침 집 영상과, 오전·오후 직장 영상이 모두 있어야 한다. 한 원본 날짜는 합성 하루 하나에만 쓰인다(D7). 매칭은 합성 하루를 되도록 한 원본 날짜로 채우지만, 맞는 클립이 없으면 하루가 원본 날짜 두 개를 쓰고 둘 다 다른 날에 다시 쓰지 못한다. 그래서 28일 타임라인에는 쓸 수 있는 NextMe 날짜가 28개보다 넉넉히 많아야 한다. 지금은 1일만 ingest했으므로 날짜를 더 받아야 한다.
 
 ### Ego4D (산책·이동·취미 등 이벤트)
 

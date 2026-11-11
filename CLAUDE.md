@@ -53,7 +53,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 대기 중인 일
 
-- NextMe-800 날짜를 더 ingest한다. 지금은 1일뿐이고, 28일 타임라인은 집과 직장 클립이 모두 있는 서로 다른 날짜가 28개 이상 필요하다(D7). `ingest nextme`로 초안을 만들고 검수한 뒤 `ingest bank --dataset nextme800`을 한다. 순서는 README 2절을 따른다.
+- NextMe-800 날짜를 더 ingest한다. 지금은 1일뿐이고, 28일 타임라인은 쓸 수 있는 날짜가 28개보다 넉넉히 많아야 한다(하루가 원본 날짜 두 개를 쓸 때가 있다, D7). 쓸 수 있는 날짜는 출근 전 `home_morning` 창(대개 1시간 안팎)에 들어갈 만큼 짧은 아침 집 영상과 오전·오후 직장 영상이 있어야 한다. `ingest nextme`로 초안을 만들고 검수한 뒤 `ingest bank --dataset nextme800`을 한다. 순서는 README 2절을 따른다.
 - `config/timeline/gaps.v1.json`은 `reviewed: false`다. 통근 외 전환의 공백 시간 표를 사람이 검토한다(스펙 13절 열린 항목 1).
 - YouTube 영상 10+10개(집 10, 직장 10)를 사용자가 내려받고 검수한 뒤 `ingest bank --dataset youtube`로 넣는다.
 - 예전 로컬 파일(`data/catalog/hdepic/`, `data/catalog/{ego4d,egoexo4d}/candidates.jsonl`, `data/catalog/nextme800/days/`, `data/compositions/`)은 사용자가 지운 뒤 push한다.
