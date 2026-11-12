@@ -259,7 +259,7 @@ describe("resolveDayWindows with slot overrides (B16, hand-computed)", () => {
 // ---------------------------------------------------------------------------
 // Whole schedules (same synthetic setup as the B8 evening tests).
 
-type Over = { overrides?: unknown[]; seed?: number };
+type Over = { overrides?: unknown[]; meals?: unknown[]; seed?: number };
 
 function worldJson(o: Over = {}): Record<string, unknown> {
   return {
@@ -291,6 +291,7 @@ function worldJson(o: Over = {}): Record<string, unknown> {
       exception_rate: { slot: 0.15, day: 0.15 },
       wake_sleep: "default_v1",
       ...(o.overrides !== undefined ? { slot_overrides: o.overrides } : {}),
+      ...(o.meals !== undefined ? { meal_place_overrides: o.meals } : {}),
     },
     seed: o.seed ?? 11,
   };
@@ -471,5 +472,75 @@ describe("verifier and slot overrides (B16)", () => {
     day.slots = day.slots.filter((s) => s.role !== "hobby");
     const again = verifyTimeline(t, memoryCatalog([])).rules.slot_window.violations.map((v) => v.detail);
     expect(again).toContain("slot override hobby (171 min) has no slot");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B21: dials.meal_place_overrides.
+
+const nodeOf = (day: ScheduleDay, role: string): string | undefined => slotOf(day, role)?.spec.node;
+
+describe("dials.meal_place_overrides (B21)", () => {
+  const restLunch = base.days.find((d) => d.day_type === "hobby_day" && roles(d).includes("lunch"));
+  const rest = restLunch!;
+
+  it("is optional and absent when not given; worlds without it are byte-identical", () => {
+    expect("meal_place_overrides" in parseWorld(worldJson()).dials).toBe(false);
+    expect(json(generateSchedule(input({ meals: undefined })))).toBe(json(base));
+  });
+
+  it("an override changes only that day's lunch place and node; other days are identical", () => {
+    expect(rest).toBeDefined();
+    const d = rest.day_index;
+    const s = generateSchedule(input({ meals: [{ day_index: d, meal: "lunch", place: "eat_out" }] }));
+    const before = nodeOf(rest, "lunch");
+    const after = s.days.find((x) => x.day_index === d)!;
+    expect(nodeOf(after, "lunch")).toBe("diner");
+    expect(before).not.toBe("diner");
+    for (const day of s.days.filter((x) => x.day_index !== d)) {
+      expect(json(day)).toBe(json(base.days.find((x) => x.day_index === day.day_index)));
+    }
+    // regeneration reproduces it
+    const inp = input({ meals: [{ day_index: d, meal: "lunch", place: "eat_out" }] });
+    expect(json(generateDay(inp, s.donors, d, after.attempt))).toBe(json(after));
+  });
+
+  it("a workday lunch drawn eat_out can be moved to the workplace", () => {
+    const out = base.days.find((x) => x.day_type === "workday" && nodeOf(x, "lunch") === "diner");
+    expect(out).toBeDefined();
+    const d = out!.day_index;
+    const s = generateSchedule(input({ meals: [{ day_index: d, meal: "lunch", place: "workplace" }] }));
+    expect(nodeOf(s.days.find((x) => x.day_index === d)!, "lunch")).toBe("workplace");
+  });
+
+  it.each([
+    ["a day past length_days", [{ day_index: 29, meal: "lunch", place: "home" }], /day_index 29 is past length_days 28/],
+    [
+      "a duplicate (day, meal)",
+      [
+        { day_index: 6, meal: "lunch", place: "home" },
+        { day_index: 6, meal: "lunch", place: "eat_out" },
+      ],
+      /day 6 meal "lunch" is listed twice/,
+    ],
+    ["an unknown meal", [{ day_index: 6, meal: "snack", place: "home" }], /meal/],
+  ])("world validation rejects %s", (_, meals, message) => {
+    const e = errorOf(() => parseWorld(worldJson({ meals })));
+    expect(e.code).toBe("WORLD_INVALID");
+    expect(e.message).toMatch(message);
+  });
+
+  it("an override for a meal the day lacks (workday breakfast) is WORLD_INVALID naming day and meal", () => {
+    const e = errorOf(() => generateSchedule(input({ meals: [{ day_index: 1, meal: "breakfast", place: "home" }] })));
+    expect(e.code).toBe("WORLD_INVALID");
+    expect(e.message).toMatch(/day 1 breakfast/);
+  });
+
+  it("a place that is not usable (unbound eat_out node) is WORLD_INVALID", () => {
+    const inp = input({ meals: [{ day_index: 1, meal: "lunch", place: "eat_out" }] });
+    inp.boundNodes = new Set([...inp.boundNodes].filter((n) => n !== "diner"));
+    const e = errorOf(() => generateSchedule(inp));
+    expect(e.code).toBe("WORLD_INVALID");
+    expect(e.message).toMatch(/day 1 lunch/);
   });
 });

@@ -337,6 +337,22 @@ export function decideDay(
     meal_place.dinner = decide("meal_dinner", mealDraw(style.rest_day.dinner));
   }
 
+  // B21: the draws above ran as usual (rng streams unchanged); the overridden meal then takes `place`.
+  for (const o of dials.meal_place_overrides ?? []) {
+    if (o.day_index !== dayIndex) continue;
+    const drawn = meal_place[o.meal];
+    const fail = (why: string): never => {
+      throw new TimelineError("WORLD_INVALID", `dials.meal_place_overrides: day ${dayIndex} ${o.meal}: ${why}`, {
+        day_index: dayIndex,
+        meal: o.meal,
+      });
+    };
+    if (drawn === undefined) fail(`the ${template} day has no ${o.meal}`);
+    if (drawn === "skip") fail(`${o.meal} is skipped that day`);
+    if (!mealPlaceUsable(world, o.place, opts.boundNodes)) fail(`place "${o.place}" is not usable for this world`);
+    meal_place[o.meal] = o.place;
+  }
+
   const hobby_node = hobbyPresent
     ? decide("hobby_node", (rng) => rng.pickWeighted(plan.weights), plan.byWeekday.get(weekday))
     : undefined;

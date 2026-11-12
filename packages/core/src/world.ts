@@ -112,6 +112,14 @@ export const SlotOverrideSchema = z.object({
   duration_min: z.number().int().positive(),
 });
 export type SlotOverride = z.infer<typeof SlotOverrideSchema>;
+
+/** B21: on day `day_index` (1-based) the `meal` is eaten at `place`, after the normal draw. */
+export const MealPlaceOverrideSchema = z.object({
+  day_index: z.number().int().min(1),
+  meal: z.enum(["breakfast", "lunch", "dinner"]),
+  place: MealPlaceSchema,
+});
+export type MealPlaceOverride = z.infer<typeof MealPlaceOverrideSchema>;
 /** E8: every meal distribution must sum to 1 within this tolerance. */
 const MEAL_SUM_TOLERANCE = 0.01;
 
@@ -164,6 +172,8 @@ export const WorldSchema = z
       evening_activities: z.array(EveningActivitySchema).optional(),
       /** B16: per-day slot durations. Optional with no default, so worlds without it keep their bytes. */
       slot_overrides: z.array(SlotOverrideSchema).optional(),
+      /** B21: per-day meal places. Optional with no default, so worlds without it keep their bytes. */
+      meal_place_overrides: z.array(MealPlaceOverrideSchema).optional(),
     }),
     seed: z.number().int().min(0),
   })
@@ -261,6 +271,22 @@ export const WorldSchema = z
         ctx.addIssue({ code: "custom", path: [...path, "role"], message: `day ${o.day_index} role "${o.role}" is listed twice` });
       }
       overridden.add(key);
+    });
+    const mealOverridden = new Set<string>();
+    (w.dials.meal_place_overrides ?? []).forEach((o, i) => {
+      const path = ["dials", "meal_place_overrides", i];
+      if (o.day_index > w.dials.length_days) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...path, "day_index"],
+          message: `day_index ${o.day_index} is past length_days ${w.dials.length_days}`,
+        });
+      }
+      const key = `${o.day_index}:${o.meal}`;
+      if (mealOverridden.has(key)) {
+        ctx.addIssue({ code: "custom", path: [...path, "meal"], message: `day ${o.day_index} meal "${o.meal}" is listed twice` });
+      }
+      mealOverridden.add(key);
     });
     const seen = new Set<string>();
     w.dials.trips.forEach((t, i) => {
