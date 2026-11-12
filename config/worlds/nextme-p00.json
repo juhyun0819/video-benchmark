@@ -52,6 +52,11 @@
       "tags": [
         "music_guitar"
       ]
+    },
+    "eat_out_ext": {
+      "kind": "frequent_place",
+      "setting": "venue_indoor",
+      "optional": true
     }
   },
   "node_binding": {
@@ -108,6 +113,14 @@
       ],
       "tags_any": [
         "music_guitar"
+      ]
+    },
+    "eat_out_ext": {
+      "dataset": [
+        "ego4d"
+      ],
+      "tags_any": [
+        "eat_out"
       ]
     }
   },

@@ -64,7 +64,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
   - 시각표는 ATUS donor가 정한다.
   - 각 블록에는 합성 하루마다 고른 실제 NextMe 날짜의 영상을 통째로 넣는다.
   - 빈 집 블록과 덜 찬 근무·집 블록은 남는 날짜의 영상으로 채운다.
-  - 실행: `npm run compose-blocks -- --world config/worlds/nextme-p00.json --fit-roles hobby --pins config/worlds/nextme-p00.pins.json`
+  - 실행: `npm run compose-blocks -- --world config/worlds/nextme-p00.json --fit-roles hobby --pins config/worlds/nextme-p00.pins.json --meal-fill-node eat_out_ext`. 프록시 영상은 `scripts/render_proxy.py`로 만든다(보고서의 "영상" 절).
 - 데이터(커밋하지 않음):
   - `data/raw/nextme-hf`(caption)
   - `data/raw/egoexo`(메타데이터)
@@ -72,6 +72,8 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
   - `data/catalog`
   - `data/exports`
 - 남은 일:
+  - Ego4D 메타데이터를 받아 외식 카테고리(B23)를 정하고 ingest한 뒤 다시 실행한다. 빈 식사 14개를 채운다.
+  - 원본 미디어를 받고 실제 프레임으로 렌더링한다(Plan 2).
   - 라벨 검수(D9)
   - 렌더링(Plan 2)
   - 최종 리뷰에서 나온 정리 항목
