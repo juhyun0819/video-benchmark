@@ -415,11 +415,14 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
     const spans = transitionBlocks(day).filter((tr) => tr.span[1] > tr.span[0]);
     const between = (from: SlotKind, to: SlotKind) =>
       spans.filter((tr) => kinds.get(tr.from_slot) === from && kinds.get(tr.to_slot) === to).sort((a, b) => a.span[0] - b.span[0]);
-    const lastWorkEnd = Math.max(...work.map((c) => c.end));
+    const gymEnds = [...exerciseTransit.keys()].flatMap((id) => (planned.get(id) ?? []).map((c) => c.end));
+    // B10: on an exercise day the commute home is the last transition into a home slot, after the gym run too.
+    const eveningTr = gymEnds.length > 0 ? spans.filter((tr) => kinds.get(tr.to_slot) === "home").sort((a, b) => a.span[0] - b.span[0]).at(-1) : between("work", "home").at(-1);
+    const lastWorkEnd = Math.max(...work.map((c) => c.end), ...gymEnds);
     const homeMorning = clips.filter((c) => home(c) && c.start < firstAway);
     const windows: [TransitionBlock | undefined, number, number][] = [
       [between("home", "work")[0], homeMorning.length > 0 ? Math.max(...homeMorning.map((c) => c.end)) : -Infinity, work[0]!.start],
-      [between("work", "home").at(-1), lastWorkEnd, clips.find((c) => home(c) && c.start >= lastWorkEnd)?.start ?? Infinity],
+      [eveningTr, lastWorkEnd, clips.find((c) => home(c) && c.start >= lastWorkEnd)?.start ?? Infinity],
     ];
     const transit = clips.filter((c) => transitAccepts(world, c.clip));
     // Only the day's first home→work and last work→home transitions are commutes; midday ones stay empty.

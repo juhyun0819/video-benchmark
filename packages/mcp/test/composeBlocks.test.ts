@@ -922,6 +922,25 @@ describe("evening activities (B10)", () => {
     expect(split["d1-s2"]).toEqual(["17:05"]);
   });
 
+  it("planDay: an exercise day keeps its commute home, after the gym run, in the transition into the home slot", () => {
+    const clips = rec("2026-05-05", [
+      { at: "09:00", min: 480, node: "workplace" },
+      { at: "17:50", min: 8, node: "transit" },
+      { at: "18:00", min: 70, node: "gym", category: "hobby" },
+      { at: "19:20", min: 20, node: "transit" },
+      { at: "19:45", min: 60, node: "home" },
+    ], { wall: "09:00" });
+    const day = mkDay("workday", [
+      slot(1, "work_pm", "workplace", "12:45", "17:00"),
+      hobbySlot(2, "exercise", "gym_1", "17:30", "19:00"),
+      slot(3, "home_evening", "home", "19:30", "21:00"),
+    ], [[1, 2, 20], [2, 3, 20]]);
+    const got = byBlock(world, day, clips, "2026-05-05");
+    expect(got["d1-t1"]).toEqual(["17:50"]);
+    expect(got["d1-s2"]).toEqual(["18:00"]);
+    expect(got["d1-t2"]).toEqual(["19:20"]);
+  });
+
   it("planDay: no gym clips leaves the exercise block empty (no cross-date fill)", () => {
     const day = mkDay("workday", [slot(1, "work_pm", "workplace", "12:45", "17:00"), hobbySlot(2, "exercise", "gym_1", "17:30", "18:30")], [[1, 2, 40]]);
     const got = byBlock(world, day, workDate("2026-05-04"), "2026-05-04");
