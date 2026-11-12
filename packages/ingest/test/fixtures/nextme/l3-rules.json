@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "person_source": "nextme800:wearer",
+  "min_clip_seconds": 120,
+  "places": [
+    {
+      "words": [
+        "hike",
+        "hiking",
+        "trail",
+        "promenade",
+        "waterfront",
+        "park",
+        "peak",
+        "beach",
+        "shuttlecock",
+        "badminton",
+        "jog",
+        "jogging"
+      ],
+      "node": "hobby",
+      "setting": "outdoor",
+      "category": "hobby",
+      "tags": [
+        "walking"
+      ]
+    },
+    {
+      "words": [
+        "restaurant",
+        "mall",
+        "cafe",
+        "café",
+        "eatery",
+        "diner",
+        "bistro",
+        "noodle",
+        "teahouse"
+      ],
+      "node": "frequent_1",
+      "setting": "venue_indoor",
+      "category": "meal",
+      "tags": []
+    },
+    {
+      "words": [
+        "apartment",
+        "home",
+        "bedroom",
+        "kitchen",
+        "dorm",
+        "bed",
+        "sofa",
+        "couch",
+        "dormitory"
+      ],
+      "node": "home",
+      "setting": "home_indoor",
+      "category": "home",
+      "tags": []
+    },
+    {
+      "words": [
+        "gym",
+        "fitness center",
+        "fitness centre",
+        "workout",
+        "dumbbell",
+        "dumbbells",
+        "bench press",
+        "pull-up",
+        "cable machine",
+        "treadmill"
+      ],
+      "node": "gym",
+      "setting": "venue_indoor",
+      "category": "hobby",
+      "tags": [
+        "gym"
+      ]
+    },
+    {
+      "words": [
+        "hospital",
+        "library",
+        "office",
+        "lab",
+        "laboratory",
+        "campus",
+        "cafeteria",
+        "canteen",
+        "workstation",
+        "workspace",
+        "colleagues",
+        "colleague",
+        "seminar",
+        "lecture"
+      ],
+      "node": "workplace",
+      "setting": "venue_indoor",
+      "category": "work",
+      "tags": []
+    },
+    {
+      "words": [
+        "street",
+        "streets",
+        "tram",
+        "bus",
+        "subway",
+        "train",
+        "MTR",
+        "ferry",
+        "taxi",
+        "station"
+      ],
+      "node": "transit",
+      "setting": "outdoor",
+      "category": "transit",
+      "tags": []
+    }
+  ],
+  "meal_words": [
+    "meal",
+    "eat",
+    "eating",
+    "ate",
+    "cook",
+    "cooking",
+    "breakfast",
+    "lunch",
+    "dinner",
+    "noodles",
+    "dumplings",
+    "rice",
+    "bun",
+    "buns"
+  ],
+  "never_home_phrases": [
+    "home screen",
+    "home row"
+  ],
+  "trip_dates": [
+    "2026-05-07",
+    "2026-05-08",
+    "2026-05-09",
+    "2026-05-10"
+  ],
+  "trip": {
+    "lodging_words": [
+      "hotel",
+      "resort",
+      "cabin",
+      "homestay",
+      "lobby",
+      "room"
+    ],
+    "outing_words": [
+      "waterfall",
+      "scenic",
+      "sightseeing",
+      "beach",
+      "trail",
+      "park",
+      "attraction"
+    ]
+  }
+}

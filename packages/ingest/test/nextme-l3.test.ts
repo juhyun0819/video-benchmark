@@ -12,7 +12,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
 const SRC = join(HERE, "fixtures", "nextme-l3");
 const OVERRIDES = join(HERE, "fixtures", "nextme", "l3-overrides.json");
-const L3_RULES = join(ROOT, "config", "nextme_label_rules.l3.json");
+const COMMITTED_RULES = join(ROOT, "config", "nextme_label_rules.l3.json");
+const L3_RULES = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "nextme", "l3-rules.json");
 
 let dir: string;
 beforeEach(() => {
@@ -167,5 +168,11 @@ describe("gym place rule (B9)", () => {
   });
   it("leaves plain office text as workplace", () => {
     expect(label("I sit in the office.")).toMatchObject({ node: "workplace" });
+  });
+});
+
+describe("committed L3 rules", () => {
+  it("still parse with loadL3Rules", () => {
+    expect(() => loadL3Rules(COMMITTED_RULES)).not.toThrow();
   });
 });
