@@ -6,6 +6,7 @@ import {
   TimelineManifestSchema,
   createTimeline,
   generateSchedule,
+  parseClock,
   parseWorld,
   verifyTimeline,
   type Annotation,
@@ -22,6 +23,7 @@ import {
   assignDates,
   collectDates,
   composeBlocks,
+  composeBlocksFit,
   deOverlap,
   eveningFill,
   homeFill,
@@ -1306,6 +1308,92 @@ describe("evening activities (B10)", () => {
       expect(result.summary.per_day.every((d) => d.evening === d.activities)).toBe(true);
       const used = result.placements.filter((p) => p.clip.source.dataset === "youtube").map((p) => p.clip.clip_id);
       expect(new Set(used).size).toBe(used.length);
+    });
+
+    describe("fit_roles (B17)", () => {
+      const MINUTES = [133, 106, 171];
+      const setup = (parts = MINUTES.map((m, i) => lego(i, m))) => {
+        const dataDir = makeTempDir();
+        writeAtusPool(dataDir);
+        const config = loadConfig(CONFIG_DIR, dataDir);
+        const w = hobbyWorld(true);
+        const build = (x: World) => createTimeline(x, generateSchedule(scheduleInput(config, x)), () => "compose-test-fit");
+        const work = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+        const rest = Array.from({ length: 10 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+        const catalog = new MemCatalog([...work.flatMap((d) => workDate(d)), ...rest.flatMap((d) => restDate(d)), ...parts]);
+        return { w, build, catalog };
+      };
+      const hobbyIds = (t: ReturnType<typeof createTimeline>) => t.schedule.days.flatMap((d) => d.slots.filter((s) => s.role === "hobby").map((s) => [d.day_index, s.slot_id]));
+
+      it("sizes the hobby slots to ceil(minutes) of their clip, untrimmed, writes the overrides and verifies", () => {
+        const { w, build, catalog } = setup();
+        const t0 = build(w);
+        const r = composeBlocksFit(t0, catalog, ["hobby"], build);
+        expect(r.slot_overrides).toHaveLength(3);
+        expect(r.slot_overrides.map((o) => o.duration_min)).toEqual([133, 106, 171]);
+        expect(r.timeline.world.dials.slot_overrides).toEqual(r.slot_overrides);
+        const hobby = r.timeline.schedule.days.flatMap((d) => d.slots.filter((s) => s.role === "hobby").map((s) => ({ d, s })));
+        for (const [i, o] of r.slot_overrides.entries()) {
+          const slot = hobby.find((h) => h.d.day_index === o.day_index)!.s;
+          expect(parseClock(slot.window[1]) - parseClock(slot.window[0])).toBe(o.duration_min);
+          const ps = r.placements.filter((p) => p.slot_id === slot.slot_id);
+          expect(ps.map((p) => p.clip.clip_id)).toEqual([`youtube:lego:${i}`]);
+          expect(ps[0]!.source_start_s).toBe(ps[0]!.clip.source_start_s);
+          expect(ps[0]!.source_end_s).toBe(ps[0]!.clip.source_end_s);
+        }
+        const report = verifyTimeline(r.timeline, catalog, { mode: "block", placements: r.placements });
+        expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+        // the hobby days (and so the assignment) are the same before and after regenerating
+        expect(hobbyIds(r.timeline)).toEqual(hobbyIds(t0));
+        expect(composeBlocksFit(t0, catalog, ["hobby"], build)).toEqual(r);
+      });
+
+      it("rounds a part up to whole minutes", () => {
+        const odd = { ...lego(1, 90), source_end_s: lego(1, 90).source_start_s + 90 * 60 + 20 };
+        const { w, build, catalog } = setup([lego(0, 60), odd, lego(2, 45)]);
+        const r = composeBlocksFit(build(w), catalog, ["hobby"], build);
+        expect(r.slot_overrides.map((o) => o.duration_min)).toEqual([60, 91, 45]);
+      });
+
+      it("without fit_roles nothing changes", () => {
+        const { w, build, catalog } = setup();
+        const t0 = build(w);
+        const plain = composeBlocks(t0, catalog);
+        const r = composeBlocksFit(t0, catalog, [], build);
+        expect(r.slot_overrides).toEqual([]);
+        expect(r.timeline).toBe(t0);
+        expect(r.placements).toEqual(plain.placements);
+        expect(r.summary).toEqual(plain.summary);
+      });
+
+      it("CLI --fit-roles: the saved world carries the overrides, the summary reports them, a rerun is accepted", { timeout: 60_000 }, () => {
+        const dataDir = makeTempDir();
+        writeAtusPool(dataDir);
+        const work = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+        const rest = Array.from({ length: 10 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+        writeDataset(dataDir, "nextme800", [...work.flatMap((d) => workDate(d)), ...rest.flatMap((d) => restDate(d))]);
+        writeDataset(dataDir, "youtube", MINUTES.map((m, i) => lego(i, m)));
+        const worldFile = join(makeTempDir(), "world.json");
+        writeFileSync(worldFile, JSON.stringify(hobbyWorld(true)), "utf8");
+        const out = makeTempDir();
+        const args = ["--world", worldFile, "--data", dataDir, "--config", CONFIG_DIR, "--out", out, "--fit-roles", "hobby"];
+        const r = run(args);
+        expect(r.stderr).toBe("");
+        const s = JSON.parse(r.stdout) as { slot_overrides: { duration_min: number }[] };
+        expect(s.slot_overrides.map((o) => o.duration_min)).toEqual([133, 106, 171]);
+        const saved = JSON.parse(readFileSync(join(out, "worlds", "compose-test.json"), "utf8"));
+        expect(saved.dials.slot_overrides).toEqual(s.slot_overrides);
+        expect(run(args).status).toBe(0);
+      });
+
+      it("names the day, role and length when core cannot hold an override", () => {
+        const { w, build, catalog } = setup();
+        expect(() =>
+          composeBlocksFit(build(w), catalog, ["hobby"], () => {
+            throw new Error("SCHEDULE_INFEASIBLE");
+          }),
+        ).toThrow(/day \d+ hobby 133 min/);
+      });
     });
   });
 });

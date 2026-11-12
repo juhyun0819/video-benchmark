@@ -11,6 +11,7 @@ import {
   type ClipCatalog,
   type DayType,
   type ScheduleDay,
+  type SlotOverride,
   type Slot,
   type Timeline,
   type TransitionBlock,
@@ -776,6 +777,8 @@ export function eveningFill(
   plan: readonly BlockPlanEntry[],
   catalog: ClipCatalog,
   world: World,
+  /** B17: roles whose slots take exactly one whole clip each (the slot is then sized to the clip). */
+  fitRoles: ReadonlySet<string> = new Set(),
 ): { entries: BlockPlanEntry[]; takes: EveningTake[] } {
   const person = personSourceOf(world);
   const roles = new Set([...eveningNodes(world).keys(), HOBBY_ROLE]);
@@ -868,6 +871,17 @@ export function eveningFill(
         const take = pick(o);
         if (take === undefined) continue;
         progress = true;
+        if (perClip && fitRoles.has(o.slot.role)) {
+          // B17: one whole, untrimmed clip; the slot is sized to it afterwards.
+          const c = take[0]!;
+          usedTakes.add(keyOf(take));
+          groupDay.set(c.day_group, o.day);
+          o.participant = participantOf(c);
+          o.entries.push({ slot_id: o.slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
+          o.takes.push({ day_index: o.day, slot_id: o.slot.slot_id, role: o.slot.role, take: c.source.video_id, day_group: c.day_group, seconds: c.source_end_s - c.source_start_s });
+          o.filled = o.len;
+          continue;
+        }
         usedTakes.add(keyOf(take));
         groupDay.set(take[0]!.day_group, o.day);
         o.participant = participantOf(take[0]!);
@@ -920,7 +934,12 @@ export type ComposeSummary = {
   home_fills: Fill[];
 };
 
+/** B17: a fitted slot: its whole clip and the whole-minute length the slot is sized to. */
+export type FittedSlot = { day_index: number; slot_id: string; role: string; clip_id: string; seconds: number; duration_min: number };
+
 export type ComposeResult = {
+  /** B17: the fitted slots (empty unless fit_roles is given). */
+  fitted: FittedSlot[];
   assignments: DateAssignment[];
   plan: BlockPlanEntry[];
   placements: BlockPlacement[];
@@ -930,7 +949,7 @@ export type ComposeResult = {
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** B5 steps 2–5 for a timeline whose schedule is already generated: dates, plan, placements and summary. */
-export function composeBlocks(t: Timeline, catalog: ClipCatalog): ComposeResult {
+export function composeBlocks(t: Timeline, catalog: ClipCatalog, opts: { fit_roles?: readonly string[] } = {}): ComposeResult {
   const world = t.world;
   const dates = collectDates(catalog, world);
   const assignments = assignDates(t.schedule.days, dates, world);
@@ -942,11 +961,19 @@ export function composeBlocks(t: Timeline, catalog: ClipCatalog): ComposeResult 
   const filled = homeFill(t.schedule.days, plan, assignments, dates, world);
   // B13: top-up entries come after the slot's primary (and B6) entries, so layoutBlocks places them right after.
   const topped = topUpFill(t.schedule.days, [...plan, ...filled.entries], assignments, dates, world, filled.fills);
-  const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries, ...topped.entries], catalog, world);
+  const fitRoles = new Set(opts.fit_roles ?? []);
+  const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries, ...topped.entries], catalog, world, fitRoles);
+  const slotOf = new Map(t.schedule.days.flatMap((d) => d.slots.map((s) => [s.slot_id, { day: d.day_index, role: s.role }] as const)));
+  const fitted = evening.takes
+    .filter((x) => fitRoles.has(x.role))
+    .map((x): FittedSlot => {
+      const clip_id = evening.entries.find((e) => e.slot_id === x.slot_id)!.clip_id;
+      return { day_index: slotOf.get(x.slot_id)!.day, slot_id: x.slot_id, role: x.role, clip_id, seconds: x.seconds, duration_min: Math.ceil(x.seconds / 60) };
+    });
   const full = [...plan, ...filled.entries, ...topped.entries, ...evening.entries];
   const placements = layoutBlocks(t, catalog, full);
   const fills = [...filled.fills, ...topped.fills];
-  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills } };
+  return { assignments, plan: full, placements, fitted, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills } };
 }
 
 function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "fills" | "home_fills"> {
@@ -992,4 +1019,46 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
     unassigned_days: assignments.filter((a) => a.date === null).map((a) => ({ day_index: a.day_index, day_type: a.day_type, pool: a.pool })),
     per_day,
   };
+}
+
+export type FitResult = ComposeResult & {
+  timeline: Timeline;
+  /** B17: the overrides written into the world (empty when nothing was fitted). */
+  slot_overrides: SlotOverride[];
+};
+
+const fitError = (overrides: readonly SlotOverride[], cause: unknown): Error => {
+  const list = overrides.map((o) => `day ${o.day_index} ${o.role} ${o.duration_min} min`).join(", ");
+  const why = cause instanceof Error ? cause.message : String(cause);
+  return new Error(`fit_roles: the schedule cannot hold the fitted slots (${list}): ${why}`);
+};
+
+/**
+ * B17: composes, sizes each fit-role slot to its one whole clip (length rounded up to whole minutes), writes the
+ * lengths into world.dials.slot_overrides, regenerates the schedule with `regenerate` and composes again. The
+ * overrides apply last in core, so the days that have fit slots (and so the clip assignment) do not change; that
+ * is checked. With no fit_roles, or nothing to fit, this is composeBlocks on `t`.
+ */
+export function composeBlocksFit(
+  t: Timeline,
+  catalog: ClipCatalog,
+  fitRoles: readonly string[],
+  regenerate: (world: World) => Timeline,
+): FitResult {
+  const first = composeBlocks(t, catalog, { fit_roles: fitRoles });
+  if (fitRoles.length === 0 || first.fitted.length === 0) return { ...first, timeline: t, slot_overrides: [] };
+  const computed: SlotOverride[] = first.fitted.map((f) => ({ day_index: f.day_index, role: f.role, duration_min: f.duration_min }));
+  const keep = (t.world.dials.slot_overrides ?? []).filter((o) => !computed.some((c) => c.day_index === o.day_index && c.role === o.role));
+  const slot_overrides = [...keep, ...computed].sort((a, b) => a.day_index - b.day_index || (a.role < b.role ? -1 : a.role > b.role ? 1 : 0));
+  const world: World = { ...t.world, dials: { ...t.world.dials, slot_overrides } };
+  let timeline: Timeline;
+  try {
+    timeline = regenerate(world);
+  } catch (e) {
+    throw fitError(computed, e);
+  }
+  const second = composeBlocks(timeline, catalog, { fit_roles: fitRoles });
+  const key = (r: ComposeResult) => JSON.stringify(r.fitted.map((f) => [f.day_index, f.slot_id, f.clip_id]));
+  if (key(first) !== key(second)) throw new Error("fit_roles: the clip assignment changed after the schedule was regenerated with the slot overrides");
+  return { ...second, timeline, slot_overrides };
 }
