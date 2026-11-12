@@ -1,6 +1,7 @@
 import type { Clip, ClipCatalog } from "./clip.js";
 import { parseClock } from "./clock.js";
-import { bindingAccepts, hardFilterFailures, slotWindow, tripDayGroup, type HardFilter } from "./match/filters.js";
+import { blockSpans, type BlockPlacement } from "./blocks.js";
+import { bindingAccepts, hardFilterFailures, matchesSlotNode, slotWindow, tripDayGroup, type HardFilter } from "./match/filters.js";
 import { layoutTimeline } from "./layout.js";
 import type { Exception, ScheduleDay } from "./schedule/types.js";
 import { unassignClip, type Timeline } from "./timeline.js";
@@ -25,7 +26,8 @@ export type Violation = { slot_id?: string; day_index?: number; detail: string }
 
 export type VerifierReport = {
   pass: boolean;
-  rules: Record<RuleId, { pass: boolean; violations: Violation[] }>;
+  /** `note` is set only in block mode, on a rule that is skipped there. */
+  rules: Record<RuleId, { pass: boolean; violations: Violation[]; note?: string }>;
   flags: { kind: "swap_point"; day_index: number; slot_ids: [string, string] }[];
   seams: { day_index: number; before_clip: string; after_clip: string; at_s: number }[];
   missing_clips: string[];
@@ -50,15 +52,31 @@ const FILTER_RULE: Partial<Record<HardFilter, RuleId>> = {
   // trip_sequence is reported by the trip rule itself, with the expected date.
 };
 
+/**
+ * B4: verify block placements (layoutBlocks) instead of t.slots. The placements are the source of truth
+ * for clips; t.slots clip ids are not read. time_of_day is skipped (reported as pass with a note);
+ * slot_window checks only that each placement lies inside its slot window or transition span, so empty
+ * blocks are allowed; clip_unique, day_group_single_day, node_binding (slot placements) and trip are
+ * checked over the placements, a transition counting as its day. Other rules are unchanged.
+ */
+export type VerifyOptions = { mode: "block"; placements: readonly BlockPlacement[] };
+
+const TIME_OF_DAY_SKIPPED = "skipped in block mode: real and synthetic clock times may differ";
+
 /** Rule-based checks of a filled timeline (§7.1, §7.3). Never throws on missing clips. */
-export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierReport {
+export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts?: VerifyOptions): VerifierReport {
   const violations = Object.fromEntries(RULE_IDS.map((r) => [r, [] as Violation[]])) as Record<RuleId, Violation[]>;
   const add = (rule: RuleId, v: Violation) => violations[rule].push(v);
+  const block = opts?.mode === "block" ? opts.placements : undefined;
 
   const missing = new Set<string>();
-  for (const day of t.schedule.days) {
-    for (const slot of day.slots) {
-      for (const id of t.slots[slot.slot_id]?.clip_ids ?? []) if (!catalog.getClip(id)) missing.add(id);
+  if (block !== undefined) {
+    for (const p of block) if (!catalog.getClip(p.clip.clip_id)) missing.add(p.clip.clip_id);
+  } else {
+    for (const day of t.schedule.days) {
+      for (const slot of day.slots) {
+        for (const id of t.slots[slot.slot_id]?.clip_ids ?? []) if (!catalog.getClip(id)) missing.add(id);
+      }
     }
   }
   const missing_clips = [...missing].sort();
@@ -78,7 +96,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
 
   // N6: a dropped required slot needs an allowance for its role, spent on at most max_days days.
   const droppedDays = new Map<string, number[]>();
-  for (const day of t.schedule.days) {
+  for (const day of block !== undefined ? [] : t.schedule.days) {
     for (const s of day.slots) {
       if (!t.slots[s.slot_id]?.relaxations.includes("dropped_required")) continue;
       const days = droppedDays.get(s.role) ?? [];
@@ -115,16 +133,18 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
       if (lo < wake || hi > sleep) {
         add("wake_sleep", { day_index: d, slot_id: s.slot_id, detail: `window ${s.window[0]}-${s.window[1]} is outside ${day.wake}-${day.sleep}` });
       }
-      if (s.required && (t.slots[s.slot_id]?.clip_ids.length ?? 0) === 0 && !t.slots[s.slot_id]?.relaxations.includes("dropped_required")) {
+      if (block === undefined && s.required && (t.slots[s.slot_id]?.clip_ids.length ?? 0) === 0 && !t.slots[s.slot_id]?.relaxations.includes("dropped_required")) {
         add("slot_window", { day_index: d, slot_id: s.slot_id, detail: `required slot ${s.role} has no clip` });
       }
     }
 
     checkExceptions(t, day, add);
-    if (missing_clips.length === 0) checkTrip(t, catalog, day, add);
+    if (missing_clips.length === 0) checkTrip(t, catalog, day, add, block);
   }
 
-  if (missing_clips.length === 0) {
+  if (missing_clips.length === 0 && block !== undefined) {
+    checkPlacements(t, block, add);
+  } else if (missing_clips.length === 0) {
     for (const day of t.schedule.days) {
       for (const slot of day.slots) {
         const entry = t.slots[slot.slot_id];
@@ -145,14 +165,22 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
   const flags: VerifierReport["flags"] = [];
   const seams: VerifierReport["seams"] = [];
   if (missing_clips.length === 0) {
-    const placed = layoutTimeline(t, catalog);
-    const windows = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, slotWindow(s)] as const)));
+    const placed = block ?? layoutTimeline(t, catalog);
+    // Seconds since the day's 00:00; in block mode transitions d<N>-t<k> are blocks too.
+    const windows = block !== undefined
+      ? new Map([...blockSpans(t)].map(([id, b]) => [id, { day_index: b.day_index, span: b.span }] as const))
+      : new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => {
+          const [lo, hi] = slotWindow(s);
+          return [s.slot_id, { day_index: day.day_index, span: [lo * 60, hi * 60] as [number, number] }] as const;
+        })));
     const nodeOf = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, s.spec.node] as const)));
     let prev: (typeof placed)[number] | undefined;
     for (const p of placed) {
-      const [lo, hi] = windows.get(p.slot_id)!;
+      const w = windows.get(p.slot_id);
       const base = (p.day_index - 1) * 86400;
-      if (p.synthetic_start_s < base + lo * 60 - 1e-6 || p.synthetic_end_s > base + hi * 60 + 1e-6) {
+      if (w === undefined || w.day_index !== p.day_index) {
+        add("slot_window", { day_index: p.day_index, slot_id: p.slot_id, detail: `clip ${p.clip.clip_id} is placed in unknown block ${p.slot_id} of day ${p.day_index}` });
+      } else if (p.synthetic_start_s < base + w.span[0] - 1e-6 || p.synthetic_end_s > base + w.span[1] + 1e-6) {
         add("slot_window", { day_index: p.day_index, slot_id: p.slot_id, detail: `clip ${p.clip.clip_id} lies outside window` });
       }
       if (prev) {
@@ -163,7 +191,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
           add("no_overlap", { day_index: p.day_index, slot_id: p.slot_id, detail: `clip ${p.clip.clip_id} overlaps ${prev.clip.clip_id}` });
         }
         if (p.day_index === prev.day_index && p.clip.day_group !== prev.clip.day_group) {
-          if (nodeOf.get(p.slot_id) === nodeOf.get(prev.slot_id)) {
+          if (nodeOf.get(p.slot_id) !== undefined && nodeOf.get(p.slot_id) === nodeOf.get(prev.slot_id)) {
             flags.push({ kind: "swap_point", day_index: p.day_index, slot_ids: [prev.slot_id, p.slot_id] });
           }
           seams.push({ day_index: p.day_index, before_clip: prev.clip.clip_id, after_clip: p.clip.clip_id, at_s: p.synthetic_start_s });
@@ -175,7 +203,12 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
   }
 
   const rules = Object.fromEntries(
-    RULE_IDS.map((r) => [r, { pass: violations[r].length === 0, violations: violations[r] }]),
+    RULE_IDS.map((r) => [
+      r,
+      block !== undefined && r === "time_of_day"
+        ? { pass: true, violations: [], note: TIME_OF_DAY_SKIPPED }
+        : { pass: violations[r].length === 0, violations: violations[r] },
+    ]),
   ) as VerifierReport["rules"];
   return { pass: RULE_IDS.every((r) => rules[r].pass), rules, flags, seams, missing_clips };
 }
@@ -184,12 +217,41 @@ type Add = (rule: RuleId, v: Violation) => void;
 
 const sameException = (a: Exception, b: Exception): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+const videoKey = (c: Clip) => `${c.source.dataset}:${c.source.video_id}`;
+
+/**
+ * B4 block mode: node_binding for slot placements, clip_unique (a clip placed once, no footage of a
+ * video placed twice) and day_group_single_day (a transition counts as its day) over the placements.
+ */
+function checkPlacements(t: Timeline, placements: readonly BlockPlacement[], add: Add): void {
+  const slots = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, s] as const)));
+  const groupDays = new Map<string, Set<number>>();
+  for (const p of placements) groupDays.set(p.clip.day_group, (groupDays.get(p.clip.day_group) ?? new Set()).add(p.day_index));
+  placements.forEach((p, i) => {
+    const at = { day_index: p.day_index, slot_id: p.slot_id };
+    const id = p.clip.clip_id;
+    const slot = slots.get(p.slot_id);
+    if (slot !== undefined && !matchesSlotNode(t.world, slot, p.clip)) add("node_binding", { ...at, detail: `clip ${id}: category_setting_node` });
+    const reused = placements.some(
+      (q, j) =>
+        j !== i &&
+        (q.clip.clip_id === id ||
+          (videoKey(q.clip) === videoKey(p.clip) && q.source_start_s < p.source_end_s && p.source_start_s < q.source_end_s)),
+    );
+    if (reused) add("clip_unique", { ...at, detail: `clip ${id}: already_used` });
+    if ([...groupDays.get(p.clip.day_group)!].some((d) => d !== p.day_index)) {
+      add("day_group_single_day", { ...at, detail: `clip ${id}: day_group_other_day` });
+    }
+  });
+}
+
 /**
  * N5: on a trip day every slot is a place of the day's trip, and every clip carries
  * that place's trip label, comes from the sequence date at the day's index and is
- * no home or workplace clip.
+ * no home or workplace clip. In block mode the clips are the day's placements; a
+ * transition's clips get the same checks except the place label.
  */
-function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add): void {
+function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add, placements?: readonly BlockPlacement[]): void {
   if (day.trip === undefined) return;
   const d = day.day_index;
   const { node: trip, index } = day.trip;
@@ -204,16 +266,27 @@ function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add
       const kind = fixed.find(([name]) => name === slot.spec.node)?.[1];
       v(`slot ${slot.role} uses ${kind !== undefined ? `${kind} ` : ""}node ${slot.spec.node}, not a place of trip ${trip}`);
     }
-    for (const id of t.slots[slot.slot_id]?.clip_ids ?? []) {
-      const clip = catalog.getClip(id) as Clip;
-      const kinds = [...new Set(fixed.filter(([name]) => bindingAccepts(t.world, name, clip)).map(([, kind]) => kind))];
-      if (kinds.length > 0) v(`clip ${id} is a ${kinds.join(" and ")} clip on a trip day`);
-      else if (place !== undefined && clip.node !== tripClipNode(place.place)) {
-        v(`clip ${id} has node ${clip.node}, expected ${tripClipNode(place.place)}`);
-      }
-      if (clip.day_group !== want) {
-        v(`clip ${id} comes from ${clip.day_group}; trip day ${index + 1} of ${trip} uses ${want ?? "(no sequence date)"}`);
-      }
+    const clips = placements !== undefined
+      ? placements.filter((p) => p.slot_id === slot.slot_id).map((p) => p.clip)
+      : (t.slots[slot.slot_id]?.clip_ids ?? []).map((id) => catalog.getClip(id) as Clip);
+    for (const clip of clips) checkClip(clip, place, v);
+  }
+  if (placements === undefined) return;
+  const slotIds = new Set(day.slots.map((s) => s.slot_id));
+  for (const p of placements) {
+    if (p.day_index !== d || slotIds.has(p.slot_id)) continue;
+    checkClip(p.clip, undefined, (detail) => add("trip", { day_index: d, slot_id: p.slot_id, detail }));
+  }
+
+  function checkClip(clip: Clip, place: ReturnType<typeof tripPlaceOf>, v: (detail: string) => void): void {
+    const id = clip.clip_id;
+    const kinds = [...new Set(fixed.filter(([name]) => bindingAccepts(t.world, name, clip)).map(([, kind]) => kind))];
+    if (kinds.length > 0) v(`clip ${id} is a ${kinds.join(" and ")} clip on a trip day`);
+    else if (place !== undefined && clip.node !== tripClipNode(place.place)) {
+      v(`clip ${id} has node ${clip.node}, expected ${tripClipNode(place.place)}`);
+    }
+    if (clip.day_group !== want) {
+      v(`clip ${id} comes from ${clip.day_group}; trip day ${index + 1} of ${trip} uses ${want ?? "(no sequence date)"}`);
     }
   }
 }

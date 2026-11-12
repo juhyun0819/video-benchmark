@@ -16,6 +16,7 @@ export * from "./schedule/realized.js";
 export * from "./timeline.js";
 export * from "./match.js";
 export * from "./layout.js";
+export * from "./blocks.js";
 export * from "./verify.js";
 export * from "./manifest.js";
 export * from "./stats.js";

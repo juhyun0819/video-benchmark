@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ClipCategorySchema, ClipSpecSchema, SettingSchema, type ClipCatalog } from "./clip.js";
 import { TIME_OF_DAY } from "./clock.js";
 import { TimelineError } from "./errors.js";
+import { slotsByStart, transitionBlocks, travelBefore, type BlockPlacement } from "./blocks.js";
 import { layoutTimeline } from "./layout.js";
 import { LICENSES } from "./licenses.js";
 import { remapAnnotations } from "./remap.js";
@@ -176,7 +177,8 @@ const minutes = (hhmm: string): number => {
 
 /**
  * E9: the parts of [wake, sleep] that no clip covers. `clipSpans` are the day's placed
- * clips per slot id as [start, end] in absolute seconds (already rounded).
+ * clips per slot or transition id as [start, end] in absolute seconds (already rounded);
+ * commute clips (B3) cover part of a transition span.
  */
 function noVideoSpans(day: ScheduleDay, clipSpans: ReadonlyMap<string, [number, number][]>): NoVideoSpan[] {
   const base = (day.day_index - 1) * 86400;
@@ -188,7 +190,17 @@ function noVideoSpans(day: ScheduleDay, clipSpans: ReadonlyMap<string, [number, 
   };
   const wake = base + minutes(day.wake) * 60;
   const sleep = base + minutes(day.sleep) * 60;
-  const slots = [...day.slots].sort((a, b) => minutes(a.window[0]) - minutes(b.window[0]));
+  const slots = slotsByStart(day);
+  const transitionIds = new Map(transitionBlocks(day).map((x) => [`${x.from_slot}>${x.to_slot}`, x.transition_id]));
+  /** Walks [from, to) and pushes the parts not covered by the block's clips as `kind`. */
+  const uncovered = (id: string | undefined, from: number, to: number, kind: NoVideoSpan["kind"]) => {
+    let cursor = from;
+    for (const [a, b] of [...((id !== undefined ? clipSpans.get(id) : undefined) ?? [])].sort((x, y) => x[0] - y[0])) {
+      if (a > cursor) push(cursor, Math.min(a, to), kind);
+      cursor = Math.max(cursor, b);
+    }
+    if (cursor < to) push(cursor, to, kind);
+  };
   if (slots.length === 0) {
     push(wake, sleep, "unscheduled");
     return out;
@@ -197,47 +209,62 @@ function noVideoSpans(day: ScheduleDay, clipSpans: ReadonlyMap<string, [number, 
   slots.forEach((slot, i) => {
     const ws = base + minutes(slot.window[0]) * 60;
     const we = base + minutes(slot.window[1]) * 60;
-    let cursor = ws;
-    for (const [a, b] of [...(clipSpans.get(slot.slot_id) ?? [])].sort((x, y) => x[0] - y[0])) {
-      if (a > cursor) push(cursor, Math.min(a, we), "unrecorded");
-      cursor = Math.max(cursor, b);
-    }
-    if (cursor < we) push(cursor, we, "unrecorded");
+    uncovered(slot.slot_id, ws, we, "unrecorded");
     const next = slots[i + 1];
     const gapEnd = next === undefined ? sleep : base + minutes(next.window[0]) * 60;
     if (gapEnd > we) {
-      const moved = next === undefined
-        ? 0
-        : (day.transitions.find((x) => x.from_slot === slot.slot_id && x.to_slot === next.slot_id)?.minutes ?? 0) * 60;
       // G23 (CR6.3): unscheduled time is spent at this slot's place; the move comes right before the next slot.
-      const t = Math.min(moved, gapEnd - we);
+      const t = travelBefore(day, slot, next);
       push(we, gapEnd - t, "unscheduled");
-      push(gapEnd - t, gapEnd, "transition");
+      const id = next === undefined ? undefined : transitionIds.get(`${slot.slot_id}>${next.slot_id}`);
+      uncovered(id, gapEnd - t, gapEnd, "transition");
     }
   });
   return out;
 }
+
+export type ManifestOptions = {
+  /**
+   * B3: block placements (layoutBlocks) to use instead of layoutTimeline. They are the source of truth
+   * for clips: t.slots clip ids are not read, and the timeline is verified in block mode.
+   */
+  placements?: readonly BlockPlacement[];
+};
 
 /**
  * Public manifest of a verified timeline (§8): source spans, synthetic times, remapped captions, provenance.
  * `realized` is recomputed from the final days (G17): schedule.realized is the pre-matching value and goes
  * stale when matching regenerates a day.
  */
-export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Date, templates: Templates): TimelineManifest {
+export function buildTimelineManifest(
+  t: Timeline,
+  catalog: ClipCatalog,
+  now: Date,
+  templates: Templates,
+  opts: ManifestOptions = {},
+): TimelineManifest {
   const missing = new Set<string>();
-  for (const a of Object.values(t.slots)) for (const id of a.clip_ids) if (!catalog.getClip(id)) missing.add(id);
+  if (opts.placements !== undefined) {
+    for (const p of opts.placements) if (!catalog.getClip(p.clip.clip_id)) missing.add(p.clip.clip_id);
+  } else {
+    for (const a of Object.values(t.slots)) for (const id of a.clip_ids) if (!catalog.getClip(id)) missing.add(id);
+  }
   if (missing.size > 0) {
     const ids = [...missing].sort();
     throw new TimelineError("MISSING_CLIPS", `clips missing from the catalog: ${ids.join(", ")}`, { ids });
   }
 
-  const report = verifyTimeline(t, catalog);
+  const report = opts.placements !== undefined
+    ? verifyTimeline(t, catalog, { mode: "block", placements: opts.placements })
+    : verifyTimeline(t, catalog);
   if (!report.pass) {
     const failed_rules = RULE_IDS.filter((r) => !report.rules[r].pass);
     throw new TimelineError("VERIFY_FAILED", `timeline fails rules: ${failed_rules.join(", ")}`, { failed_rules });
   }
 
-  const placed = layoutTimeline(t, catalog);
+  // Without placements every clip is used whole (its catalog span).
+  const placed: readonly BlockPlacement[] = opts.placements
+    ?? layoutTimeline(t, catalog).map((p) => ({ ...p, source_start_s: p.clip.source_start_s, source_end_s: p.clip.source_end_s, trimmed: false }));
   const captions: ManifestCaption[] = [];
   const extractors = new Set<string>();
   const datasets = new Set<string>();
@@ -250,12 +277,12 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       const c = p.clip;
       extractors.add(c.extractor_version);
       datasets.add(c.source.dataset);
-      seconds += c.source_end_s - c.source_start_s;
+      seconds += p.source_end_s - p.source_start_s;
       clips.push({
         source: c.source,
         video_id: c.source.video_id,
-        source_start_s: c.source_start_s,
-        source_end_s: c.source_end_s,
+        source_start_s: p.source_start_s,
+        source_end_s: p.source_end_s,
         synthetic_start_s: round3(p.synthetic_start_s),
         synthetic_end_s: round3(p.synthetic_end_s),
         slot_id: p.slot_id,
@@ -281,8 +308,8 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
         {
           block_id: `clip:${p.slot_id}:${c.clip_id}`,
           source: c.source,
-          src_start: c.source_start_s,
-          src_end: c.source_end_s,
+          src_start: p.source_start_s,
+          src_end: p.source_end_s,
           composed_start: p.synthetic_start_s,
         },
         catalog.getAnnotations(c.source.dataset, c.source.video_id),

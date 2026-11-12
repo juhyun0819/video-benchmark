@@ -15,7 +15,8 @@ export type TimelineErrorCode =
   | "WORLD_NOT_FOUND"
   | "WORLD_INVALID"
   | "MISSING_CLIPS"
-  | "VERIFY_FAILED";
+  | "VERIFY_FAILED"
+  | "BLOCK_PLAN_INVALID";
 
 export class TimelineError extends Error {
   readonly code: TimelineErrorCode;
