@@ -1,3 +1,4 @@
 [
-  { "day_index": 17, "role": "home_morning", "video_id": "2026-05-28_1055-1219", "from_s": 690, "to_s": 2475 }
+  { "day_index": 17, "role": "home_morning", "video_id": "2026-05-28_1055-1219", "from_s": 690, "to_s": 2475 },
+  { "day_index": 24, "role": "lunch", "video_id": "2026-08-10_1102-1224", "from_s": 3232, "to_s": 4465 }
 ]

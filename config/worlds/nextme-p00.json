@@ -179,6 +179,13 @@
         "count": 6,
         "max_per_week": 2
       }
+    ],
+    "meal_place_overrides": [
+      {
+        "day_index": 24,
+        "meal": "lunch",
+        "place": "workplace"
+      }
     ]
   },
   "seed": 1020
