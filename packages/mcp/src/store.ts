@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import {
   TimelineError,
   TimelineSchema,
-  WorldSchema,
+  parseWorld,
   type Timeline,
   type TimelineManifest,
   type VerifierReport,
@@ -44,7 +44,7 @@ export class WorldStore {
     if (!existsSync(file)) {
       throw new TimelineError("WORLD_NOT_FOUND", `world ${personId} not found under ${this.dir}`, { person_id: personId });
     }
-    return WorldSchema.parse(JSON.parse(readFileSync(file, "utf8")));
+    return parseWorld(JSON.parse(readFileSync(file, "utf8")));
   }
 
   list(): World[] {

@@ -64,6 +64,8 @@ export type DayDecisions = {
 /** Exactly what parseClock accepts: HH 00–27, MM 00–59 (R44). */
 const ClockSchema = z.string().regex(/^(?:[01]\d|2[0-7]):[0-5]\d$/, "expected HH:MM with HH 00-27 and MM 00-59");
 
+const Prob01 = z.number().min(0).max(1);
+
 /** The subset of schedule_defaults_*.json the generator reads; other keys pass through (R5). */
 export const ScheduleDefaultsSchema = z
   .object({
@@ -71,6 +73,13 @@ export const ScheduleDefaultsSchema = z
       .object({ routine_strength_1: z.number().min(0), routine_strength_0: z.number().min(0) })
       .passthrough(),
     weekend: z.object({ sports_start: z.object({ p50: ClockSchema }).passthrough() }).passthrough(),
+    weekday_evening_home: z
+      .object({
+        slot_probability: Prob01,
+        minutes: z.object({ p25: z.number().min(0), p50: z.number().min(0), p75: z.number().min(0) }).passthrough(),
+      })
+      .passthrough(),
+    meal_location_priors: z.object({ rest_day: z.object({}).passthrough() }).passthrough(),
   })
   .passthrough();
 export type ScheduleDefaults = z.infer<typeof ScheduleDefaultsSchema>;
@@ -191,7 +200,7 @@ export const ScheduleSchema = z.object({
   }),
   meal_style_effective: z.object({
     workday: z.object({ lunch: MealDistributionSchema, dinner: MealDistributionSchema }),
-    weekend: z.object({
+    rest_day: z.object({
       breakfast: MealDistributionSchema,
       lunch: MealDistributionSchema,
       dinner: MealDistributionSchema,

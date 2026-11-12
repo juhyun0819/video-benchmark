@@ -36,7 +36,7 @@ export function makeWorld(over: { seed?: number; routine?: number } = {}): World
     },
     meal_style: {
       workday: { lunch: { workplace: 1 }, dinner: { home: 1 } },
-      weekend: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
+      rest_day: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
       breakfast_skip_prob: 0,
       place_nodes: { eat_out: "diner" },
     },
@@ -142,7 +142,7 @@ export function makeSchedule(days = 28, defsFor: (d: number) => SlotDef[] | unde
     donors: { weekday: donor, weekend: donor, country_fallback: false, weekend_redraws: 0 },
     meal_style_effective: {
       workday: { lunch: { workplace: 1 }, dinner: { home: 1 } },
-      weekend: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
+      rest_day: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
     },
     days: Array.from({ length: days }, (_, i) => makeDay(i + 1, 0, defsFor(i + 1))),
   });

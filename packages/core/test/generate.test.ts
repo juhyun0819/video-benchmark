@@ -103,7 +103,7 @@ function makeWorld(o: Over = {}): World {
     },
     meal_style: {
       workday: { lunch: { workplace: 0.8, eat_out: 0.2 }, dinner: { home: 0.8, eat_out: 0.1, others_home: 0.1 } },
-      weekend: {
+      rest_day: {
         breakfast: { home: 0.9, eat_out: 0.1 },
         lunch: { home: 0.6, eat_out: 0.3, others_home: 0.1 },
         dinner: { home: 0.7, eat_out: 0.2, others_home: 0.1 },
@@ -206,10 +206,17 @@ describe("generateSchedule", () => {
     expect(json(generateSchedule(inp))).toBe(json(schedule));
   });
 
+  it("parses the rev3 defaults: weekday_evening_home and rest_day meal priors", () => {
+    const d = ScheduleDefaultsSchema.parse(readConfig("schedule_defaults_atus2025.json"));
+    expect(d.weekday_evening_home.slot_probability).toBe(0.91);
+    expect(d.weekday_evening_home.minutes).toMatchObject({ p25: 105, p50: 187, p75: 270 });
+    expect(d.meal_location_priors.rest_day).toHaveProperty("lunch");
+  });
+
   it("meal_style_effective drops eat_out without place_nodes.eat_out and sums to 1", () => {
     const schedule = generateSchedule(input({ placeNodes: { others_home: "friend_home" } }));
     const eff = schedule.meal_style_effective;
-    const dists = [eff.workday.lunch, eff.workday.dinner, eff.weekend.breakfast, eff.weekend.lunch, eff.weekend.dinner];
+    const dists = [eff.workday.lunch, eff.workday.dinner, eff.rest_day.breakfast, eff.rest_day.lunch, eff.rest_day.dinner];
     for (const dist of dists) {
       expect(dist).not.toHaveProperty("eat_out");
       expect(Object.values(dist).reduce((s, p) => s + p, 0)).toBeCloseTo(1, 12);

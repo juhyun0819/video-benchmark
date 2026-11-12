@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { WorldSchema } from "../src/world.js";
+import { WorldSchema, parseWorld } from "../src/world.js";
 
 function world(): Record<string, any> {
   return {
@@ -29,10 +29,10 @@ function world(): Record<string, any> {
         lunch: { workplace: 0.84, home: 0.1, eat_out: 0.06 },
         dinner: { home: 0.83, eat_out: 0.09, workplace: 0.07, others_home: 0.01 },
       },
-      weekend: {
-        breakfast: { home: 0.9, eat_out: 0.1 },
-        lunch: { home: 0.62, eat_out: 0.23, workplace: 0.1, others_home: 0.05 },
-        dinner: { home: 0.77, eat_out: 0.13, others_home: 0.08, workplace: 0.02 },
+      rest_day: {
+        breakfast: { home: 0.91, others_home: 0.04, eat_out: 0.05 },
+        lunch: { home: 0.67, eat_out: 0.27, others_home: 0.06 },
+        dinner: { home: 0.79, eat_out: 0.14, others_home: 0.07 },
       },
       breakfast_skip_prob: 0.3,
       place_nodes: { eat_out: "frequent_1" },
@@ -45,6 +45,17 @@ function world(): Record<string, any> {
     },
     seed: 1234,
   };
+}
+
+function worldInvalid(w: unknown): { message: string; issues: { path: string }[] } {
+  try {
+    parseWorld(w);
+  } catch (e) {
+    expect(e).toMatchObject({ name: "TimelineError", code: "WORLD_INVALID" });
+    const err = e as { message: string; details: { issues: { path: string }[] } };
+    return { message: err.message, issues: err.details.issues };
+  }
+  throw new Error("expected WORLD_INVALID");
 }
 
 function issuePaths(w: unknown): string[] {
@@ -112,5 +123,41 @@ describe("WorldSchema", () => {
     const v = world();
     v.meal_style.breakfast_skip_prob = 2;
     expect(WorldSchema.safeParse(v).success).toBe(false);
+  });
+
+  it("rejects meal weights summing to 0 or 0.98 and accepts 0.995 (E8)", () => {
+    const zero = world();
+    zero.meal_style.workday.lunch = {};
+    expect(worldInvalid(zero).message).toContain("meal_style.workday.lunch");
+
+    const low = world();
+    low.meal_style.rest_day.dinner = { home: 0.77, eat_out: 0.14, others_home: 0.07 };
+    expect(worldInvalid(low).issues.map((i) => i.path)).toContain("meal_style.rest_day.dinner");
+
+    const ok = world();
+    ok.meal_style.rest_day.dinner = { home: 0.795, eat_out: 0.14, others_home: 0.06 };
+    expect(parseWorld(ok).person_id).toBe("p01");
+  });
+
+  it("rejects workplace on rest days (E8)", () => {
+    const w = world();
+    w.meal_style.rest_day.lunch = { home: 0.57, eat_out: 0.27, others_home: 0.06, workplace: 0.1 };
+    expect(worldInvalid(w).issues.map((i) => i.path)).toContain("meal_style.rest_day.lunch.workplace");
+  });
+
+  it("rejects four hobbies as WORLD_INVALID and joins issues as path: message", () => {
+    const w = world();
+    for (const k of ["hobby_2", "hobby_3", "hobby_4"]) {
+      w.nodes[k] = { kind: "hobby", activity: "x", setting: "outdoor", weekly_freq: 1 };
+      w.node_binding[k] = { node: "x" };
+    }
+    expect(worldInvalid(w).message).toMatch(/^nodes: expected 1-3 hobby nodes, got 4/);
+  });
+
+  it("no longer accepts meal_style.weekend", () => {
+    const w = world();
+    w.meal_style.weekend = w.meal_style.rest_day;
+    delete w.meal_style.rest_day;
+    expect(worldInvalid(w).issues.map((i) => i.path)).toContain("meal_style.rest_day");
   });
 });

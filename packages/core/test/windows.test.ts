@@ -31,7 +31,7 @@ function world(): World {
     node_binding: { home: { node: "h" }, workplace: { node: "w" }, hobby_a: { node: "a" }, diner: { node: "d" } },
     meal_style: {
       workday: { lunch: { workplace: 1 }, dinner: { home: 1 } },
-      weekend: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
+      rest_day: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
       breakfast_skip_prob: 0,
       place_nodes: { eat_out: "diner" },
     },

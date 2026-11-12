@@ -12,6 +12,7 @@ export type TimelineErrorCode =
   | "REVISION_MISMATCH"
   | "TIMELINE_NOT_FOUND"
   | "WORLD_NOT_FOUND"
+  | "WORLD_INVALID"
   | "MISSING_CLIPS"
   | "VERIFY_FAILED";
 

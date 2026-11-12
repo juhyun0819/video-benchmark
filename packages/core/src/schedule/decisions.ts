@@ -1,3 +1,4 @@
+import { TimelineError } from "../errors.js";
 import { rngFor, type Rng } from "../rng.js";
 import { MealPlaceSchema, WeekdaySchema, type MealPlace, type MealWeights, type Weekday, type World } from "../world.js";
 import type { DayDecisions, DayType, Exception, ExceptionCatalog, Meal, TemplateName } from "./types.js";
@@ -6,7 +7,7 @@ import type { DayDecisions, DayType, Exception, ExceptionCatalog, Meal, Template
 export type MealDistribution = Partial<Record<MealPlace, number>>;
 export type EffectiveMealStyle = {
   workday: { lunch: MealDistribution; dinner: MealDistribution };
-  weekend: { breakfast: MealDistribution; lunch: MealDistribution; dinner: MealDistribution };
+  rest_day: { breakfast: MealDistribution; lunch: MealDistribution; dinner: MealDistribution };
 };
 
 export type DecideOptions = { boundNodes: Set<string> };
@@ -18,36 +19,43 @@ const HOME_EVENING_PROB = 0.5;
 
 /**
  * D4: eat_out / others_home are usable only when their place node exists and is bound.
- * R16: workplace is usable only on workday templates.
+ * Workplace on rest days is forbidden by world validation (E8), so it needs no filtering here.
  */
-function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>, workday: boolean): boolean {
-  if (place === "home") return true;
-  if (place === "workplace") return workday;
+function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>): boolean {
+  if (place === "home" || place === "workplace") return true;
   const node = world.meal_style.place_nodes[place];
   return node !== undefined && boundNodes.has(node);
 }
 
-function renormalize(weights: MealWeights, world: World, boundNodes: Set<string>, workday: boolean): MealDistribution {
+function renormalize(weights: MealWeights, world: World, boundNodes: Set<string>): MealDistribution {
   const kept: [MealPlace, number][] = [];
   for (const place of MealPlaceSchema.options) {
     const w = weights[place] ?? 0;
-    if (w > 0 && mealPlaceUsable(world, place, boundNodes, workday)) kept.push([place, w]);
+    if (w > 0 && mealPlaceUsable(world, place, boundNodes)) kept.push([place, w]);
   }
   const total = kept.reduce((s, [, w]) => s + w, 0);
   return Object.fromEntries(kept.map(([place, w]) => [place, w / total]));
 }
 
 /**
- * meal_style after dropping unusable places and renormalizing (D4, R12, R16).
- * Every non-workday template (hobby_day, home_day, leave_day) uses `weekend`.
+ * meal_style after dropping unusable places and renormalizing (D4, R12).
+ * Every non-workday template (hobby_day, home_day, leave_day) uses `rest_day`.
+ * E8: the workday dinner must keep mass after dropping, else WORLD_INVALID.
  */
 export function effectiveMealStyle(world: World, boundNodes: Set<string>): EffectiveMealStyle {
-  const { workday, weekend } = world.meal_style;
-  const wd = (w: MealWeights) => renormalize(w, world, boundNodes, true);
-  const we = (w: MealWeights) => renormalize(w, world, boundNodes, false);
+  const { workday, rest_day } = world.meal_style;
+  const norm = (w: MealWeights) => renormalize(w, world, boundNodes);
+  const dinner = norm(workday.dinner);
+  if (Object.keys(dinner).length === 0) {
+    throw new TimelineError(
+      "WORLD_INVALID",
+      "meal_style.workday.dinner: no usable place remains after dropping places without a bound node",
+      { issues: [{ path: "meal_style.workday.dinner", message: "no usable place after dropping unbound places" }] },
+    );
+  }
   return {
-    workday: { lunch: wd(workday.lunch), dinner: wd(workday.dinner) },
-    weekend: { breakfast: we(weekend.breakfast), lunch: we(weekend.lunch), dinner: we(weekend.dinner) },
+    workday: { lunch: norm(workday.lunch), dinner },
+    rest_day: { breakfast: norm(rest_day.breakfast), lunch: norm(rest_day.lunch), dinner: norm(rest_day.dinner) },
   };
 }
 
@@ -163,10 +171,10 @@ export function decideDay(
     hobbyPresent = optional.hobby;
   } else {
     const skip = decide("breakfast_skip", (rng) => rng.bernoulli(world.meal_style.breakfast_skip_prob));
-    const breakfast = decide("meal_breakfast", mealDraw(style.weekend.breakfast));
+    const breakfast = decide("meal_breakfast", mealDraw(style.rest_day.breakfast));
     meal_place.breakfast = skip ? "skip" : breakfast;
-    meal_place.lunch = decide("meal_lunch", mealDraw(style.weekend.lunch));
-    meal_place.dinner = decide("meal_dinner", mealDraw(style.weekend.dinner));
+    meal_place.lunch = decide("meal_lunch", mealDraw(style.rest_day.lunch));
+    meal_place.dinner = decide("meal_dinner", mealDraw(style.rest_day.dinner));
   }
 
   const hobby_node = hobbyPresent
@@ -175,9 +183,7 @@ export function decideDay(
 
   if (exceptions.length === 0) {
     const eligible = catalog.slot.filter(
-      (e) =>
-        e.day_types.includes(dayType) &&
-        mealPlaceUsable(world, e.meal_place, opts.boundNodes, template === "workday"),
+      (e) => e.day_types.includes(dayType) && mealPlaceUsable(world, e.meal_place, opts.boundNodes),
     );
     if (eligible.length > 0) {
       const rng = dayRng("slot_exception");

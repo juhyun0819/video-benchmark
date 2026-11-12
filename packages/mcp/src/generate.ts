@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 import {
   RULE_IDS,
   TimelineError,
-  WorldSchema,
+  parseWorld,
   buildTimelineManifest,
   fillTimeline,
   rankSelector,
@@ -32,7 +32,7 @@ type GenerateResult = {
 function generate(worldPath: string, { dataDir, configDir }: Dirs, now: Date): GenerateResult {
   if (!existsSync(worldPath)) throw new Error(`world file not found: ${worldPath}`);
   const worldText = readFileSync(worldPath, "utf8");
-  const world = WorldSchema.parse(JSON.parse(worldText));
+  const world = parseWorld(JSON.parse(worldText));
   if (!isSafeId(world.person_id)) throw new Error(`person_id ${JSON.stringify(world.person_id)} is not a safe file name`);
 
   const worldFile = new WorldStore(dataDir).file(world.person_id);

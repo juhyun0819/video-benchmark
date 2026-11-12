@@ -56,7 +56,7 @@ function makeWorld(o: Over = {}): World {
         lunch: { workplace: 0.7, home: 0.1, eat_out: 0.2 },
         dinner: { home: 0.8, eat_out: 0.1, others_home: 0.1 },
       },
-      weekend: {
+      rest_day: {
         breakfast: { home: 0.9, eat_out: 0.1 },
         lunch: { home: 0.6, eat_out: 0.3, others_home: 0.1 },
         dinner: { home: 0.7, eat_out: 0.2, others_home: 0.1 },
@@ -291,13 +291,19 @@ describe("meal places", () => {
     expect(Object.keys(eff.workday.lunch)).toEqual(["home", "workplace"]);
     expect(eff.workday.lunch.home).toBeCloseTo(0.125, 12);
     expect(eff.workday.lunch.workplace).toBeCloseTo(0.875, 12);
-    expect(eff.weekend.breakfast).toEqual({ home: 1 });
+    expect(eff.rest_day.breakfast).toEqual({ home: 1 });
 
     const onlyOut = makeWorld();
     onlyOut.meal_style.workday.dinner = { eat_out: 1 };
-    expect(effectiveMealStyle(onlyOut, bound(onlyOut)).workday.dinner).toEqual({});
-    const days = decideDays(onlyOut, catalog(), { boundNodes: bound(onlyOut) });
-    for (const d of days.filter((x) => x.template === "workday")) expect(d.meal_place.dinner).toBe("skip");
+    expect(() => effectiveMealStyle(onlyOut, bound(onlyOut))).toThrow(
+      expect.objectContaining({ code: "WORLD_INVALID", message: expect.stringContaining("meal_style.workday.dinner") }),
+    );
+
+    const lunchOnlyOut = makeWorld();
+    lunchOnlyOut.meal_style.workday.lunch = { eat_out: 1 };
+    expect(effectiveMealStyle(lunchOnlyOut, bound(lunchOnlyOut)).workday.lunch).toEqual({});
+    const days = decideDays(lunchOnlyOut, catalog(), { boundNodes: bound(lunchOnlyOut) });
+    for (const d of days.filter((x) => x.template === "workday")) expect(d.meal_place.lunch).toBe("skip");
   });
 
   it("workdays decide lunch and dinner; weekend templates also decide breakfast", () => {
@@ -315,16 +321,10 @@ describe("meal places", () => {
     }
   });
 
-  it("non-workday templates never eat at the workplace (R16)", () => {
+  it("non-workday templates never eat at the workplace (validation forbids it on rest days)", () => {
     const w = makeWorld({ routine: 0, day: 0.5, seed: 11 });
-    w.meal_style.weekend.breakfast = { home: 0.5, workplace: 0.5 };
-    w.meal_style.weekend.lunch = { home: 0.4, workplace: 0.6 };
-    w.meal_style.weekend.dinner = { workplace: 1 };
     const eff = effectiveMealStyle(w, bound(w));
-    for (const dist of Object.values(eff.weekend)) expect(dist).not.toHaveProperty("workplace");
-    expect(eff.weekend.breakfast).toEqual({ home: 1 });
-    expect(eff.weekend.lunch).toEqual({ home: 1 });
-    expect(eff.weekend.dinner).toEqual({});
+    for (const dist of Object.values(eff.rest_day)) expect(dist).not.toHaveProperty("workplace");
     expect(eff.workday.lunch).toHaveProperty("workplace");
 
     const days = decideDays(w, catalog(), { boundNodes: bound(w) });
@@ -334,6 +334,7 @@ describe("meal places", () => {
     }
     expect(days.some((d) => d.template === "workday" && d.meal_place.lunch === "workplace")).toBe(true);
   });
+
 });
 
 describe("determinism", () => {

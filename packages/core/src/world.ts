@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TimelineError } from "./errors.js";
 import { SettingSchema } from "./clip.js";
 import { DatasetSchema } from "./schema.js";
 
@@ -36,6 +37,8 @@ const MealWeightsSchema = z.record(MealPlaceSchema, z.number().min(0));
 export type MealWeights = z.infer<typeof MealWeightsSchema>;
 
 const Prob = z.number().min(0).max(1);
+/** E8: every meal distribution must sum to 1 within this tolerance. */
+const MEAL_SUM_TOLERANCE = 0.01;
 
 export const WorldSchema = z
   .object({
@@ -53,7 +56,7 @@ export const WorldSchema = z
     node_binding: z.record(z.string(), NodeBindingSchema),
     meal_style: z.object({
       workday: z.object({ lunch: MealWeightsSchema, dinner: MealWeightsSchema }),
-      weekend: z.object({
+      rest_day: z.object({
         breakfast: MealWeightsSchema,
         lunch: MealWeightsSchema,
         dinner: MealWeightsSchema,
@@ -84,6 +87,31 @@ export const WorldSchema = z
         });
       }
     }
+    const { workday, rest_day } = w.meal_style;
+    const meals: [string, MealWeights][] = [
+      ["workday.lunch", workday.lunch],
+      ["workday.dinner", workday.dinner],
+      ["rest_day.breakfast", rest_day.breakfast],
+      ["rest_day.lunch", rest_day.lunch],
+      ["rest_day.dinner", rest_day.dinner],
+    ];
+    for (const [key, weights] of meals) {
+      const sum = Object.values(weights).reduce((s, v) => s + v, 0);
+      if (Math.abs(sum - 1) > MEAL_SUM_TOLERANCE + 1e-9) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["meal_style", ...key.split(".")],
+          message: `meal weights must sum to 1 +/- ${MEAL_SUM_TOLERANCE}, got ${Number(sum.toFixed(6))}`,
+        });
+      }
+      if (key.startsWith("rest_day.") && (weights.workplace ?? 0) > 0) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["meal_style", ...key.split("."), "workplace"],
+          message: "rest_day meals cannot take place at the workplace",
+        });
+      }
+    }
     for (const [name, def] of Object.entries(w.nodes)) {
       if (def.kind === "kitchen" || (def.kind === "frequent_place" && def.optional)) continue;
       if (!(name in w.node_binding)) {
@@ -92,3 +120,11 @@ export const WorldSchema = z
     }
   });
 export type World = z.infer<typeof WorldSchema>;
+
+/** Parses a world file; schema problems become WORLD_INVALID listing each `path: message`. */
+export function parseWorld(json: unknown): World {
+  const r = WorldSchema.safeParse(json);
+  if (r.success) return r.data;
+  const issues = r.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
+  throw new TimelineError("WORLD_INVALID", issues.map((i) => `${i.path}: ${i.message}`).join("; "), { issues });
+}

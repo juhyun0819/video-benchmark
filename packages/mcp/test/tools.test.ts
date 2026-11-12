@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TimelineManifestSchema, TimelineSchema, WorldSchema } from "@vb/core";
@@ -212,6 +212,18 @@ describe("timeline tools", () => {
     expect(r.isError).toBe(true);
     expect(textOf(r)).toContain(join(dataDir, POOL_REL));
     expect(filesIn(dataDir, "timelines")).toEqual([]);
+  });
+
+  it("an invalid world returns WORLD_INVALID with the offending path", async () => {
+    const dataDir = setupDataDir({ world: false });
+    const world = JSON.parse(readFileSync(EXAMPLE_WORLD, "utf8"));
+    world.meal_style.rest_day.lunch = { home: 0.9 };
+    mkdirSync(join(dataDir, "worlds"), { recursive: true });
+    writeFileSync(join(dataDir, "worlds", `${PERSON_ID}.json`), JSON.stringify(world));
+    const s = await open(dataDir);
+    const r = await s.call("create_timeline", { person_id: PERSON_ID });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toMatch(/^WORLD_INVALID: meal_style\.rest_day\.lunch: /);
   });
 
   it("unknown world returns WORLD_NOT_FOUND", async () => {

@@ -22,10 +22,10 @@
       "lunch": { "workplace": 0.84, "home": 0.1, "eat_out": 0.06 },
       "dinner": { "home": 0.83, "eat_out": 0.09, "workplace": 0.07, "others_home": 0.01 }
     },
-    "weekend": {
-      "breakfast": { "home": 1 },
-      "lunch": { "home": 0.62, "eat_out": 0.23, "workplace": 0.1, "others_home": 0.05 },
-      "dinner": { "home": 0.77, "eat_out": 0.13, "others_home": 0.08, "workplace": 0.02 }
+    "rest_day": {
+      "breakfast": { "home": 0.91, "others_home": 0.04, "eat_out": 0.05 },
+      "lunch": { "home": 0.67, "eat_out": 0.27, "others_home": 0.06 },
+      "dinner": { "home": 0.79, "eat_out": 0.14, "others_home": 0.07 }
     },
     "breakfast_skip_prob": 0.3,
     "place_nodes": {}
