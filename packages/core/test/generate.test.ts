@@ -405,6 +405,26 @@ describe("generateSchedule", () => {
     expect(schedule.donors.weekday.adjustments).toEqual([]);
   });
 
+  it("a weekday donor working past bedtime on every draw gets an earlier work_end, recorded (G9)", () => {
+    // Every weekday row works until 23:00 and goes to bed at 23:18: the bounds hold, but the
+    // required dinner (after work_end + 20 min, 60 min long) never fits. 23:18 - 80 min = 21:58.
+    const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { work_end: 1380, dinner_time: 1140, bed: 1398 });
+    const schedule = generateSchedule(inp);
+    const { weekday } = schedule.donors;
+    expect(weekday.redraws).toBe(5);
+    expect(weekday.profile.work_end).toBe(1318);
+    expect(weekday.adjustments).toEqual([{ item: "work_end", from: 1380, to: 1318 }]);
+    for (const day of schedule.days.filter((d) => d.day_type === "workday")) {
+      expect(day.slots.map((s) => s.role)).toContain("dinner");
+    }
+  });
+
+  it("a weekday donor whose required slots fit keeps adjustments [] (G9)", () => {
+    const { weekday } = generateSchedule(input({ day: 0, slot: 0, routine: 1 })).donors;
+    expect(weekday.redraws).toBe(0);
+    expect(weekday.adjustments).toEqual([]);
+  });
+
   it("schedule clocks accept 00:00–27:59 and reject 28:00 and minute 60 (R44)", () => {
     const day = generateSchedule(input()).days[0]!;
     expect(ScheduleDaySchema.safeParse({ ...day, sleep: "27:59" }).success).toBe(true);

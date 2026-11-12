@@ -6,6 +6,7 @@ import {
   type DayKind,
   type DayProfile,
   type DistributionSource,
+  type DonorPick,
   type DonorAdjustment,
   type DonorViolation,
 } from "../donor.js";
@@ -140,6 +141,26 @@ function requiredWorkdaySlotsFit(input: ScheduleInput, profile: DayProfile): boo
   }
 }
 
+/**
+ * G9: a final weekday pick that still fails the required-slots check gets the
+ * latest integer work_end (searched down to work_start + 240) at which the
+ * required slots fit, recorded in its adjustments. Unchanged when none fits.
+ */
+function repairWorkEnd(input: ScheduleInput, pick: DonorPick): DonorPick {
+  const { profile } = pick;
+  if (profile.work_start === undefined || profile.work_end === undefined) return pick;
+  if (requiredWorkdaySlotsFit(input, profile)) return pick;
+  const from = profile.work_end;
+  const floor = Math.ceil(profile.work_start + 240);
+  for (let to = Math.ceil(from) - 1; to >= floor; to--) {
+    const candidate = { ...profile, work_end: to };
+    if (requiredWorkdaySlotsFit(input, candidate)) {
+      return { ...pick, profile: candidate, adjustments: [...pick.adjustments, { item: "work_end", from, to }] };
+    }
+  }
+  return pick;
+}
+
 function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
   const { world, gaps, templates } = input;
   const d = decisions.day_index;
@@ -185,8 +206,9 @@ export function generateDay(input: ScheduleInput, donors: Donors, dayIndex: numb
 export function generateSchedule(input: ScheduleInput): Schedule {
   const { world, templates, gaps, exceptions, source, boundNodes, defaults } = input;
   const requiredSlots: DonorViolation[] = [{ item: "required_slots", bound: 0, value: 1 }];
-  // G7: a weekday pick that still fails this check after its clamps is kept;
-  // its days rely on attempt retries and finally SCHEDULE_INFEASIBLE.
+  // G7/G9: a weekday pick that still fails this check after its clamps has
+  // work_end pulled earlier (repairWorkEnd); if nothing fits, its days rely on
+  // attempt retries and finally SCHEDULE_INFEASIBLE.
   const picked = selectDonors(world.attributes, source, {
     seed: world.seed,
     allowCountryFallback: world.allow_country_fallback,
@@ -194,7 +216,7 @@ export function generateSchedule(input: ScheduleInput): Schedule {
     accept: (kind, profile) => (kind === "weekday" && !requiredWorkdaySlotsFit(input, profile) ? requiredSlots : []),
   });
   const donors: Donors = {
-    weekday: picked.weekday,
+    weekday: repairWorkEnd(input, picked.weekday),
     weekend: picked.weekend,
     country_fallback: picked.country_fallback,
     weekend_redraws: picked.weekend_redraws,
