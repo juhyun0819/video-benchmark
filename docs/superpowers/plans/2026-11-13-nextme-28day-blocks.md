@@ -164,7 +164,7 @@ Steps (TDD):
   - the summary lists home_fills.
 - [ ] Implement. Run `npm test && npm run typecheck`. Commit.
 
-- **B6b. Home-morning last resort.** This applies after B6 to every home_morning that is still empty. Use a spare date not yet taken, under the same one-day-per-date rule. Its candidates are home clips that start before that date's first non-home labeled clip and before 13:00, with no time window. Pick the date whose run is longest, breaking ties by earlier date. Record it in `home_fills` with `fallback: true`.
+- **B6b. Home-morning last resort.** This applies after B6 to every home_morning that is still empty. Use a spare date not yet taken, under the same one-day-per-date rule. Its candidates are home clips that start before that date's first non-home labeled clip (any clock time; the 13:00 cap was dropped by the user, 2026-11-13), with no time window. Pick the date whose run is longest, breaking ties by earlier date. Record it in `home_fills` with `fallback: true`.
 
 ## Addendum 2 (2026-11-13): weekday dates, gym, hobby 2
 

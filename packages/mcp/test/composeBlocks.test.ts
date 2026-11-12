@@ -769,13 +769,14 @@ describe("home fill from spare dates", () => {
       expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["11:40"]);
     });
 
-    it("does not use home clips after the date's first away clip, or at/after 13:00", () => {
+    it("does not use home clips after the date's first away clip, but uses ones before it at any clock time", () => {
       const afterAway = [...bare("2026-05-01"), ...rec("2026-05-02", [away("11:00"), home("11:40", 30)])];
       expect(fill([dayN(1, [MORNING])], A1, afterAway).fills).toEqual([]);
-      const late = [...bare("2026-05-01"), ...rec("2026-05-02", [home("13:00", 30)])];
-      expect(fill([dayN(1, [MORNING])], A1, late).fills).toEqual([]);
-      const justBefore = fill([dayN(1, [MORNING])], A1, [...bare("2026-05-01"), ...rec("2026-05-02", [home("12:59", 30)])]);
-      expect(justBefore.fills.map((f) => f.fallback)).toEqual([true]);
+      const afternoon = fill([dayN(1, [MORNING])], A1, [...bare("2026-05-01"), ...rec("2026-05-02", [home("13:00", 30), home("13:40", 20), away("15:00")])]);
+      expect(afternoon.fills).toEqual([{ kind: "home_fallback", day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 360, seconds: 3000, fallback: true }]);
+      expect(afternoon.entries.map((e) => e.clip_id.slice(-5))).toEqual(["13:00", "13:40"]);
+      const evening = fill([dayN(1, [MORNING])], A1, [...bare("2026-05-01"), ...rec("2026-05-02", [home("19:00", 30)])]);
+      expect(evening.fills.map((f) => f.fallback)).toEqual([true]);
     });
 
     it("never uses a date already taken by another day, nor fills non-morning slots", () => {

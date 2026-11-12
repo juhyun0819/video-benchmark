@@ -29,8 +29,6 @@ const LATE_FIRST_WORK_S = H(11);
 const RUN_GAP_S = 15 * 60;
 /** B6: a home block takes spare-date footage whose real start is at most this far from the block start. */
 const FILL_WINDOW_S = 180 * 60;
-/** B6b: the last-resort home_morning fill only takes home clips that start before this time of day. */
-const FALLBACK_BEFORE_S = H(13);
 const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
 /** A catalog clip with its real start and end, in seconds since its date's 00:00. */
@@ -550,8 +548,8 @@ export type HomeFill = Fill;
  * start; the smallest |Δt| wins, then the longer run, then the earlier date. The block takes that clip
  * and the following run of candidates (gap ≤ 15 min) until it is full.
  * B6b: every home_morning B6 left empty gets a last-resort fill (`kind: "home_fallback"`, `fallback: true`)
- * from a spare date not yet taken: its home clips that start before its first non-home clip and before
- * 13:00, no time window; the date whose home run from the first such clip is longest wins (ties: earlier
+ * from a spare date not yet taken: its home clips that start before its first non-home clip, at any
+ * clock time (the start of that date's footage; user decision 2026-11-13), no time window; the date whose home run from the first such clip is longest wins (ties: earlier
  * date); the block takes that run until it is full.
  * Order (the scarce pre-departure morning footage goes to home_morning first): B6 for the home_morning
  * slots of all days, then B6b for all of them, then B6 for the other home slots. Within each phase days
@@ -633,7 +631,7 @@ export function homeFill(
     for (const d of spares) {
       if (taken.has(d.date)) continue;
       const firstAway = d.clips.find((c) => !isHome(world, c.clip));
-      const pool = d.clips.filter((c) => isHome(world, c.clip) && c.start < FALLBACK_BEFORE_S && (firstAway === undefined || c.start < firstAway.start));
+      const pool = d.clips.filter((c) => isHome(world, c.clip) && (firstAway === undefined || c.start < firstAway.start));
       if (pool.length === 0) continue;
       const run = [pool[0]!];
       for (const n of pool.slice(1)) {
