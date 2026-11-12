@@ -271,3 +271,43 @@ Tests:
 - a clip is never reused;
 - hobby slots with no bound clips stay empty;
 - block verify passes.
+
+## Addendum 5 (2026-11-13): whole LEGO parts
+
+- **B16. Per-day slot duration override (core).** A new optional dial is `dials.slot_overrides: [{ day_index, role, duration_min }]`. Use zod `.optional()` and no default, so existing worlds stay byte-identical.
+  - On that day, the slot with that role gets exactly `duration_min`. Its start stays where the layout puts it.
+  - The following slots shift later.
+  - **Sleep limit:** nothing may pass sleep. If it would, shrink the home-place slots after it (home_afternoon, chores, home_evening) first, down to 20 min, and then drop them as `no_time`. Meals keep their minimum. The overridden slot is never shrunk or dropped.
+  - **Errors:** if the day still cannot fit, generation fails with a clear INFEASIBLE error that names the day and role.
+  - **Validation:** world validation rejects unknown roles and day indexes out of range. Other days are unchanged.
+  - The verifier accepts the overridden duration.
+- **B17. Fit hobby slots (mcp).**
+  - **Setting:** a world dial or CLI flag `--fit-roles hobby`. A world dial `dials.fit_roles: ["hobby"]` is preferred, also `.optional()`.
+  - **Process:**
+    1. compose-blocks first assigns bound clips to the slots of those roles (B15 order).
+    2. It sets `slot_overrides` so each slot's duration equals the total length of its assigned clips, rounded up to whole minutes.
+    3. It regenerates the schedule with those overrides and composes again.
+  - **Outputs:** the saved world in the outputs includes the computed overrides, so the manifest can be reproduced. The summary reports the overrides.
+  - **Result:** fitted hobby clips are never trimmed.
+
+### Task 10: slot_overrides (B16)
+Files:
+- `packages/core/src/world.ts`
+- `packages/core/src/schedule/{generate,windows}.ts`
+- `packages/core/src/verify.ts`
+- tests
+
+Tests:
+- an override lengthens a rest-day hobby to 171 min and shifts later slots;
+- home slots shrink before anything else;
+- the overridden slot never shrinks;
+- an infeasible override errors;
+- worlds without the dial are byte-identical.
+
+### Task 11: fit_roles in compose-blocks (B17)
+Files: `packages/mcp/src/composeBlocks.ts`, `composeBlocksCli.ts`, tests.
+
+Tests:
+- with fit_roles hobby, 3 parts (133/106/171 min) give hobby slots of exactly those lengths with untrimmed placements;
+- the written world carries the overrides;
+- block verify passes.
