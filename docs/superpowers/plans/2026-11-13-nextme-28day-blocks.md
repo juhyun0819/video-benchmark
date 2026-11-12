@@ -427,6 +427,7 @@ Tests:
   - **Eating test:** an EAT_ACT word, or the phrases "share a meal", "shared a meal", "over my/our/a … meal", "during a meal", "meal of".
   - **Time windows:** lunch takes the first such run starting 11:00–16:00, and dinner the first starting at or after 16:00 that lunch has not used.
   - **Unchanged:** the B19 trimming still applies. Non-trip days are unchanged.
+  - **Verify:** in block mode only, the core `trip` rule accepts for a trip-day meal slot a clip from any of the trip's places (lodging, outing, meal), still from the right sequence date and never home or workplace; non-block verify is unchanged.
 - **World (nextme-p00):**
   - node `eat_out_ext: { kind: "frequent_place", setting: "venue_indoor", optional: true }`
   - binding `{ dataset: ["ego4d"], tags_any: ["eat_out"] }`

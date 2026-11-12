@@ -360,6 +360,26 @@ describe("verifyTimeline block mode (B4)", () => {
     expect(run("home-l").rules.trip.violations.map((v) => v.detail)).toEqual(["clip home-l is a home clip on a trip day"]);
   });
 
+  it("trip rule, block mode: a meal slot takes a clip of any place of the trip; a non-meal slot still needs its place", () => {
+    const world = WorldSchema.parse({
+      ...makeWorld(),
+      nodes: { ...makeWorld().nodes, trip_1: { kind: "trip", lodging_setting: "venue_indoor", outing_setting: "outdoor", meal_setting: "venue_indoor" } },
+      node_binding: { ...makeWorld().node_binding, trip_1: { dataset: ["nextme800"], person_source: "p1", day_group_sequence: ["2026-06-29"] } },
+    });
+    const defs: SlotDef[] = [
+      { role: "lodging_morning", category: "home", setting: "venue_indoor", node: "trip_1:lodging", activity: "getting ready", required: true, window: ["08:00", "09:00"] },
+      { role: "dinner", category: "meal", setting: "venue_indoor", node: "trip_1:meal", activity: "dinner", required: true, window: ["18:00", "19:00"] },
+    ];
+    const tt = createTimeline(world, makeSchedule(1, () => defs), genId);
+    tt.schedule.days[0] = { ...tt.schedule.days[0]!, day_type: "trip_day", trip: { node: "trip_1", index: 0 } };
+    const lodging = (id: string) => at(id, "2026-06-29", 0, 600, { setting: "venue_indoor", node: "trip:lodging" });
+    const tc = memoryCatalog([lodging("l1"), lodging("l2"), at("home-l", "2026-06-29", 700, 900)]);
+    const run = (slotId: string, id: string) =>
+      verifyTimeline(tt, tc, { mode: "block", placements: layoutBlocks(tt, tc, [{ slot_id: slotId, clip_id: id, source_start_s: tc.getClip(id)!.source_start_s, source_end_s: tc.getClip(id)!.source_end_s }]) });
+    expect(run("d1-s2", "l1").rules.trip.pass).toBe(true);
+    expect(run("d1-s2", "home-l").rules.trip.violations.map((v) => v.detail)).toEqual(["clip home-l is a home clip on a trip day"]);
+  });
+
   it("without the option, the verifier ignores placements and checks t.slots", () => {
     const r = verifyTimeline(t, cat);
     expect(r.rules.slot_window.pass).toBe(false); // required slots are empty in t.slots

@@ -320,7 +320,9 @@ function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add
     const clips = placements !== undefined
       ? placements.filter((p) => p.slot_id === slot.slot_id).map((p) => p.clip)
       : (t.slots[slot.slot_id]?.clip_ids ?? []).map((id) => catalog.getClip(id) as Clip);
-    for (const clip of clips) checkClip(clip, place, v);
+    // Block mode: a meal slot takes a clip of any of the trip's places (meals are picked by L3 text, B25).
+    const anyPlace = placements !== undefined && ["breakfast", "lunch", "dinner"].includes(slot.role);
+    for (const clip of clips) checkClip(clip, place, v, anyPlace);
   }
   if (placements === undefined) return;
   const slotIds = new Set(day.slots.map((s) => s.slot_id));
@@ -329,11 +331,13 @@ function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add
     checkClip(p.clip, undefined, (detail) => add("trip", { day_index: d, slot_id: p.slot_id, detail }));
   }
 
-  function checkClip(clip: Clip, place: ReturnType<typeof tripPlaceOf>, v: (detail: string) => void): void {
+  function checkClip(clip: Clip, place: ReturnType<typeof tripPlaceOf>, v: (detail: string) => void, anyPlace = false): void {
     const id = clip.clip_id;
     const kinds = [...new Set(fixed.filter(([name]) => bindingAccepts(t.world, name, clip)).map(([, kind]) => kind))];
     if (kinds.length > 0) v(`clip ${id} is a ${kinds.join(" and ")} clip on a trip day`);
-    else if (place !== undefined && clip.node !== tripClipNode(place.place)) {
+    else if (anyPlace) {
+      if (!TRIP_PLACES.some((p) => clip.node === tripClipNode(p))) v(`clip ${id} has node ${clip.node}, expected a place of trip ${trip}`);
+    } else if (place !== undefined && clip.node !== tripClipNode(place.place)) {
       v(`clip ${id} has node ${clip.node}, expected ${tripClipNode(place.place)}`);
     }
     if (clip.day_group !== want) {
