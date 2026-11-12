@@ -406,3 +406,40 @@ Tests:
 - an assigned-date conflict errors;
 - an empty span errors;
 - block verify passes.
+
+## Addendum 9 (2026-11-13): empty meals — Ego4D eat-out, trip meals by text
+
+- **B23. Ego4D eat-out category.** `config/categories.json` gains `meal_out`, placed first among the ego4d categories.
+  - **Match:** dataset ego4d; scenarios are the Ego4D eating scenarios, confirmed from `--list-scenarios` after download. Keywords: restaurant, restaurants, cafe, café, cafeteria, canteen, diner, eatery, bistro, bar, pub, food court, buffet, terrace, patio, picnic, park, outdoor, outdoors, outside, street, market, stall, stalls, takeaway.
+  - **Clip fields:** category meal, setting venue_indoor, node "eat_out", tags ["eat_out"].
+  - **Exclusions:** summaries mentioning home, kitchen, dining room or living room are excluded.
+- **B24. External meal fill (mcp).**
+  - **When:** after every other fill (primary, B6/B6b, B13, activities, pins), every still-empty lunch or dinner slot on a non-trip day is filled from catalog clips accepted by the binding of the world node named by `--meal-fill-node <node>`. CLI flag; the world schema strips unknown dials.
+  - **Selection:**
+    - Each clip is used once, and each source day_group on at most one synthetic day.
+    - Prefer the clip whose length is closest to the window, with at least min(20 min, window).
+    - Ties are broken by `rngFor(seed, "meal_external")`.
+    - The clip is placed from the block start and trimmed at the block end.
+  - **Summary:** `fills` gets kind "meal_external".
+  - **Trip days:** excluded.
+- **B25. Trip meals by text.**
+  - **Scope:** only on trip days. The meal phase picks the assigned trip date's clips by the L3 text, ignoring category.
+  - **Eating test:** an EAT_ACT word, or the phrases "share a meal", "shared a meal", "over my/our/a … meal", "during a meal", "meal of".
+  - **Time windows:** lunch takes the first such run starting 11:00–16:00, and dinner the first starting at or after 16:00 that lunch has not used.
+  - **Unchanged:** the B19 trimming still applies. Non-trip days are unchanged.
+- **World (nextme-p00):**
+  - node `eat_out_ext: { kind: "frequent_place", setting: "venue_indoor", optional: true }`
+  - binding `{ dataset: ["ego4d"], tags_any: ["eat_out"] }`
+  - run with `--meal-fill-node eat_out_ext`
+
+### Task 16: B24 + B25
+Files: `packages/mcp/src/composeBlocks.ts`, `composeBlocksCli.ts`, tests.
+
+Tests:
+- an empty dinner on a workday gets one external eat_out clip trimmed to its window;
+- clips and day_groups are never reused;
+- trip days get no external clip;
+- a trip dinner picks "I dine at the X restaurant" labeled trip:lodging;
+- a trip lunch at 15:30 is found;
+- non-trip days are unchanged without the flag;
+- block verify passes.
