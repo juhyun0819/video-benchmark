@@ -83,6 +83,24 @@ const MealWeightsSchema = z.record(MealPlaceSchema, z.number().min(0));
 export type MealWeights = z.infer<typeof MealWeightsSchema>;
 
 const Prob = z.number().min(0).max(1);
+
+/**
+ * B8: an activity inserted on routine workdays (template workday, no exception) after work_pm
+ * (before_dinner) or right after dinner (after_dinner). Days come from exactly one of `weekdays`
+ * (every such day) or `count` (the days whose work_pm ends earliest, at most `max_per_week` per ISO week).
+ */
+export const EveningActivitySchema = z.object({
+  /** A hobby node; its place, setting, activity and tags make the slot spec. */
+  node: z.string(),
+  /** Slot role, unique among the activities and not a template role. */
+  role: z.string(),
+  position: z.enum(["before_dinner", "after_dinner"]),
+  duration_min: z.number().int().positive(),
+  weekdays: z.array(WeekdaySchema).min(1).optional(),
+  count: z.number().int().min(1).optional(),
+  max_per_week: z.number().int().min(1).optional(),
+});
+export type EveningActivity = z.infer<typeof EveningActivitySchema>;
 /** E8: every meal distribution must sum to 1 within this tolerance. */
 const MEAL_SUM_TOLERANCE = 0.01;
 
@@ -131,6 +149,8 @@ export const WorldSchema = z
         .default([]),
       /** N6: a required slot of `role` may be left empty on up to `max_days` distinct days when no clip fits. */
       missing_required_allowance: z.array(z.object({ role: z.string(), max_days: z.number().int().min(1) })).default([]),
+      /** B8: evening activities on routine workdays. Optional with no default, so worlds without it keep their bytes. */
+      evening_activities: z.array(EveningActivitySchema).optional(),
     }),
     seed: z.number().int().min(0),
   })
@@ -196,6 +216,23 @@ export const WorldSchema = z
         });
       }
     }
+    const roles = new Set<string>();
+    (w.dials.evening_activities ?? []).forEach((a, i) => {
+      const path = ["dials", "evening_activities", i];
+      if (w.nodes[a.node]?.kind !== "hobby") {
+        ctx.addIssue({ code: "custom", path: [...path, "node"], message: `"${a.node}" is not a hobby node` });
+      }
+      if ((a.weekdays === undefined) === (a.count === undefined)) {
+        ctx.addIssue({ code: "custom", path, message: "give exactly one of weekdays and count" });
+      }
+      if (a.max_per_week !== undefined && a.count === undefined) {
+        ctx.addIssue({ code: "custom", path: [...path, "max_per_week"], message: "max_per_week needs count" });
+      }
+      if (roles.has(a.role)) {
+        ctx.addIssue({ code: "custom", path: [...path, "role"], message: `role "${a.role}" is listed twice` });
+      }
+      roles.add(a.role);
+    });
     const seen = new Set<string>();
     w.dials.trips.forEach((t, i) => {
       const path = ["dials", "trips", i];

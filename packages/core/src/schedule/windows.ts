@@ -2,7 +2,7 @@ import type { ClipSpec, Setting } from "../clip.js";
 import { formatClock, timeOfDayAt } from "../clock.js";
 import { TimelineError } from "../errors.js";
 import { TRIP_PLACE_KIND, placeKindOf, type PlaceKind } from "../gaps.js";
-import { tripPlaceOf, type NodeDef, type World } from "../world.js";
+import { tripPlaceOf, type EveningActivity, type NodeDef, type World } from "../world.js";
 import type {
   AnchorName,
   DayAnchors,
@@ -189,6 +189,89 @@ export function orderBySportAnchor(template: readonly TemplateSlot[], anchors: D
   return [...rest.slice(0, insert), hobby, ...rest.slice(insert)];
 }
 
+/** B8: the shortest an evening activity, and home_evening on its day, may be shrunk to. */
+export const EVENING_MIN_MINUTES = 20;
+/** B8: the template slot each position is inserted after. */
+const EVENING_AFTER: Record<EveningActivity["position"], string> = { before_dinner: "work_pm", after_dinner: "dinner" };
+/** B8: the slot that absorbs a push before the activity shrinks. */
+const EVENING_FOLLOWER = "home_evening";
+
+/**
+ * B8: the template with each evening activity inserted right after work_pm
+ * (before_dinner) or right after dinner (after_dinner), in dial order. The
+ * slot is optional, lasts duration_min, may shrink to 20 min and takes its
+ * place, setting, activity and tags from its hobby node (category hobby).
+ * With any activity, home_evening may also shrink to 20 min. An empty list
+ * returns the template unchanged.
+ */
+export function withEveningSlots(template: readonly TemplateSlot[], evening: readonly EveningActivity[]): TemplateSlot[] {
+  if (evening.length === 0) return [...template];
+  const roles = new Set(template.map((s) => s.role));
+  for (const a of evening) {
+    if (roles.has(a.role) || !roles.has(EVENING_AFTER[a.position])) {
+      const why = roles.has(a.role) ? `role ${a.role} is already a template role` : `the template has no ${EVENING_AFTER[a.position]} slot`;
+      throw new TimelineError("WORLD_INVALID", `dials.evening_activities: ${why}`, {
+        issues: [{ path: "dials.evening_activities", message: why }],
+      });
+    }
+  }
+  const slotOf = (a: EveningActivity): TemplateSlot => ({
+    role: a.role,
+    category: "hobby",
+    node: a.node,
+    activity: "hobby",
+    tags: [],
+    required: false,
+    duration_minutes: a.duration_min,
+    min_minutes: Math.min(EVENING_MIN_MINUTES, a.duration_min),
+  });
+  const out: TemplateSlot[] = [];
+  for (const slot of template) {
+    out.push(slot.role === EVENING_FOLLOWER ? { ...slot, min_minutes: Math.min(slot.min_minutes, EVENING_MIN_MINUTES) } : slot);
+    for (const a of evening) if (EVENING_AFTER[a.position] === slot.role) out.push(slotOf(a));
+  }
+  return out;
+}
+
+/**
+ * B8: shrinks evening activities (roles in `elastic`) at or before the failing
+ * slot, nearest first, minute by minute, until the failure is gone or moves to
+ * a later slot. Nothing shrinks when even all of them at min_minutes would not
+ * get past the failure. The first shrink of a role is recorded.
+ */
+function shrinkEvening(
+  kept: Kept[],
+  elastic: ReadonlySet<string>,
+  failing: number,
+  anchors: DayAnchors,
+  gap: GapFn,
+  dropped: DroppedSlot[],
+): boolean {
+  const candidates: number[] = [];
+  for (let i = Math.min(failing, kept.length - 1); i >= 0; i--) {
+    const { role, duration_minutes: d, min_minutes: min } = kept[i]!.slot;
+    if (elastic.has(role) && d !== undefined && d > min) candidates.push(i);
+  }
+  if (candidates.length === 0) return false;
+  const passes = (trial: Kept[]): boolean => {
+    const r = layout(trial, anchors, gap);
+    return !("role" in r) || r.index > failing;
+  };
+  const withDuration = (k: Kept, minutes: number): Kept => ({ ...k, slot: { ...k.slot, duration_minutes: minutes } });
+  const allMin = kept.map((k, i) => (candidates.includes(i) ? withDuration(k, k.slot.min_minutes) : k));
+  if (!passes(allMin)) return false;
+  for (const i of candidates) {
+    const k = kept[i]!;
+    const role = k.slot.role;
+    if (!dropped.some((x) => x.role === role && x.reason === "shrunk")) dropped.push({ role, reason: "shrunk" });
+    for (let m = k.slot.duration_minutes! - 1; m >= k.slot.min_minutes; m--) {
+      kept[i] = withDuration(k, m);
+      if (passes(kept)) return true;
+    }
+  }
+  return true;
+}
+
 /**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
  * "skip" meals, absent optional keys and unresolved optional nodes. While the
@@ -197,6 +280,8 @@ export function orderBySportAnchor(template: readonly TemplateSlot[], anchors: D
  * Every change is recorded. A sport-anchored slot is first put in anchor
  * order among the meals (G20).
  * Required slots are never shrunk or dropped; when no optional slot is left it throws.
+ * B8: `evening` activities are inserted (withEveningSlots); while the day does
+ * not fit they shrink first (shrinkEvening), before the reduce order.
  */
 export function resolveDayWindows(
   template: TemplateSlot[],
@@ -205,13 +290,14 @@ export function resolveDayWindows(
   world: World,
   gap: GapFn,
   reduceOrder: readonly ReduceStep[] = [],
+  evening: readonly EveningActivity[] = [],
 ): { slots: Slot[]; transitions: SlotTransition[]; dropped: DroppedSlot[] } {
   const day = decisions.day_index;
   const infeasible = (role: string, reason: string): TimelineError =>
     new TimelineError("SCHEDULE_INFEASIBLE", `day ${day}: slot ${role} is infeasible (${reason})`, { day, role, reason });
 
   const kept: Kept[] = [];
-  for (const slot of orderBySportAnchor(template, anchors)) {
+  for (const slot of withEveningSlots(orderBySportAnchor(template, anchors), evening)) {
     if (slot.optional_key !== undefined && decisions.optional[slot.optional_key] === false) continue;
     const node = resolveNode(slot, decisions, world);
     if (node === null) continue;
@@ -229,9 +315,12 @@ export function resolveDayWindows(
 
   const dropped: DroppedSlot[] = [];
   const used = reduceOrder.map(() => false);
+  const elastic = new Set(evening.map((a) => a.role));
   let result = layout(kept, anchors, gap);
   while ("role" in result) {
-    if (!applyReduceStep(kept, reduceOrder, used, result.index, dropped)) {
+    if (shrinkEvening(kept, elastic, result.index, anchors, gap, dropped)) {
+      // shrunk an evening activity
+    } else if (!applyReduceStep(kept, reduceOrder, used, result.index, dropped)) {
       const victim = slotToDrop(kept, result.index);
       if (victim < 0) throw infeasible(result.role, result.reason);
       dropped.push({ role: kept[victim]!.slot.role, reason: "no_time" });

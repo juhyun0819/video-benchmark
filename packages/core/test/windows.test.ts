@@ -8,6 +8,7 @@ import {
   resolveDayWindows,
   type DayAnchors,
   type DayDecisions,
+  type EveningActivity,
   type PlaceKind,
   type Templates,
   type World,
@@ -62,6 +63,7 @@ function workday(over: Partial<DayDecisions> = {}): DayDecisions {
 }
 
 const gap20 = () => 20;
+const json = (x: unknown) => JSON.stringify(x);
 
 function resolveWorkday(decisions: DayDecisions = workday(), anchors: DayAnchors = ANCHORS) {
   const t = templates();
@@ -329,5 +331,90 @@ describe("hobby_day slot order follows the sport anchor (G20)", () => {
   it("a sport before breakfast puts the hobby before breakfast", () => {
     const { slots } = resolveHobbyDay({ wake: 420, breakfast: 600, sport: 450, lunch: 780, dinner: 1100, sleep: 1380 });
     expect(slots.map((s) => s.role).slice(0, 3)).toEqual(["home_morning", "hobby", "breakfast"]);
+  });
+});
+
+describe("resolveDayWindows with evening activities (B8, hand-computed)", () => {
+  const eveningWorld = (): World => {
+    const w = world();
+    return WorldSchema.parse({
+      ...w,
+      nodes: {
+        ...w.nodes,
+        gym_1: { kind: "hobby", activity: "gym workout", setting: "venue_indoor", weekly_freq: 0, tags: ["gym"] },
+        hobby_2: { kind: "hobby", activity: "guitar", setting: "venue_indoor", weekly_freq: 0, tags: ["music_guitar"] },
+      },
+      node_binding: { ...w.node_binding, gym_1: { node: "g" }, hobby_2: { node: "m" } },
+    });
+  };
+  const gym: EveningActivity = { node: "gym_1", role: "exercise", position: "before_dinner", duration_min: 75, weekdays: ["Tue"] };
+  const guitar = (duration_min: number): EveningActivity => ({ node: "hobby_2", role: "hobby_2", position: "after_dinner", duration_min, count: 6 });
+  const resolve = (evening: EveningActivity[], anchors: DayAnchors = ANCHORS) => {
+    const t = templates();
+    return resolveDayWindows(t.day_types.workday, anchors, workday(), eveningWorld(), gap20, t.reduce_order?.workday, evening);
+  };
+
+  it("an empty list is the plain workday", () => {
+    expect(json(resolve([]))).toBe(json(resolveWorkday()));
+  });
+
+  it("before_dinner: after work_pm plus travel, for duration_min; dinner shifts by the overlap", () => {
+    const { slots, dropped } = resolve([gym]);
+    expect(table(slots).slice(3)).toEqual([
+      "work_pm 12:45-17:00 workplace",
+      "exercise 17:20-18:35 gym_1",
+      "dinner 18:55-19:55 home",
+      "home_evening 19:55-22:18 home",
+    ]);
+    expect(slots[4]).toMatchObject({ role: "exercise", required: false });
+    expect(slots[4]!.spec).toEqual({
+      category: "hobby",
+      setting: "venue_indoor",
+      node: "gym_1",
+      activity: "gym workout",
+      time_of_day: "evening",
+      tags: ["gym"],
+    });
+    expect(dropped).toEqual([]);
+  });
+
+  it("after_dinner: right after dinner; home_evening shifts later", () => {
+    const { slots } = resolve([guitar(45)]);
+    expect(table(slots).slice(4)).toEqual([
+      "dinner 18:30-19:30 home",
+      "hobby_2 19:50-20:35 hobby_2",
+      "home_evening 20:55-22:18 home",
+    ]);
+    expect(slots[5]!.spec.tags).toEqual(["music_guitar"]);
+  });
+
+  it("both: exercise before dinner and hobby_2 after it", () => {
+    const { slots } = resolve([gym, guitar(45)]);
+    expect(table(slots).slice(3)).toEqual([
+      "work_pm 12:45-17:00 workplace",
+      "exercise 17:20-18:35 gym_1",
+      "dinner 18:55-19:55 home",
+      "hobby_2 20:15-21:00 hobby_2",
+      "home_evening 21:20-22:18 home",
+    ]);
+  });
+
+  it("past sleep: home_evening shrinks to 20 min, then the activity by just enough", () => {
+    const { slots, dropped } = resolve([guitar(180)]);
+    expect(table(slots).slice(4)).toEqual([
+      "dinner 18:30-19:30 home",
+      "hobby_2 19:50-21:38 hobby_2",
+      "home_evening 21:58-22:18 home",
+    ]);
+    expect(dropped).toEqual([{ role: "hobby_2", reason: "shrunk" }]);
+  });
+
+  it("drops the activity when even 20 min would pass sleep", () => {
+    const { slots, dropped } = resolve([guitar(45)], { ...ANCHORS, dinner: 1260 });
+    expect(table(slots).slice(-1)).toEqual(["dinner 21:00-22:00 home"]);
+    expect(dropped).toEqual([
+      { role: "home_evening", reason: "no_time" },
+      { role: "hobby_2", reason: "no_time" },
+    ]);
   });
 });

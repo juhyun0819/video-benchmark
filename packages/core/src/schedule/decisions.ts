@@ -4,6 +4,7 @@ import {
   MealPlaceSchema,
   WeekdaySchema,
   weekdayOfDate,
+  type EveningActivity,
   type MealPlace,
   type MealWeights,
   type Weekday,
@@ -142,6 +143,52 @@ function baseDayType(weekday: Weekday, plan: HobbyPlan, late: ReadonlySet<Weekda
 /** Weekday of a 1-based synthetic day. */
 function weekdayAt(world: World, dayIndex: number): Weekday {
   return WEEKDAYS[(WEEKDAYS.indexOf(world.dials.start_weekday) + dayIndex - 1) % 7]!;
+}
+
+/** B8: ISO week (Mon-Sun) of a 1-based synthetic day, counted from the week that holds day 1. */
+export function isoWeekOf(world: World, dayIndex: number): number {
+  return Math.floor((WEEKDAYS.indexOf(world.dials.start_weekday) + dayIndex - 1) / 7);
+}
+
+/** B8: a routine workday (template workday, no exception) at attempt 0 and the end of its work_pm window in minutes. */
+export type EveningCandidate = { day_index: number; work_pm_end: number };
+
+/**
+ * B8: the days each evening activity is planned on, in dial order.
+ * - weekdays: every day on those weekdays; the generator inserts the slot only on routine workdays.
+ * - count: the candidates with the earliest work_pm end, at most max_per_week per ISO week, until
+ *   count are picked (fewer when the candidates run out). Ties keep the order of a shuffle drawn
+ *   with rngFor(seed, "evening", node).
+ * `candidates` is called only when an activity uses count.
+ */
+export function planEveningDays(world: World, candidates: () => readonly EveningCandidate[]): ReadonlySet<number>[] {
+  const activities: readonly EveningActivity[] = world.dials.evening_activities ?? [];
+  let pool: readonly EveningCandidate[] | undefined;
+  return activities.map((a) => {
+    if (a.weekdays !== undefined) {
+      const days = Array.from({ length: world.dials.length_days }, (_, i) => i + 1);
+      return new Set(days.filter((d) => a.weekdays!.includes(weekdayAt(world, d))));
+    }
+    pool ??= [...candidates()].sort((x, y) => x.day_index - y.day_index);
+    const order = [...pool];
+    const rng = rngFor(world.seed, "evening", a.node);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = rng.int(0, i + 1);
+      [order[i], order[j]] = [order[j]!, order[i]!];
+    }
+    order.sort((x, y) => x.work_pm_end - y.work_pm_end);
+    const picked = new Set<number>();
+    const perWeek = new Map<number, number>();
+    for (const c of order) {
+      if (picked.size >= a.count!) break;
+      const week = isoWeekOf(world, c.day_index);
+      const n = perWeek.get(week) ?? 0;
+      if (a.max_per_week !== undefined && n >= a.max_per_week) continue;
+      perWeek.set(week, n + 1);
+      picked.add(c.day_index);
+    }
+    return picked;
+  });
 }
 
 /** One placed trip: 1-based start day, length and the base day type of each covered day. */

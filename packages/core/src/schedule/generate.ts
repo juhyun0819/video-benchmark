@@ -13,8 +13,16 @@ import {
 import { TimelineError } from "../errors.js";
 import { gapQuantile, sampleGap, type GapTable } from "../gaps.js";
 import { rngFor } from "../rng.js";
-import type { World } from "../world.js";
-import { catalogDayType, decideDay, decideDays, effectiveMealStyle, mealPlaceUsable } from "./decisions.js";
+import type { EveningActivity, World } from "../world.js";
+import {
+  catalogDayType,
+  decideDay,
+  decideDays,
+  effectiveMealStyle,
+  mealPlaceUsable,
+  planEveningDays,
+  type EveningCandidate,
+} from "./decisions.js";
 import { realizedOf } from "./realized.js";
 import type {
   AnchorName,
@@ -250,9 +258,16 @@ type DayLayout = ReturnType<typeof resolveDayWindows>;
 
 /**
  * The day's template laid out with its reduce order and the day's gap draws.
- * The base layout and every slot-exception re-layout go through here (G14).
+ * The base layout and every slot-exception re-layout go through here (G14),
+ * and the B8 re-layout with the day's evening activities.
  */
-function layoutDay(input: ScheduleInput, anchors: DayAnchors, decisions: DayDecisions, attempt: number): DayLayout {
+function layoutDay(
+  input: ScheduleInput,
+  anchors: DayAnchors,
+  decisions: DayDecisions,
+  attempt: number,
+  evening: readonly EveningActivity[] = [],
+): DayLayout {
   const { world, gaps, templates } = input;
   const d = decisions.day_index;
   return resolveDayWindows(
@@ -262,6 +277,7 @@ function layoutDay(input: ScheduleInput, anchors: DayAnchors, decisions: DayDeci
     world,
     (from, to, i) => sampleGap(gaps, from, to, rngFor(world.seed, "day", d, attempt, "gap", i)),
     templates.reduce_order?.[decisions.template],
+    evening,
   );
 }
 
@@ -323,8 +339,10 @@ function placeSlotException(
   return { ...placed, layout, exceptions: [exception] };
 }
 
-function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
-  const d = decisions.day_index;
+type BaseDay = { anchors: DayAnchors; adjustments: DonorAdjustment[]; redraws: number; placed: SlotExceptionPlacement };
+
+/** The day without evening activities: anchors, layout and slot exception (B8 decides on this day). */
+function baseDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): BaseDay {
   // Trip days use the weekend donor like every non-workday template (N3).
   const profile =
     decisions.day_type === "workday_late" && donors.weekday_late !== undefined
@@ -334,7 +352,68 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
         : donors.weekend.profile;
   const { anchors, adjustments, redraws } = dayAnchors(input, profile, decisions, attempt);
   const base = layoutDay(input, anchors, decisions, attempt);
-  const { layout, exceptions, eligible, candidates } = placeSlotException(input, anchors, decisions, attempt, base);
+  return { anchors, adjustments, redraws, placed: placeSlotException(input, anchors, decisions, attempt, base) };
+}
+
+/** B8: plans per (input, donors), so generateDay reproduces generateSchedule's picks without redoing them. */
+const eveningPlans = new WeakMap<ScheduleInput, WeakMap<Donors, readonly ReadonlySet<number>[]>>();
+
+/**
+ * B8: the planned days of each evening activity. A count activity ranks the
+ * routine workdays of attempt 0 (day type workday, no day or slot exception)
+ * by the end of their work_pm window; it depends on the world, the config and
+ * the donors only, so a regenerated day keeps its plan.
+ */
+function eveningPlan(input: ScheduleInput, donors: Donors): readonly ReadonlySet<number>[] {
+  if ((input.world.dials.evening_activities ?? []).length === 0) return [];
+  let byDonors = eveningPlans.get(input);
+  if (byDonors === undefined) eveningPlans.set(input, (byDonors = new WeakMap()));
+  let plan = byDonors.get(donors);
+  if (plan === undefined) byDonors.set(donors, (plan = planEveningDays(input.world, () => eveningCandidates(input, donors))));
+  return plan;
+}
+
+function eveningCandidates(input: ScheduleInput, donors: Donors): EveningCandidate[] {
+  const opts = { boundNodes: input.boundNodes, defaults: input.defaults };
+  const out: EveningCandidate[] = [];
+  for (let d = 1; d <= input.world.dials.length_days; d++) {
+    const decisions = decideDay(input.world, input.exceptions, opts, d, 0);
+    if (decisions.day_type !== "workday") continue;
+    let base: BaseDay;
+    try {
+      base = baseDay(input, donors, decisions, 0);
+    } catch (e) {
+      if (isInfeasible(e)) continue;
+      throw e;
+    }
+    if (base.placed.exceptions.length > 0) continue;
+    const workPm = base.placed.layout.slots.find((s) => s.role === "work_pm");
+    if (workPm !== undefined) out.push({ day_index: d, work_pm_end: parseClock(workPm.window[1]) });
+  }
+  return out;
+}
+
+/** B8: the evening activities planned on a routine workday (day type workday, no exception at all); [] otherwise. */
+function eveningOn(world: World, plan: readonly ReadonlySet<number>[], decisions: DayDecisions, exceptions: Exception[]): EveningActivity[] {
+  if (decisions.day_type !== "workday" || exceptions.length > 0) return [];
+  return (world.dials.evening_activities ?? []).filter((_, i) => plan[i]!.has(decisions.day_index));
+}
+
+function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
+  const d = decisions.day_index;
+  const { anchors, adjustments, redraws, placed } = baseDay(input, donors, decisions, attempt);
+  const { exceptions, eligible, candidates } = placed;
+  let { layout } = placed;
+  // B8: evening activities go on top of the finished routine day; its anchors stay as they are.
+  const evening = eveningOn(input.world, eveningPlan(input, donors), decisions, exceptions);
+  if (evening.length > 0) {
+    try {
+      layout = layoutDay(input, anchors, decisions, attempt, evening);
+    } catch (e) {
+      if (!isInfeasible(e)) throw e;
+      layout = { ...layout, dropped: [...layout.dropped, ...evening.map((a) => ({ role: a.role, reason: "no_time" as const }))] };
+    }
+  }
   return {
     day_index: d,
     weekday: decisions.weekday,

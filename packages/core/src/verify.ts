@@ -125,6 +125,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts?: VerifyO
         if (s.role.startsWith("work_")) add("day_type", { day_index: d, slot_id: s.slot_id, detail: `${day.day_type} has work slot ${s.role}` });
       }
     }
+    checkEveningActivities(t.world, day, add);
 
     const wake = parseClock(day.wake);
     const sleep = parseClock(day.sleep);
@@ -337,6 +338,30 @@ function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add
     if (clip.day_group !== want) {
       v(`clip ${id} comes from ${clip.day_group}; trip day ${index + 1} of ${trip} uses ${want ?? "(no sequence date)"}`);
     }
+  }
+}
+
+/**
+ * B8 (day_type rule): an evening activity slot is on a routine workday (day type workday, no exception), uses its
+ * activity's node and sits after work_pm and before dinner (before_dinner) or after dinner (after_dinner).
+ */
+function checkEveningActivities(world: World, day: ScheduleDay, add: Add): void {
+  const roles = day.slots.map((s) => s.role);
+  const workPm = roles.indexOf("work_pm");
+  const dinner = roles.indexOf("dinner");
+  for (const a of world.dials.evening_activities ?? []) {
+    day.slots.forEach((s, i) => {
+      if (s.role !== a.role) return;
+      const v = (detail: string) => add("day_type", { day_index: day.day_index, slot_id: s.slot_id, detail });
+      if (day.day_type !== "workday" || day.exceptions.length > 0) {
+        v(`evening activity ${a.role} on a ${day.day_type}${day.exceptions.length > 0 ? " with an exception" : ""}`);
+      }
+      if (s.spec.node !== a.node) v(`evening activity ${a.role} uses node ${s.spec.node}, not ${a.node}`);
+      const placed = a.position === "before_dinner" ? workPm >= 0 && workPm < i && (dinner < 0 || i < dinner) : dinner >= 0 && dinner < i;
+      if (!placed) {
+        v(`${a.role} (${a.position}) must come ${a.position === "before_dinner" ? "after work_pm and before dinner" : "after dinner"}`);
+      }
+    });
   }
 }
 
