@@ -166,10 +166,11 @@ describe("buildTimelineManifest", () => {
     }
     expect([...kinds].sort()).toEqual(["transition", "unrecorded", "unscheduled"]);
     const d1 = m.days[0]!.no_video_spans;
-    // Window s1 ends 08:00, s2 starts 09:00: 30 min transition, then 30 min unscheduled.
+    // Window s1 ends 08:00, s2 starts 09:00: 30 min unscheduled at s1's place, then the 30 min
+    // transition right before s2 (G23, CR6.3).
     expect(d1.filter((s) => s.start >= 8 * HOUR && s.end <= 9 * HOUR)).toEqual([
-      { start: 8 * HOUR, end: 8.5 * HOUR, kind: "transition" },
-      { start: 8.5 * HOUR, end: 9 * HOUR, kind: "unscheduled" },
+      { start: 8 * HOUR, end: 8.5 * HOUR, kind: "unscheduled" },
+      { start: 8.5 * HOUR, end: 9 * HOUR, kind: "transition" },
     ]);
     // Day 2 has no transition record: the whole 08:00-09:00 gap is unscheduled, and 17:00-23:00 trails.
     const d2 = m.days[1]!.no_video_spans;

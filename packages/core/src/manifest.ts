@@ -67,8 +67,9 @@ export type ManifestClip = z.infer<typeof ManifestClipSchema>;
 
 /**
  * Time on a day that no clip covers (E9), in absolute seconds since day 1 00:00.
- * "transition": travel between two slots at different places; "unscheduled": time
- * between windows (or before the first / after the last) that no slot claims;
+ * "transition": travel between two slots at different places, right before the later
+ * slot; "unscheduled": time between windows (or before the first / after the last)
+ * that no slot claims, at the previous slot's place (G23);
  * "unrecorded": time inside a slot's window not covered by its clips.
  */
 export const NoVideoSpanSchema = z.object({
@@ -191,9 +192,10 @@ function noVideoSpans(day: ScheduleDay, clipSpans: ReadonlyMap<string, [number, 
       const moved = next === undefined
         ? 0
         : (day.transitions.find((x) => x.from_slot === slot.slot_id && x.to_slot === next.slot_id)?.minutes ?? 0) * 60;
+      // G23 (CR6.3): unscheduled time is spent at this slot's place; the move comes right before the next slot.
       const t = Math.min(moved, gapEnd - we);
-      push(we, we + t, "transition");
-      push(we + t, gapEnd, "unscheduled");
+      push(we, gapEnd - t, "unscheduled");
+      push(gapEnd - t, gapEnd, "transition");
     }
   });
   return out;
