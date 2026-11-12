@@ -794,8 +794,22 @@ export function eveningFill(
       const key = perClip ? c.clip_id : `${c.source.dataset}:${c.source.video_id}`;
       byTake.set(key, [...(byTake.get(key) ?? []), c]);
     }
-    const list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1)));
-    const rng = rngFor(world.seed, perClip ? "hobby" : "hobby_2");
+    const cmp = (a: Clip, b: Clip) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1);
+    if (perClip) {
+      // B15: clips of one video stay in source order (a build progresses over the days); videos are shuffled.
+      const byVideo = new Map<string, Clip[]>();
+      for (const [, [c]] of byTake) byVideo.set(`${c!.source.dataset}:${c!.source.video_id}`, []);
+      for (const [, [c]] of byTake) byVideo.get(`${c!.source.dataset}:${c!.source.video_id}`)!.push(c!);
+      const videos = [...byVideo.keys()].sort();
+      const vr = rngFor(world.seed, "hobby");
+      for (let i = videos.length - 1; i > 0; i--) {
+        const j = vr.int(0, i + 1);
+        [videos[i], videos[j]] = [videos[j]!, videos[i]!];
+      }
+      return videos.flatMap((v) => byVideo.get(v)!.sort(cmp).map((c) => [c]));
+    }
+    const list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort(cmp));
+    const rng = rngFor(world.seed, "hobby_2");
     for (let i = list.length - 1; i > 0; i--) {
       const j = rng.int(0, i + 1);
       [list[i], list[j]] = [list[j]!, list[i]!];
@@ -826,6 +840,7 @@ export function eveningFill(
     const pick = (o: Open): Clip[] | undefined => {
       const left = takes.filter(usable(o));
       if (left.length === 0) return undefined;
+      if (perClip) return left[0];
       const same = o.participant === undefined ? undefined : left.find((t) => participantOf(t[0]!) === o.participant);
       if (same !== undefined) return same;
       const others = new Set(slots.filter((x) => x.day !== o.day && x.participant !== undefined).map((x) => x.participant!));
@@ -952,7 +967,7 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
       .flatMap((s) => {
         const by = new Map<string, number>();
         for (const p of ps.filter((x) => x.slot_id === s.slot_id)) {
-          const src = p.clip.person_source === person ? p.clip.day_group : p.clip.source.video_id;
+          const src = s.role === HOBBY_ROLE ? p.clip.clip_id : p.clip.person_source === person ? p.clip.day_group : p.clip.source.video_id;
           by.set(src, (by.get(src) ?? 0) + p.synthetic_end_s - p.synthetic_start_s);
         }
         return [...by].map(([source_date_or_take, seconds]) => ({ role: s.role, source_date_or_take, seconds: round3(seconds) }));

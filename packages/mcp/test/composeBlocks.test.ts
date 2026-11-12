@@ -1266,6 +1266,22 @@ describe("evening activities (B10)", () => {
       expect(eveningFill(days, [], new MemCatalog(clips.slice(0, 2)), w).entries).toHaveLength(2);
     });
 
+    it("deals the parts of one video to the hobby days in source order; several videos stay deterministic", () => {
+      const days = [1, 2, 3].map(hobbyDay);
+      for (const seed of [1, 2, 3]) {
+        const w = parseWorld({ ...hobbyWorld(true), seed } as never);
+        const r = eveningFill(days, [], new MemCatalog([lego(2, 45), lego(0, 60), lego(1, 132)]), w);
+        expect(r.entries.map((e) => e.clip_id)).toEqual(["youtube:lego:0", "youtube:lego:1", "youtube:lego:2"]);
+      }
+      const other = (i: number): Clip => ({ ...lego(i, 30), clip_id: `youtube:other:${i}`, day_group: `youtube:other:${i}`, source: { ...lego(i, 30).source, video_id: "other" } });
+      const two = new MemCatalog([lego(1, 60), other(1), lego(0, 60), other(0)]);
+      const r2 = eveningFill([1, 2, 3, 4].map(hobbyDay), [], two, hobbyWorld(true));
+      expect(eveningFill([1, 2, 3, 4].map(hobbyDay), [], two, hobbyWorld(true))).toEqual(r2);
+      const ids = r2.entries.map((e) => e.clip_id);
+      expect(ids.indexOf("youtube:lego:0")).toBeLessThan(ids.indexOf("youtube:lego:1"));
+      expect(ids.indexOf("youtube:other:0")).toBeLessThan(ids.indexOf("youtube:other:1"));
+    });
+
     it("leaves hobby slots empty without bound clips", () => {
       const days = [1, 2, 3].map(hobbyDay);
       expect(eveningFill(days, [], new MemCatalog([lego(0, 60)]), hobbyWorld(false)).entries).toEqual([]);
