@@ -175,8 +175,10 @@ export const ScheduleDaySchema = z.object({
   slots: z.array(SlotSchema),
   dropped_slots: z.array(DroppedSlotSchema),
   transitions: z.array(SlotTransitionSchema),
-  /** Clamps applied after the day's jitter redraws ran out (E6). */
+  /** Clamps applied after an anchor's jitter redraws ran out (E6, G13). */
   anchor_adjustments: z.array(AdjustmentSchema),
+  /** Per-anchor jitter redraws spent on the day, summed over anchors (G13). */
+  jitter_redraws: z.number().int().min(0),
 });
 export type ScheduleDay = z.infer<typeof ScheduleDaySchema>;
 

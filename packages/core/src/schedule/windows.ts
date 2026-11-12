@@ -110,9 +110,10 @@ function slotToDrop(kept: Kept[], failing: number): number {
 
 /**
  * E4: applies the first unused reduce step, in order, whose optional slot is
- * still kept and can affect the failing slot (a slot's layout depends only on
- * itself, the slots before it and the next one). A shrink needs a duration
- * above min_minutes. Returns false when no step applies.
+ * still kept and can affect the failing slot (G10: a slot's layout depends only
+ * on itself, the slots before it and the next one, so a drop may target up to
+ * failing + 1; a shrink only up to failing). A shrink needs a duration above
+ * min_minutes. Returns false when no step applies.
  */
 function applyReduceStep(
   kept: Kept[],
@@ -129,7 +130,7 @@ function applyReduceStep(
       used[si] = true;
       continue;
     }
-    if (i > failing + 1) continue;
+    if (i > failing + (step.action === "drop" ? 1 : 0)) continue;
     used[si] = true;
     const k = kept[i]!;
     if (step.action === "drop") {

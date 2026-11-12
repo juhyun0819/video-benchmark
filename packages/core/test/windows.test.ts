@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  TemplateSlotSchema,
   TemplatesSchema,
   TimelineError,
   WorldSchema,
@@ -195,6 +196,29 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     const { slots, dropped } = resolveWorkday(workday(), { ...ANCHORS, sleep: 1190 });
     expect(dropped).toEqual([{ role: "home_evening", reason: "no_time" }]);
     expect(slots.map((s) => s.role)).toEqual(["home_morning", "work_am", "lunch", "work_pm", "dinner"]);
+  });
+
+  it("a shrink step does not fire for a failure in the slot before it; a drop may (G10)", () => {
+    const slot = (role: string, over: object) =>
+      TemplateSlotSchema.parse({ role, category: "home", node: "home", activity: role, ...over });
+    const template = [
+      slot("a", { required: true, anchor: "wake" }),
+      slot("b", { anchor: "lunch", duration_minutes: 60 }),
+      slot("c", { anchor: "dinner", duration_minutes: 90, min_minutes: 30 }),
+    ];
+    const anchors: DayAnchors = { wake: 400, lunch: 1000, dinner: 1020, sleep: 1050 };
+    // b ends after sleep; shrinking c (next slot) cannot help, so R24 drops b first, then c is shrunk.
+    const shrink = resolveDayWindows(template, anchors, workday(), world(), gap20, [{ role: "c", action: "shrink" }]);
+    expect(shrink.dropped).toEqual([
+      { role: "b", reason: "no_time" },
+      { role: "c", reason: "shrunk" },
+    ]);
+    expect(table(shrink.slots)).toEqual(["a 06:40-17:00 home", "c 17:00-17:30 home"]);
+    const drop = resolveDayWindows(template, anchors, workday(), world(), gap20, [{ role: "c", action: "drop" }]);
+    expect(drop.dropped).toEqual([
+      { role: "c", reason: "no_time" },
+      { role: "b", reason: "no_time" },
+    ]);
   });
 
   it("a workday whose required dinner cannot fit throws SCHEDULE_INFEASIBLE at dinner", () => {

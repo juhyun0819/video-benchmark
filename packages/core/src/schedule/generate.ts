@@ -11,7 +11,7 @@ import {
   type DonorViolation,
 } from "../donor.js";
 import { TimelineError } from "../errors.js";
-import { medianGap, sampleGap, type GapTable } from "../gaps.js";
+import { gapQuantile, sampleGap, type GapTable } from "../gaps.js";
 import { rngFor } from "../rng.js";
 import type { World } from "../world.js";
 import { decideDay, decideDays, effectiveMealStyle } from "./decisions.js";
@@ -23,6 +23,7 @@ import type {
   Schedule,
   ScheduleDay,
   ScheduleDefaults,
+  TemplateName,
   Templates,
 } from "./types.js";
 import { resolveDayWindows } from "./windows.js";
@@ -49,7 +50,7 @@ function daySigma(input: ScheduleInput): number {
   return s0 + (s1 - s0) * input.world.dials.routine_strength;
 }
 
-/** Jitter vector redraws after the first draw before the day falls back to clamping (E6). */
+/** Redraws per anchor after its first draw before it falls back to a clamp (E6, G13). */
 const MAX_JITTER_REDRAWS = 5;
 
 /** Template durations the bounds depend on: the workday lunch (R22) and the weekend hobby at sport (R25). */
@@ -60,6 +61,22 @@ function boundMinutes(templates: Templates): { lunchMinutes: number; hobbyMinute
   };
 }
 
+type JitterItem = AnchorName | "sleep";
+
+/**
+ * Anchors in dependency order (G13): the primaries wake, sleep and work_start
+ * first, then work_end | work_start, breakfast | wake, lunch | work window,
+ * dinner | sleep and sport | sleep.
+ */
+const JITTER_ORDER: readonly JitterItem[] = ["wake", "sleep", "work_start", "work_end", "breakfast", "lunch", "dinner", "sport"];
+
+/** Anchors whose bounds are checked per template (G12); the others are jittered once and left alone. */
+const CHECKED: Record<TemplateName, ReadonlySet<JitterItem>> = {
+  workday: new Set(["wake", "sleep", "work_start", "work_end", "lunch", "dinner"]),
+  hobby_day: new Set(["wake", "sleep", "breakfast", "lunch", "dinner", "sport"]),
+  home_day: new Set(["wake", "sleep", "breakfast", "lunch", "dinner"]),
+};
+
 function anchorsOf(p: DayProfile): DayAnchors {
   const a: DayAnchors = { wake: p.wake, sleep: p.sleep, breakfast: p.breakfast, lunch: p.lunch, dinner: p.dinner };
   if (p.work_start !== undefined) a.work_start = p.work_start;
@@ -69,46 +86,64 @@ function anchorsOf(p: DayProfile): DayAnchors {
 }
 
 /**
- * Donor times jittered per day and rounded (E6). The whole jitter vector is
- * redrawn (keys "jitter", k for k = 0..5) until the E5 bounds hold; after
- * that the last draw is clamped like a donor and each clamp is recorded.
+ * Donor times jittered per day and rounded (E6, G12, G13). In dependency
+ * order, each anchor the template uses is redrawn (keys "jitter", item, k for
+ * k = 1..5) while it violates its own E5 bound given the anchors already
+ * accepted; after that it is clamped to the bound and the clamp is recorded.
  */
 function dayAnchors(
   input: ScheduleInput,
   profile: DayProfile,
   decisions: DayDecisions,
   attempt: number,
-): { anchors: DayAnchors; adjustments: DonorAdjustment[] } {
+): { anchors: DayAnchors; adjustments: DonorAdjustment[]; redraws: number } {
   const { seed } = input.world;
   const d = decisions.day_index;
   const sigma = daySigma(input);
   const workday = decisions.template === "workday";
   const kind: DayKind = workday ? "weekday" : "weekend";
+  const checked = CHECKED[decisions.template];
   const { lunchMinutes, hobbyMinutes } = boundMinutes(input.templates);
-  const sport = profile.sport ?? parseClock(input.defaults.weekend.sports_start.p50);
-
-  const draw = (k: number): DayProfile => {
-    const jitter = (name: AnchorName | "sleep", value: number): number =>
-      Math.round(value + rngFor(seed, "day", d, attempt, "jitter", k, name).normal(0, sigma));
-    const p: DayProfile = {
-      wake: jitter("wake", profile.wake),
-      sleep: jitter("sleep", profile.sleep),
-      breakfast: jitter("breakfast", profile.breakfast),
-      lunch: jitter("lunch", profile.lunch),
-      dinner: jitter("dinner", profile.dinner),
-      sport: jitter("sport", sport),
-      meal_loc: {},
-    };
-    if (workday && profile.work_start !== undefined) p.work_start = jitter("work_start", profile.work_start);
-    if (workday && profile.work_end !== undefined) p.work_end = jitter("work_end", profile.work_end);
-    return p;
+  const base: Partial<Record<JitterItem, number>> = {
+    wake: profile.wake,
+    sleep: profile.sleep,
+    breakfast: profile.breakfast,
+    lunch: profile.lunch,
+    dinner: profile.dinner,
+    sport: profile.sport ?? parseClock(input.defaults.weekend.sports_start.p50),
   };
-  const violates = (p: DayProfile) => donorBoundViolations(kind, p, lunchMinutes, hobbyMinutes).length > 0;
+  if (workday) {
+    base.work_start = profile.work_start;
+    base.work_end = profile.work_end;
+  }
+  const jitter = (item: JitterItem, value: number, k: number): number =>
+    Math.round(value + rngFor(seed, "day", d, attempt, "jitter", item, k).normal(0, sigma));
 
-  let p = draw(0);
-  for (let k = 1; k <= MAX_JITTER_REDRAWS && violates(p); k++) p = draw(k);
-  const adjustments = violates(p) ? clampToBounds(kind, p, lunchMinutes, hobbyMinutes) : [];
-  return { anchors: anchorsOf(p), adjustments };
+  // Every item gets its first draw up front; later items do not affect earlier items' bounds.
+  const p: DayProfile = { wake: 0, sleep: 0, breakfast: 0, lunch: 0, dinner: 0, meal_loc: {} };
+  for (const item of JITTER_ORDER) {
+    const value = base[item];
+    if (value !== undefined) p[item] = jitter(item, value, 0);
+  }
+  const violation = (item: JitterItem) =>
+    donorBoundViolations(kind, p, lunchMinutes, hobbyMinutes).find((v) => v.item === item);
+
+  const adjustments: DonorAdjustment[] = [];
+  let redraws = 0;
+  for (const item of JITTER_ORDER) {
+    const value = base[item];
+    if (value === undefined || !checked.has(item)) continue;
+    for (let k = 1; k <= MAX_JITTER_REDRAWS && violation(item); k++) {
+      p[item] = jitter(item, value, k);
+      redraws += 1;
+    }
+    const v = violation(item);
+    if (v) {
+      p[item] = v.bound;
+      adjustments.push({ item, from: v.value, to: v.bound });
+    }
+  }
+  return { anchors: anchorsOf(p), adjustments, redraws };
 }
 
 const isInfeasible = (e: unknown): e is TimelineError =>
@@ -116,8 +151,8 @@ const isInfeasible = (e: unknown): e is TimelineError =>
 
 /**
  * E5 template check for a weekday donor: the workday's required slots (a
- * required $meal eaten at home) lay out with the donor's raw times and the
- * gap table's medians.
+ * required $meal eaten at home) lay out with the donor's raw times, p90
+ * transition gaps and sleep moved σ earlier, so daily jitter keeps slack (G11).
  */
 function requiredWorkdaySlotsFit(input: ScheduleInput, profile: DayProfile): boolean {
   const decisions: DayDecisions = {
@@ -131,9 +166,8 @@ function requiredWorkdaySlotsFit(input: ScheduleInput, profile: DayProfile): boo
   };
   const required = input.templates.day_types.workday.filter((s) => s.required);
   try {
-    resolveDayWindows(required, anchorsOf(profile), decisions, input.world, (from, to) =>
-      medianGap(input.gaps, from, to),
-    );
+    const anchors = { ...anchorsOf(profile), sleep: profile.sleep - daySigma(input) };
+    resolveDayWindows(required, anchors, decisions, input.world, (from, to) => gapQuantile(input.gaps, from, to, "p90"));
     return true;
   } catch (e) {
     if (isInfeasible(e)) return false;
@@ -165,7 +199,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
   const { world, gaps, templates } = input;
   const d = decisions.day_index;
   const profile = decisions.template === "workday" ? donors.weekday.profile : donors.weekend.profile;
-  const { anchors, adjustments } = dayAnchors(input, profile, decisions, attempt);
+  const { anchors, adjustments, redraws } = dayAnchors(input, profile, decisions, attempt);
   const { slots, transitions, dropped } = resolveDayWindows(
     templates.day_types[decisions.template],
     anchors,
@@ -189,6 +223,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
     dropped_slots: dropped,
     transitions,
     anchor_adjustments: adjustments,
+    jitter_redraws: redraws,
   };
 }
 

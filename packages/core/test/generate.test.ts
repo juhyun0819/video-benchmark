@@ -79,7 +79,7 @@ function rows(weekend: Partial<DonorRow> = {}, weekdayOver: Partial<DonorRow> = 
   return [...weekday, ...we];
 }
 
-type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number; seed?: number };
+type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number; seed?: number; length?: number };
 
 function makeWorld(o: Over = {}): World {
   return WorldSchema.parse({
@@ -114,7 +114,7 @@ function makeWorld(o: Over = {}): World {
       place_nodes: o.placeNodes ?? { eat_out: "diner", others_home: "friend_home" },
     },
     dials: {
-      length_days: 28,
+      length_days: o.length ?? 28,
       routine_strength: o.routine ?? 0.6,
       exception_rate: { slot: o.slot ?? 0.15, day: o.day ?? 0.1 },
       wake_sleep: "default_v1",
@@ -235,12 +235,12 @@ describe("generateSchedule", () => {
   });
 
   it("uses the weekend donor for leave days and records day exceptions", () => {
-    // Weekend donors wake at 10:00, weekday donors around 06:45 (at most 07:00); routine 1 keeps σ at 20 min.
+    // Weekend donors wake at 10:00, weekday donors around 06:45; routine 1 keeps σ at 20 min.
     const schedule = generateSchedule(input({ day: 1, routine: 1 }, { wake: 600, breakfast_time: 630 }));
     const leave = schedule.days.filter((d) => d.day_type === "leave_day");
     expect(leave.length).toBeGreaterThan(0);
     for (const day of leave) {
-      expect(parseClock(day.wake)).toBeGreaterThan(500);
+      expect(parseClock(day.wake)).toBeGreaterThan(540);
       expect(day.exceptions).toEqual([{ scope: "day", type: "leave_day", replaces: "workday", day_range: [day.day_index, day.day_index] }]);
       expect(day.slots.map((s) => s.role)).toContain("chores");
       expect(day.slots.some((s) => s.spec.category === "work")).toBe(false);
@@ -296,7 +296,9 @@ describe("generateSchedule", () => {
     const inp = input({ day: 0, slot: 0, routine: 0 }, { bed: 1675 }, { bed: 1675 });
     const schedule = generateSchedule(inp);
     expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
-    expect(Math.max(...schedule.days.map((d) => parseClock(d.sleep)))).toBe(1679);
+    // E6: late sleeps are redrawn, then clamped, so the bound holds without every day sitting on it.
+    expect(Math.max(...schedule.days.map((d) => parseClock(d.sleep)))).toBeLessThanOrEqual(1679);
+    expect(Math.max(...schedule.days.map((d) => parseClock(d.sleep)))).toBeGreaterThan(1600);
     // The matcher parses every slot window (slotWindow); "28:xx" used to throw there.
     const t = createTimeline(inp.world, schedule, () => "tl-late");
     const probe: Clip = {
@@ -324,7 +326,8 @@ describe("generateSchedule", () => {
   it("a donor waking at 03:20 wakes at 04:00 or later (R44)", () => {
     const schedule = generateSchedule(input({ day: 0, slot: 0, routine: 1 }, {}, { wake: 200, breakfast_time: 220 }));
     const wakes = schedule.days.map((d) => parseClock(d.wake));
-    expect(Math.min(...wakes)).toBe(240);
+    expect(Math.min(...wakes)).toBeGreaterThanOrEqual(240);
+    expect(Math.min(...wakes)).toBeLessThan(270);
     for (const day of schedule.days) expect(day.slots[0]!.spec.time_of_day).not.toBe("night");
   });
 
@@ -341,7 +344,7 @@ describe("generateSchedule", () => {
     }
   });
 
-  it("a jitter that pushes wake below 04:00 is redrawn, not clamped (E6)", () => {
+  it("a jitter that pushes wake below 04:00 is redrawn, not clamped (E6, G13)", () => {
     // Weekday donors wake at 04:10; with σ 20 min the first jitter draw is below 04:00 on about a third of workdays.
     const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { wake: 250, breakfast_time: 330 });
     const schedule = generateSchedule(inp);
@@ -349,13 +352,53 @@ describe("generateSchedule", () => {
     const firstDrawEarly = schedule.days.filter(
       (d) =>
         d.day_type === "workday" &&
-        Math.round(250 + rngFor(inp.world.seed, "day", d.day_index, d.attempt, "jitter", 0, "wake").normal(0, sigma)) < 240,
+        Math.round(250 + rngFor(inp.world.seed, "day", d.day_index, d.attempt, "jitter", "wake", 0).normal(0, sigma)) < 240,
     );
     expect(firstDrawEarly.length).toBeGreaterThan(0);
+    for (const day of firstDrawEarly) expect(day.jitter_redraws).toBeGreaterThan(0);
     for (const day of schedule.days) {
       expect(day.anchor_adjustments).toEqual([]);
       expect(parseClock(day.wake)).toBeGreaterThanOrEqual(240);
     }
+  });
+
+  it("a workday does not check breakfast: a breakfast jitter before wake + 10 is neither redrawn nor adjusted (G12)", () => {
+    // Weekday donors eat breakfast 20-40 min before waking (the donor clamp moves it to wake + 10);
+    // σ 20 then puts the day's breakfast before wake + 10 on about half the workdays.
+    const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { breakfast_time: 380 });
+    const schedule = generateSchedule(inp);
+    const p = schedule.donors.weekday.profile;
+    const sigma = inp.defaults.day_level_sigma.routine_strength_1;
+    const first = (d: { day_index: number; attempt: number }, item: string, base: number) =>
+      Math.round(base + rngFor(inp.world.seed, "day", d.day_index, d.attempt, "jitter", item, 0).normal(0, sigma));
+    const workdays = schedule.days.filter((d) => d.day_type === "workday");
+    const early = workdays.filter((d) => first(d, "breakfast", p.breakfast) < first(d, "wake", p.wake) + 10);
+    expect(early.length).toBeGreaterThan(0);
+    for (const day of workdays) {
+      expect(day.jitter_redraws).toBe(0);
+      expect(day.anchor_adjustments).toEqual([]);
+    }
+  });
+
+  it("per-item redraw keeps the rest-day wake unbiased when only breakfast violates (G13)", () => {
+    // Weekend donors wake 07:50 with breakfast 08:20; at σ 45 breakfast is before wake + 10 on about a
+    // third of first draws. Whole-vector redraw pulled the accepted wake earlier; per-item redraw must not.
+    const inp = input({ day: 0, slot: 0, routine: 0 });
+    const { donors } = generateSchedule(inp);
+    const p = donors.weekend.profile;
+    expect(p.breakfast - p.wake).toBe(30);
+    let n = 0;
+    let shift = 0;
+    let redrawn = 0;
+    for (let d = 1; n < 2000; d++) {
+      const day = generateDay(inp, donors, d, 0);
+      if (day.day_type === "workday") continue;
+      n += 1;
+      shift += parseClock(day.wake) - p.wake;
+      if (day.jitter_redraws > 0) redrawn += 1;
+    }
+    expect(redrawn / n).toBeGreaterThan(0.2);
+    expect(Math.abs(shift / n)).toBeLessThanOrEqual(3);
   });
 
   it("a huge σ exhausts the redraws and records the clamps as anchor_adjustments (E6)", () => {
@@ -407,15 +450,25 @@ describe("generateSchedule", () => {
 
   it("a weekday donor working past bedtime on every draw gets an earlier work_end, recorded (G9)", () => {
     // Every weekday row works until 23:00 and goes to bed at 23:18: the bounds hold, but the
-    // required dinner (after work_end + 20 min, 60 min long) never fits. 23:18 - 80 min = 21:58.
+    // required dinner (60 min after work_end + gap) never fits. G11: p90 workplace->home gap
+    // 55 min and sleep - σ (20 at routine 1) give work_end <= 23:18 - 20 - 55 - 60 = 21:03.
     const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { work_end: 1380, dinner_time: 1140, bed: 1398 });
     const schedule = generateSchedule(inp);
     const { weekday } = schedule.donors;
     expect(weekday.redraws).toBe(5);
-    expect(weekday.profile.work_end).toBe(1318);
-    expect(weekday.adjustments).toEqual([{ item: "work_end", from: 1380, to: 1318 }]);
+    expect(weekday.profile.work_end).toBe(1263);
+    expect(weekday.adjustments).toEqual([{ item: "work_end", from: 1380, to: 1263 }]);
     for (const day of schedule.days.filter((d) => d.day_type === "workday")) {
       expect(day.slots.map((s) => s.role)).toContain("dinner");
+    }
+  });
+
+  it("the past-bedtime donor repaired with slack generates an 84-day world (G11)", () => {
+    for (const routine of [0, 1]) {
+      const inp = input({ day: 0, slot: 0, routine, length: 84 }, {}, { work_end: 1380, dinner_time: 1140, bed: 1398 });
+      const schedule = generateSchedule(inp);
+      expect(schedule.days).toHaveLength(84);
+      expect(schedule.donors.weekday.adjustments.map((a) => a.item)).toEqual(["work_end"]);
     }
   });
 
