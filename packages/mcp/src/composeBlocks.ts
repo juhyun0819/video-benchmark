@@ -184,13 +184,15 @@ export function poolOf(day: DayLike): Pool {
 const rank = (a: RealDate, b: RealDate) =>
   Number(b.home_first) - Number(a.home_first) || b.labeled_seconds - a.labeled_seconds || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
 
+const isWeekend = (date: string) => [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
+
 /**
  * B5 step 3: one real date per synthetic day, each date used once. Trip days take their trip's
  * day_group_sequence entry at `trip.index`. Other days are visited in an order shuffled with
  * rngFor(seed, "block_dates") and take the best unused date of their pool; late workdays prefer
  * first work at or after 11:00, plain workdays earlier; when that side is empty, the day takes the
  * other side's date whose first work is closest to its preference (latest for late days, earliest
- * otherwise). Rest days fall back to partial dates. A day whose pool is empty gets `date: null`.
+ * otherwise), each within the weekday dates first and the Sat/Sun dates only after (B7). Rest days fall back to partial dates. A day whose pool is empty gets `date: null`.
  */
 export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string, RealDate>, world: World): DateAssignment[] {
   const used = new Set<string>();
@@ -212,10 +214,14 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
       const free = (kind: DateKind) => sorted.filter((x) => x.kind === kind && !used.has(x.date));
       if (pool === "work") {
         const late = day.day_type === "workday_late";
+        // B7: real Mon-Fri dates first; Sat/Sun dates only once no weekday work date is left.
+        const pick = (work: RealDate[]) => {
+          const preferred = work.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
+          const fallback = [...work].sort((a, b) => (late ? b.first_work_s! - a.first_work_s! : a.first_work_s! - b.first_work_s!) || rank(a, b));
+          return (preferred[0] ?? fallback[0])?.date;
+        };
         const work = free("work");
-        const preferred = work.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
-        const fallback = [...work].sort((a, b) => (late ? b.first_work_s! - a.first_work_s! : a.first_work_s! - b.first_work_s!) || rank(a, b));
-        date = (preferred[0] ?? fallback[0])?.date ?? null;
+        date = pick(work.filter((x) => !isWeekend(x.date))) ?? pick(work.filter((x) => isWeekend(x.date))) ?? null;
       } else {
         date = (free("rest")[0] ?? free("partial")[0])?.date ?? null;
       }
@@ -298,7 +304,12 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
         // Fix ruling 3: on rest dates only the morning (before 12:00).
         return { cands: clips.filter((c) => bound(c) && c.start < firstAway && (!rest || c.start < H(12))), run: false };
       case "work_am":
-        return { cands: clips.filter((c) => bound(c) && c.clip.category !== "meal" && c.start < lunchStart), run: false };
+      {
+        const work = clips.filter((c) => bound(c) && c.clip.category !== "meal");
+        const before = work.filter((c) => c.start < lunchStart);
+        // B7: lunch before any work leaves work_am empty, so it takes the date's work clips from the start.
+        return { cands: before.length > 0 ? before : work, run: false };
+      }
       case "work_pm":
         return { cands: clips.filter((c) => bound(c) && c.clip.category !== "meal" && c.start >= lunchStart), run: false };
       case "home_afternoon":

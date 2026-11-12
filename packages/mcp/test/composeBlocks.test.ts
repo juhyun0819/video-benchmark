@@ -290,6 +290,28 @@ describe("date assignment", () => {
     ...(trip ? { trip } : {}),
   });
 
+  it("takes weekday work dates before Saturday and Sunday ones, for plain and late days alike", () => {
+    // 2026-05-09 is a Saturday and ranks best (more footage); 05-04 and 05-05 are Monday and Tuesday.
+    const dates = collectDates(
+      new MemCatalog([...workDate("2026-05-04"), ...workDate("2026-05-05"), ...workDate("2026-05-09", { extraWork: 600 })]),
+      world,
+    );
+    for (const seed of [1, 2, 3]) {
+      const w = makeWorld({ seed });
+      const two = assignDates([day(1, "workday"), day(2, "workday")], dates, w).map((a) => a.date).sort();
+      expect(two).toEqual(["2026-05-04", "2026-05-05"]);
+      const lateTwo = assignDates([day(1, "workday_late"), day(2, "workday")], dates, w).map((a) => a.date).sort();
+      expect(lateTwo).toEqual(["2026-05-04", "2026-05-05"]);
+      const three = assignDates([day(1, "workday"), day(2, "workday"), day(3, "workday_late")], dates, w);
+      expect(three.filter((a) => a.date !== "2026-05-09")).toHaveLength(2);
+      expect(three.map((a) => a.date).sort()).toEqual(["2026-05-04", "2026-05-05", "2026-05-09"]);
+    }
+    // A weekday date on the wrong side of the late preference still beats a Saturday date on the right side.
+    const lateSat = collectDates(new MemCatalog([...workDate("2026-05-04"), ...workDate("2026-05-09", { late: true })]), world);
+    expect(assignDates([day(1, "workday_late")], lateSat, world)[0]!.date).toBe("2026-05-04");
+    expect(assignDates([day(1, "workday_late"), day(2, "workday")], lateSat, world).map((a) => a.date).sort()).toEqual(["2026-05-04", "2026-05-09"]);
+  });
+
   it("uses each date on at most one day and leaves a day without a date when its pool runs out", () => {
     const dates = collectDates(new MemCatalog([...workDate("2026-05-04"), ...workDate("2026-05-06"), ...restDate("2026-05-09")]), world);
     const out = assignDates([day(1, "workday"), day(2, "workday"), day(3, "workday"), day(4, "home_day"), day(5, "hobby_day")], dates, world);
@@ -413,6 +435,27 @@ describe("real day phases", () => {
       "d1-t1": ["08:00"],
       "d1-t2": ["17:30"],
     });
+  });
+
+  it("fills work_am from the first workplace clips when the real lunch comes before any work", () => {
+    const clips = [
+      ...rec("2026-06-13", [
+        { at: "10:00", min: 30, node: "home" },
+        { at: "12:00", min: 30, node: "workplace", category: "meal" },
+        { at: "13:38", min: 60, node: "workplace" },
+        { at: "15:00", min: 60, node: "workplace" },
+        { at: "16:30", min: 60, node: "workplace" },
+        { at: "18:00", min: 60, node: "workplace" },
+      ]),
+    ];
+    const day = mkDay("workday_late", [
+      slot(1, "work_am", "workplace", "13:00", "15:00"),
+      slot(2, "lunch", "workplace", "15:00", "15:30"),
+      slot(3, "work_pm", "workplace", "15:30", "20:00"),
+    ]);
+    const got = byBlock(world, day, clips, "2026-06-13");
+    expect(got["d1-s1"]).toEqual(["13:38", "15:00"]);
+    expect(got["d1-s3"]).toEqual(["16:30", "18:00"]);
   });
 
   it("takes commute bounds from the real phases, not from the clips a short slot planned", () => {
