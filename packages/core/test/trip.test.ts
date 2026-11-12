@@ -18,6 +18,7 @@ import {
   hardFilterFailures,
   lateWeekdays,
   parseWorld,
+  placeTrips,
   rankSelector,
   realizedOf,
   verifyTimeline,
@@ -332,6 +333,67 @@ function tripClips(dates: readonly string[] = SEQUENCE): Clip[] {
 }
 
 const slotOf = (day: ScheduleDay, role: string) => day.slots.find((s) => s.role === role)!;
+
+describe("fixed trip start (B1)", () => {
+  const MON_WED = ["2026-05-04", "2026-05-05", "2026-05-06"]; // Mon-Wed
+  const fixed = (o: Over = {}) =>
+    input({ sequence: MON_WED, trips: [{ node: "trip_1", length_days: 3, start_day: 19 }], ...o });
+
+  it("start_day 19 with a Mon-Wed sequence places the trip on days 19-21 (Fri-Sun), whatever the seed", () => {
+    for (const seed of [1, 2, 3]) {
+      const trip = tripDays(generateSchedule(fixed({ seed })));
+      expect(trip.map((d) => d.day_index)).toEqual([19, 20, 21]);
+      expect(trip.map((d) => d.weekday)).toEqual(["Fri", "Sat", "Sun"]);
+    }
+  });
+
+  it("the exception record has day_range [19, 21] and replaces lists the base day types", () => {
+    const trip = tripDays(generateSchedule(fixed()));
+    for (const d of trip) {
+      expect(d.exceptions).toEqual([
+        { scope: "multi_day", type: "trip", replaces: ["workday", "hobby_day", "hobby_day"], day_range: [19, 21], node: "trip_1" },
+      ]);
+    }
+  });
+
+  it("rejects a start_day that does not fit the world or is not a positive integer", () => {
+    for (const start_day of [27, 29, 0, 1.5]) {
+      const e = errorOf(() => makeWorld({ sequence: MON_WED, trips: [{ node: "trip_1", length_days: 3, start_day }] }));
+      expect(e.code).toBe("WORLD_INVALID");
+    }
+    expect(makeWorld({ sequence: MON_WED, trips: [{ node: "trip_1", length_days: 3, start_day: 26 }] }).dials.trips[0]!.start_day).toBe(26);
+  });
+
+  it("rejects two fixed trips that overlap", () => {
+    const e = errorOf(() =>
+      parseWorld(twoTrips([{ node: "trip_1", length_days: 3, start_day: 5 }, { node: "trip_2", length_days: 3, start_day: 7 }])),
+    );
+    expect(e.code).toBe("WORLD_INVALID");
+    expect(e.message).toMatch(/overlap/);
+    expect(parseWorld(twoTrips([{ node: "trip_1", length_days: 3, start_day: 5 }, { node: "trip_2", length_days: 3, start_day: 8 }])).dials.trips).toHaveLength(2);
+  });
+
+  it("an unfixed trip listed before a fixed one avoids it", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const w = parseWorld({ ...twoTrips([{ node: "trip_1", length_days: 3 }, { node: "trip_2", length_days: 3, start_day: 5 }]), seed });
+      const placed = placeTrips(w);
+      expect(placed.map((p) => p.node)).toEqual(["trip_1", "trip_2"]);
+      expect(placed[1]!.start).toBe(5);
+      expect(placed[0]!.start + 2 < 5 || placed[0]!.start > 7).toBe(true);
+    }
+  });
+
+  it("a world without start_day echoes no start_day", () => {
+    expect(makeWorld().dials.trips[0]).not.toHaveProperty("start_day");
+  });
+});
+
+function twoTrips(trips: unknown): Record<string, unknown> {
+  const w = worldJson({ sequence: ["2026-05-04", "2026-05-05", "2026-05-06"], trips }) as Record<string, any>;
+  w.nodes.trip_2 = { ...w.nodes.trip_1 };
+  w.node_binding.trip_2 = { ...w.node_binding.trip_1 };
+  return w;
+}
 
 describe("trip matching (N5)", () => {
   const o = input();

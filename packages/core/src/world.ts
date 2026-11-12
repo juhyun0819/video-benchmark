@@ -119,7 +119,16 @@ export const WorldSchema = z
       /** Workdays per week that start late (workday_late); the weekdays are fixed per person. */
       late_workdays_per_week: z.number().int().min(0).max(5).default(0),
       /** Multi-day trip exceptions (N3); each length equals its binding's day_group_sequence length. */
-      trips: z.array(z.object({ node: z.string(), length_days: z.number().int().min(1) })).default([]),
+      trips: z
+        .array(
+          z.object({
+            node: z.string(),
+            length_days: z.number().int().min(1),
+            /** B1: fixed 1-based synthetic start day; no weekday match and no draw. */
+            start_day: z.number().int().min(1).optional(),
+          }),
+        )
+        .default([]),
       /** N6: a required slot of `role` may be left empty on up to `max_days` distinct days when no clip fits. */
       missing_required_allowance: z.array(z.object({ role: z.string(), max_days: z.number().int().min(1) })).default([]),
     }),
@@ -208,6 +217,26 @@ export const WorldSchema = z
       }
       if (t.length_days > w.dials.length_days) {
         ctx.addIssue({ code: "custom", path: [...path, "length_days"], message: `trip is longer than the world` });
+      }
+      if (t.start_day !== undefined) {
+        const end = t.start_day + t.length_days - 1;
+        if (end > w.dials.length_days) {
+          ctx.addIssue({
+            code: "custom",
+            path: [...path, "start_day"],
+            message: `trip ${t.node} starting on day ${t.start_day} ends on day ${end}, past length_days ${w.dials.length_days}`,
+          });
+        }
+        w.dials.trips.slice(0, i).forEach((o) => {
+          if (o.start_day === undefined) return;
+          if (t.start_day! <= o.start_day + o.length_days - 1 && o.start_day <= end) {
+            ctx.addIssue({
+              code: "custom",
+              path: [...path, "start_day"],
+              message: `trip ${t.node} (days ${t.start_day}-${end}) overlaps trip ${o.node} (days ${o.start_day}-${o.start_day + o.length_days - 1})`,
+            });
+          }
+        });
       }
     });
   });

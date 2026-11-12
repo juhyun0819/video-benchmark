@@ -151,19 +151,32 @@ export type TripPlacement = { node: string; start: number; length: number; repla
  * N3: where each trip of dials.trips goes, decided before any day exception.
  * Candidate starts are the days whose weekday equals the weekday of the trip's
  * first day_group_sequence date and from which the whole trip fits in the world
- * without overlapping an earlier trip; one is drawn with rngFor(seed, "trip", node).
+ * without overlapping a fixed or earlier trip (B1: dials.trips[].start_day pins a trip, no draw); one is drawn with rngFor(seed, "trip", node).
  * It depends on the world alone, so a regenerated day keeps its trip.
  */
 export function placeTrips(world: World): TripPlacement[] {
   const plan = hobbyPlan(world);
   const late = lateWeekdays(world);
-  const placed: TripPlacement[] = [];
+  const replacesAt = (start: number, length: number): DayType[] =>
+    Array.from({ length }, (_, k) => baseDayType(weekdayAt(world, start + k), plan, late));
+  // B1: fixed starts are taken first so a drawn trip listed earlier still avoids them.
+  const fixed = new Map<string, TripPlacement>();
+  for (const { node, length_days: length, start_day } of world.dials.trips) {
+    if (start_day !== undefined) fixed.set(node, { node, start: start_day, length, replaces: replacesAt(start_day, length) });
+  }
+  const taken = [...fixed.values()];
+  const result: TripPlacement[] = [];
   for (const { node, length_days: length } of world.dials.trips) {
+    const f = fixed.get(node);
+    if (f !== undefined) {
+      result.push(f);
+      continue;
+    }
     const weekday = weekdayOfDate(world.node_binding[node]!.day_group_sequence![0]!);
     const candidates: number[] = [];
     for (let s = 1; s + length - 1 <= world.dials.length_days; s++) {
       if (weekdayAt(world, s) !== weekday) continue;
-      if (placed.some((p) => s <= p.start + p.length - 1 && p.start <= s + length - 1)) continue;
+      if (taken.some((p) => s <= p.start + p.length - 1 && p.start <= s + length - 1)) continue;
       candidates.push(s);
     }
     if (candidates.length === 0) {
@@ -172,10 +185,11 @@ export function placeTrips(world: World): TripPlacement[] {
       });
     }
     const start = candidates[rngFor(world.seed, "trip", node).int(0, candidates.length)]!;
-    const replaces = Array.from({ length }, (_, k) => baseDayType(weekdayAt(world, start + k), plan, late));
-    placed.push({ node, start, length, replaces });
+    const p = { node, start, length, replaces: replacesAt(start, length) };
+    taken.push(p);
+    result.push(p);
   }
-  return placed;
+  return result;
 }
 
 /** The trip covering the day, if any. */
