@@ -30,7 +30,8 @@ import type {
 } from "./types.js";
 import { resolveDayWindows } from "./windows.js";
 
-export const SCHEDULE_GENERATOR_VERSION = "schedule.v1";
+/** schedule.v2: rev3 (rest_day meals, donor/day acceptance, realized). Older schedules do not parse (G25). */
+export const SCHEDULE_GENERATOR_VERSION = "schedule.v2";
 /** Regeneration attempts after attempt 0 fails (D11). */
 const MAX_RETRIES = 5;
 

@@ -27,7 +27,7 @@ import {
 } from "@vb/core";
 import { loadConfig, regenFor, scheduleInput, type Dirs, type GeneratorConfig } from "./config.js";
 import { FsClipCatalog } from "./fsCatalog.js";
-import { TimelineStore, WorldStore } from "./store.js";
+import { TimelineStore, WorldStore, type SkippedFile } from "./store.js";
 import { renderDay, renderOverview } from "./view.js";
 
 export type ServerOptions = {
@@ -75,6 +75,11 @@ function guard<A>(fn: (args: A) => CallToolResult): (args: A) => CallToolResult 
 }
 
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
+
+/** Appends one "skipped <file>: <code>: <message>" line per file a listing could not load (G25). */
+function withSkipped(text: string, skipped: readonly SkippedFile[]): string {
+  return [text, ...skipped.map((x) => `skipped ${x.file}: ${x.code}: ${x.message}`)].join("\n");
+}
 
 export type ManifestSummary = { days: number; clips: number; captions: number; coverage_mean: number };
 
@@ -160,17 +165,16 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
     "list_worlds",
     { description: "List the worlds (one synthetic person each) under data/worlds." },
     guard(() => {
-      const worlds = ctx.worlds.list().map((w) => ({
+      const listed = ctx.worlds.list();
+      const worlds = listed.worlds.map((w) => ({
         person_id: w.person_id,
         length_days: w.dials.length_days,
         seed: w.seed,
         nodes: Object.keys(w.nodes),
       }));
-      const text =
-        worlds.length === 0
-          ? "(no worlds)"
-          : worlds.map((w) => `${w.person_id}  ${w.length_days} days  seed ${w.seed}  nodes ${w.nodes.join(",")}`).join("\n");
-      return ok(text, { worlds });
+      const lines = worlds.map((w) => `${w.person_id}  ${w.length_days} days  seed ${w.seed}  nodes ${w.nodes.join(",")}`);
+      const text = withSkipped(worlds.length === 0 ? "(no worlds)" : lines.join("\n"), listed.skipped);
+      return ok(text, { worlds, skipped: listed.skipped });
     }),
   );
 
@@ -199,14 +203,10 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
     "list_timelines",
     { description: "List saved timelines with id, name, person and revision." },
     guard(() => {
-      const timelines = ctx.timelines.list();
-      const text =
-        timelines.length === 0
-          ? "(no timelines)"
-          : timelines
-              .map((t) => `${t.id}${t.name ? ` (${t.name})` : ""}  ${t.person_id}  r${t.revision}  ${t.days} days`)
-              .join("\n");
-      return ok(text, { timelines });
+      const { timelines, skipped } = ctx.timelines.list();
+      const lines = timelines.map((t) => `${t.id}${t.name ? ` (${t.name})` : ""}  ${t.person_id}  r${t.revision}  ${t.days} days`);
+      const text = withSkipped(timelines.length === 0 ? "(no timelines)" : lines.join("\n"), skipped);
+      return ok(text, { timelines, skipped });
     }),
   );
 

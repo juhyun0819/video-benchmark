@@ -117,13 +117,14 @@ const DonorAdjustmentSchema = ScheduleSchema.shape.donors.shape.weekday.pick({
   sport_fill: true,
 });
 
+/** schema_version 2: rev3 manifests (realized, no_video_spans, day slots; G25). */
 export const TimelineManifestSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(2),
   id: z.string(),
   revision: z.number().int().min(0),
   created_at: z.string(),
   versions: z.object({
-    schema: z.literal(1),
+    schema: z.literal(2),
     generator: z.string(),
     template: z.string(),
     gap_table: z.string(),
@@ -324,12 +325,12 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
     ...(p.sport_fill !== undefined ? { sport_fill: p.sport_fill } : {}),
   });
   return {
-    schema_version: 1,
+    schema_version: 2,
     id: t.id,
     revision: t.revision,
     created_at: now.toISOString(),
     versions: {
-      schema: 1,
+      schema: 2,
       generator: s.generator_version,
       template: s.template_version,
       gap_table: s.gap_table_version,

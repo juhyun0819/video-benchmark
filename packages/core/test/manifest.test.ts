@@ -81,6 +81,8 @@ describe("buildTimelineManifest", () => {
     const m = buildTimelineManifest(t, catalogOf(clips, annotations), NOW, TEMPLATES);
     expect(TimelineManifestSchema.parse(m)).toEqual(m);
     expect(m.created_at).toBe("2026-11-12T00:00:00.000Z");
+    expect(m.schema_version).toBe(2);
+    expect(m.versions).toMatchObject({ schema: 2, generator: "schedule.v2" });
     expect(m.days.map((d) => d.clips.length)).toEqual([4, 4]);
     const text = JSON.stringify(m, null, 2) + "\n";
     if (process.env.UPDATE_GOLDEN === "1") {

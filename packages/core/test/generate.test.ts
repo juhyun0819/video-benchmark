@@ -166,7 +166,7 @@ describe("generateSchedule", () => {
   it("28 days, slot ids unique, windows inside [wake, sleep], transitions match node changes", () => {
     const schedule = generateSchedule(input());
     expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
-    expect(schedule.generator_version).toBe("schedule.v1");
+    expect(schedule.generator_version).toBe("schedule.v2");
     expect(schedule.template_version).toBe("templates.v2");
     expect(schedule.gap_table_version).toBe("gaps.v1");
     expect(schedule.exception_catalog_version).toBe("exceptions.v1");

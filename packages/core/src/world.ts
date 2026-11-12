@@ -121,10 +121,21 @@ export const WorldSchema = z
   });
 export type World = z.infer<typeof WorldSchema>;
 
-/** Parses a world file; schema problems become WORLD_INVALID listing each `path: message`. */
+const WEEKEND_RENAMED_HINT = "hint: meal_style.weekend was renamed to meal_style.rest_day in rev3; rename it";
+
+/**
+ * Parses a world file; schema problems become WORLD_INVALID listing each `path: message`.
+ * A world written before rev3 (meal_style.weekend) gets a rename hint (G25).
+ */
 export function parseWorld(json: unknown): World {
   const r = WorldSchema.safeParse(json);
   if (r.success) return r.data;
   const issues = r.error.issues.map((i) => ({ path: i.path.join("."), message: i.message }));
-  throw new TimelineError("WORLD_INVALID", issues.map((i) => `${i.path}: ${i.message}`).join("; "), { issues });
+  const mealStyle = (json as { meal_style?: unknown } | null)?.meal_style;
+  const legacy = typeof mealStyle === "object" && mealStyle !== null && "weekend" in mealStyle;
+  const message = issues.map((i) => `${i.path}: ${i.message}`).join("; ");
+  throw new TimelineError("WORLD_INVALID", legacy ? `${message}; ${WEEKEND_RENAMED_HINT}` : message, {
+    issues,
+    ...(legacy ? { hint: WEEKEND_RENAMED_HINT } : {}),
+  });
 }

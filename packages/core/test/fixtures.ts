@@ -139,7 +139,7 @@ const donor = {
 export function makeSchedule(days = 28, defsFor: (d: number) => SlotDef[] | undefined = () => undefined): Schedule {
   return ScheduleSchema.parse({
     person_id: "p-fixture",
-    generator_version: "schedule.v1",
+    generator_version: "schedule.v2",
     template_version: "templates.fixture",
     gap_table_version: "gaps.fixture",
     gap_table_reviewed: false,

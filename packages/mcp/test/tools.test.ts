@@ -232,6 +232,51 @@ describe("timeline tools", () => {
     expect(textOf(r)).toMatch(/^WORLD_INVALID: meal_style\.rest_day\.lunch: /);
   });
 
+  it("a timeline saved before rev3 returns TIMELINE_INVALID with a regenerate hint; list_timelines skips and reports it (G25)", async () => {
+    const dataDir = setupDataDir();
+    let s = await open(dataDir);
+    const { timeline_id } = await createAndFill(s);
+    await s.close();
+    const file = join(dataDir, "timelines", `${timeline_id}.json`);
+    const old = JSON.parse(readFileSync(file, "utf8"));
+    old.schedule.generator_version = "schedule.v1";
+    writeFileSync(join(dataDir, "timelines", "old-1.json"), JSON.stringify({ ...old, id: "old-1" }));
+    writeFileSync(join(dataDir, "timelines", "broken.json"), "{ not json");
+    s = await open(dataDir);
+
+    const r = await s.call("get_timeline", { timeline_id: "old-1" });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toMatch(/^TIMELINE_INVALID: .*regenerate/);
+    expect(textOf(await s.call("get_timeline", { timeline_id: "broken" }))).toMatch(/^TIMELINE_INVALID: /);
+
+    const listed = await s.call("list_timelines");
+    expect(listed.isError).toBeFalsy();
+    const data = dataOf<{ timelines: { id: string }[]; skipped: { file: string; code: string }[] }>(listed);
+    expect(data.timelines.map((t) => t.id)).toEqual([timeline_id]);
+    expect(data.skipped.map((x) => [x.file, x.code])).toEqual([
+      ["broken.json", "TIMELINE_INVALID"],
+      ["old-1.json", "TIMELINE_INVALID"],
+    ]);
+    expect(textOf(listed)).toContain("skipped old-1.json: TIMELINE_INVALID");
+  });
+
+  it("list_worlds skips and reports an invalid world file; a meal_style.weekend world gets a rename hint (G25)", async () => {
+    const dataDir = setupDataDir();
+    const world = JSON.parse(readFileSync(EXAMPLE_WORLD, "utf8"));
+    world.person_id = "old-world";
+    world.meal_style.weekend = world.meal_style.rest_day;
+    delete world.meal_style.rest_day;
+    writeFileSync(join(dataDir, "worlds", "old-world.json"), JSON.stringify(world));
+    const s = await open(dataDir);
+    const listed = await s.call("list_worlds");
+    expect(listed.isError).toBeFalsy();
+    const data = dataOf<{ worlds: { person_id: string }[]; skipped: { file: string; code: string; message: string }[] }>(listed);
+    expect(data.worlds.map((w) => w.person_id)).toEqual([PERSON_ID]);
+    expect(data.skipped).toEqual([{ file: "old-world.json", code: "WORLD_INVALID", message: expect.stringContaining("rest_day") }]);
+    const r = await s.call("create_timeline", { person_id: "old-world" });
+    expect(textOf(r)).toMatch(/^WORLD_INVALID: .*renamed/);
+  });
+
   it("unknown world returns WORLD_NOT_FOUND", async () => {
     const dataDir = setupDataDir();
     const s = await open(dataDir);

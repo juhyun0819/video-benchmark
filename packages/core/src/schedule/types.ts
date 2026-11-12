@@ -265,7 +265,7 @@ export type Realized = z.infer<typeof RealizedSchema>;
 
 export const ScheduleSchema = z.object({
   person_id: z.string(),
-  generator_version: z.literal("schedule.v1"),
+  generator_version: z.literal("schedule.v2"),
   template_version: z.string(),
   gap_table_version: z.string(),
   gap_table_reviewed: z.boolean(),

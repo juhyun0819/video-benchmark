@@ -160,4 +160,14 @@ describe("WorldSchema", () => {
     delete w.meal_style.rest_day;
     expect(worldInvalid(w).issues.map((i) => i.path)).toContain("meal_style.rest_day");
   });
+
+  it("hints at the rest_day rename when meal_style.weekend is present (G25)", () => {
+    const w = world();
+    w.meal_style.weekend = w.meal_style.rest_day;
+    delete w.meal_style.rest_day;
+    expect(worldInvalid(w).message).toMatch(/meal_style\.weekend .*renamed.*meal_style\.rest_day/);
+    const other = world();
+    other.meal_style.rest_day.lunch = { home: 0.9 };
+    expect(worldInvalid(other).message).not.toContain("renamed");
+  });
 });
