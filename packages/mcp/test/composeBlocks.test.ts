@@ -567,8 +567,8 @@ describe("home fill from spare dates", () => {
     const edge = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("10:00", 30)])]);
     expect(edge.fills.map((f) => f.delta_min)).toEqual([180]);
     const out = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("10:01", 30)])]);
-    expect(out.fills).toEqual([]);
-    expect(out.entries).toEqual([]);
+    expect(out.fills.map((f) => f.fallback)).toEqual([true]); // only the B6b last resort takes it
+    expect(edge.fills[0]!.fallback).toBeUndefined();
   });
 
   it("never uses an assigned date as a spare", () => {
@@ -626,6 +626,50 @@ describe("home fill from spare dates", () => {
     expect(fill([tripDay, dayN(2, [MORNING])], [[1, "2026-06-29"], [2, "2026-05-01"]], clips).fills).toEqual([]);
     const spare = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:00", 30)])];
     expect(fill([tripDay], [[1, "2026-05-01"]], spare).fills).toEqual([]);
+  });
+
+  describe("B6b last-resort home_morning fill", () => {
+    const away = (at: string): Spec => ({ at, min: 30, node: "workplace" });
+    const A1 = [[1, "2026-05-01"]] as [number, string | null][];
+
+    it("fills a home_morning with no in-window candidate from a spare date whose home clips precede its first away clip", () => {
+      const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("11:40", 30), away("12:30")])];
+      const r = fill([dayN(1, [MORNING])], A1, clips);
+      expect(r.fills).toEqual([{ day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 280, seconds: 1800, fallback: true }]);
+      expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["11:40"]);
+    });
+
+    it("does not use home clips after the date's first away clip, or at/after 13:00", () => {
+      const afterAway = [...bare("2026-05-01"), ...rec("2026-05-02", [away("11:00"), home("11:40", 30)])];
+      expect(fill([dayN(1, [MORNING])], A1, afterAway).fills).toEqual([]);
+      const late = [...bare("2026-05-01"), ...rec("2026-05-02", [home("13:00", 30)])];
+      expect(fill([dayN(1, [MORNING])], A1, late).fills).toEqual([]);
+      const justBefore = fill([dayN(1, [MORNING])], A1, [...bare("2026-05-01"), ...rec("2026-05-02", [home("12:59", 30)])]);
+      expect(justBefore.fills.map((f) => f.fallback)).toEqual([true]);
+    });
+
+    it("never uses a date already taken by another day, nor fills non-morning slots", () => {
+      const clips = [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("11:40", 30), away("12:30")])];
+      const r = fill([dayN(1, [MORNING]), dayN(2, [MORNING])], [[1, "2026-05-01"], [2, "2026-05-03"]], clips);
+      expect(r.slots).toEqual(["d1-s1<-2026-05-02"]);
+      const evening = fill([dayN(1, [EVENING])], A1, [...bare("2026-05-01"), ...rec("2026-05-02", [home("11:40", 30)])]);
+      expect(evening.fills).toEqual([]);
+      // a date taken by a normal B6 fill of an earlier day is not reused by the fallback of a later day
+      const mixed = [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("07:10", 30), away("12:30")])];
+      const m = fill([dayN(1, [MORNING]), dayN(2, [MORNING])], [[1, "2026-05-01"], [2, "2026-05-03"]], mixed);
+      expect(m.slots).toEqual(["d1-s1<-2026-05-02"]);
+      expect(m.fills[0]!.fallback).toBeUndefined();
+    });
+
+    it("picks the date with the longest run, ties to the earlier date, and the run stops at gaps over 15 minutes", () => {
+      const base = bare("2026-05-01");
+      const longer = fill([dayN(1, [MORNING])], A1, [...base, ...rec("2026-05-02", [home("11:00", 20)]), ...rec("2026-05-03", [home("11:00", 20), home("11:25", 20)])]);
+      expect(longer.fills[0]!.from_date).toBe("2026-05-03");
+      const gap = fill([dayN(1, [MORNING])], A1, [...base, ...rec("2026-05-02", [home("11:00", 20)]), ...rec("2026-05-03", [home("11:00", 10), home("12:00", 15)])]);
+      expect(gap.fills[0]!.from_date).toBe("2026-05-02");
+      const tie = fill([dayN(1, [MORNING])], A1, [...base, ...rec("2026-05-04", [home("11:00", 20)]), ...rec("2026-05-03", [home("11:00", 20)])]);
+      expect(tie.fills[0]!.from_date).toBe("2026-05-03");
+    });
   });
 });
 
