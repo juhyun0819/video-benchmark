@@ -492,6 +492,23 @@ describe("generateSchedule", () => {
     }
   });
 
+  it("an early-sleeping donor with work to 21:00 generates at routine 0: days that do not fit redraw, then pull work_end (G21)", () => {
+    // Seed-242-like donor: wake 06:00, work 09:15-21:00, dinner 19:55, bed 21:15. At σ 45 no work_end
+    // passes the donor check (the dinner anchor alone ends after sleep - σ), so the donor is kept as drawn
+    // and most days' required slots only fit after the day-level check redraws or pulls work_end.
+    const inp = input({ day: 0, slot: 0, routine: 0, length: 84 }, {}, {
+      wake: 360, bed: 1275, work_start: 555, work_end: 1260, dinner_time: 1195, breakfast_time: 370, lunch_time: 720,
+    });
+    const schedule = generateSchedule(inp);
+    expect(schedule.days).toHaveLength(84);
+    const workdays = schedule.days.filter((d) => d.day_type === "workday");
+    for (const day of workdays) expect(day.slots.map((s) => s.role)).toContain("dinner");
+    const pulled = workdays.flatMap((d) => d.anchor_adjustments.filter((a) => a.item === "work_end"));
+    expect(pulled.length).toBeGreaterThan(0);
+    for (const a of pulled) expect(a.to).toBeLessThan(a.from);
+    expect(json(generateSchedule(inp))).toBe(json(schedule));
+  });
+
   it("a weekday donor whose required slots fit keeps adjustments [] (G9)", () => {
     const { weekday } = generateSchedule(input({ day: 0, slot: 0, routine: 1 })).donors;
     expect(weekday.redraws).toBe(0);

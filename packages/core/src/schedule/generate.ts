@@ -54,6 +54,8 @@ function daySigma(input: ScheduleInput): number {
 
 /** Redraws per anchor after its first draw before it falls back to a clamp (E6, G13). */
 const MAX_JITTER_REDRAWS = 5;
+/** Shortest workday the E5 work_end bound allows, in minutes after work_start. */
+const WORK_MIN_SPAN = 240;
 
 /** Template durations the bounds depend on: the workday lunch (R22) and the weekend hobby at sport (R25). */
 function boundMinutes(templates: Templates): { lunchMinutes: number; hobbyMinutes: number } {
@@ -92,6 +94,10 @@ function anchorsOf(p: DayProfile): DayAnchors {
  * order, each anchor the template uses is redrawn (keys "jitter", item, k for
  * k = 1..5) while it violates its own E5 bound given the anchors already
  * accepted; after that it is clamped to the bound and the clamp is recorded.
+ * On workdays work_end and dinner are also redrawn while the day's required
+ * slots do not lay out with its own gap draws (G21); if they still do not,
+ * work_end is pulled earlier to the latest integer minute (≥ work_start + 240)
+ * at which they do, recorded like a clamp.
  */
 function dayAnchors(
   input: ScheduleInput,
@@ -129,13 +135,17 @@ function dayAnchors(
   }
   const violation = (item: JitterItem) =>
     donorBoundViolations(kind, p, lunchMinutes, hobbyMinutes).find((v) => v.item === item);
+  // G21: the workday's required slots must lay out with the day's own gap draws.
+  const fits = (): boolean => !workday || layoutFits(input, anchorsOf(p), decisions, attempt);
+  const fitChecked = (item: JitterItem) => workday && (item === "work_end" || item === "dinner");
+  const rejected = (item: JitterItem) => violation(item) !== undefined || (fitChecked(item) && !fits());
 
   const adjustments: DonorAdjustment[] = [];
   let redraws = 0;
   for (const item of JITTER_ORDER) {
     const value = base[item];
     if (value === undefined || !checked.has(item)) continue;
-    for (let k = 1; k <= MAX_JITTER_REDRAWS && violation(item); k++) {
+    for (let k = 1; k <= MAX_JITTER_REDRAWS && rejected(item); k++) {
       p[item] = jitter(item, value, k);
       redraws += 1;
     }
@@ -145,7 +155,30 @@ function dayAnchors(
       adjustments.push({ item, from: v.value, to: v.bound });
     }
   }
+  if (workday && p.work_start !== undefined && p.work_end !== undefined && !fits()) {
+    const from = p.work_end;
+    for (let to = from - 1; to >= p.work_start + WORK_MIN_SPAN; to--) {
+      p.work_end = to;
+      if (fits()) {
+        adjustments.push({ item: "work_end", from, to });
+        return { anchors: anchorsOf(p), adjustments, redraws };
+      }
+    }
+    // Nothing fits: keep the drawn value and let the layout fail into an attempt retry.
+    p.work_end = from;
+  }
   return { anchors: anchorsOf(p), adjustments, redraws };
+}
+
+/** True when the day lays out (optional slots may be reduced); false when a required slot cannot fit. */
+function layoutFits(input: ScheduleInput, anchors: DayAnchors, decisions: DayDecisions, attempt: number): boolean {
+  try {
+    layoutDay(input, anchors, decisions, attempt);
+    return true;
+  } catch (e) {
+    if (isInfeasible(e)) return false;
+    throw e;
+  }
 }
 
 const isInfeasible = (e: unknown): e is TimelineError =>
@@ -187,7 +220,7 @@ function repairWorkEnd(input: ScheduleInput, pick: DonorPick): DonorPick {
   if (profile.work_start === undefined || profile.work_end === undefined) return pick;
   if (requiredWorkdaySlotsFit(input, profile)) return pick;
   const from = profile.work_end;
-  const floor = Math.ceil(profile.work_start + 240);
+  const floor = Math.ceil(profile.work_start + WORK_MIN_SPAN);
   for (let to = Math.ceil(from) - 1; to >= floor; to--) {
     const candidate = { ...profile, work_end: to };
     if (requiredWorkdaySlotsFit(input, candidate)) {
