@@ -255,6 +255,46 @@
       "sleep": "23:00",
       "coverage_ratio": 0.25,
       "exceptions": [],
+      "slot_exception_eligible": false,
+      "slot_exception_candidates": 0,
+      "slots": [
+        {
+          "slot_id": "d1-s1",
+          "role": "home_morning",
+          "required": true,
+          "window": [
+            "07:00",
+            "08:00"
+          ]
+        },
+        {
+          "slot_id": "d1-s2",
+          "role": "work_am",
+          "required": true,
+          "window": [
+            "09:00",
+            "12:00"
+          ]
+        },
+        {
+          "slot_id": "d1-s3",
+          "role": "lunch",
+          "required": false,
+          "window": [
+            "12:00",
+            "13:00"
+          ]
+        },
+        {
+          "slot_id": "d1-s4",
+          "role": "work_pm",
+          "required": true,
+          "window": [
+            "13:00",
+            "17:00"
+          ]
+        }
+      ],
       "dropped_slots": [],
       "dropped_optional": [],
       "anchor_adjustments": [],
@@ -436,6 +476,46 @@
       "sleep": "23:00",
       "coverage_ratio": 0.25,
       "exceptions": [],
+      "slot_exception_eligible": false,
+      "slot_exception_candidates": 0,
+      "slots": [
+        {
+          "slot_id": "d2-s1",
+          "role": "home_morning",
+          "required": true,
+          "window": [
+            "07:00",
+            "08:00"
+          ]
+        },
+        {
+          "slot_id": "d2-s2",
+          "role": "work_am",
+          "required": true,
+          "window": [
+            "09:00",
+            "12:00"
+          ]
+        },
+        {
+          "slot_id": "d2-s3",
+          "role": "lunch",
+          "required": false,
+          "window": [
+            "12:00",
+            "13:00"
+          ]
+        },
+        {
+          "slot_id": "d2-s4",
+          "role": "work_pm",
+          "required": true,
+          "window": [
+            "13:00",
+            "17:00"
+          ]
+        }
+      ],
       "dropped_slots": [],
       "dropped_optional": [],
       "anchor_adjustments": [],

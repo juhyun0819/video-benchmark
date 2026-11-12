@@ -12,6 +12,7 @@ import {
   type ClipCatalog,
   type Timeline,
   TemplatesSchema,
+  realizedOf,
 } from "../src/index.js";
 import { clip, genId, makeSchedule, makeWorld, type SlotDef } from "./fixtures.js";
 
@@ -219,5 +220,22 @@ describe("buildTimelineManifest", () => {
     const none = buildTimelineManifest(build(1).t, catalogOf(build(1).clips), NOW, TEMPLATES);
     expect(none.realized.matching_dropped_slots).toBe(0);
     expect(none.realized.matching_dropped_by_role).toEqual({});
+  });
+
+  it("days carry slot_exception_eligible/candidates and slot windows, so realized recounts from the manifest alone (G24)", () => {
+    const { t, clips } = build(3);
+    t.schedule.days[1] = { ...t.schedule.days[1]!, slot_exception_eligible: true, slot_exception_candidates: 2 };
+    t.schedule.days[2] = { ...t.schedule.days[2]!, slot_exception_eligible: true, slot_exception_candidates: 1 };
+    t.slots["d3-s3"] = { clip_ids: [], relaxations: ["dropped_optional"] };
+    const m = buildTimelineManifest(t, catalogOf(clips.filter((c) => c.clip_id !== "d3-lunch")), NOW, TEMPLATES);
+    expect(TimelineManifestSchema.parse(m)).toEqual(m);
+    expect(m.days[1]).toMatchObject({ slot_exception_eligible: true, slot_exception_candidates: 2 });
+    expect(m.days[0]!.slots).toEqual(
+      t.schedule.days[0]!.slots.map(({ slot_id, role, required, window }) => ({ slot_id, role, required, window })),
+    );
+    const { matching_dropped_slots: _n, matching_dropped_by_role: _r, ...realized } = m.realized;
+    expect(realizedOf(m.days, m.inputs.world, TEMPLATES)).toEqual(realized);
+    expect(realized.slot_exception_eligible_days).toBe(2);
+    expect(realized.slot_exception_share).toBe(0);
   });
 });

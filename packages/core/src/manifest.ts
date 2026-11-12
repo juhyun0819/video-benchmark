@@ -11,6 +11,7 @@ import {
   DayTypeSchema,
   ExceptionSchema,
   RealizedSchema,
+  SlotSchema,
   type ScheduleDay,
   type Templates,
 } from "./schedule/types.js";
@@ -88,6 +89,11 @@ export const ManifestDaySchema = z.object({
   sleep: z.string(),
   coverage_ratio: z.number(),
   exceptions: z.array(ExceptionSchema),
+  /** As in schedule.json (E1); with `slots` they let realized be recounted from the manifest (G24). */
+  slot_exception_eligible: z.boolean(),
+  slot_exception_candidates: z.number().int().min(0),
+  /** The day's scheduled slots, including ones left empty at matching time. */
+  slots: z.array(SlotSchema.pick({ slot_id: true, role: true, required: true, window: true })),
   dropped_slots: ScheduleSchema.shape.days.element.shape.dropped_slots,
   /** Roles of slots left empty at matching time (relaxation "dropped_optional", D10, R27, R48). */
   dropped_optional: z.array(z.string()),
@@ -282,6 +288,9 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       sleep: day.sleep,
       coverage_ratio: awake > 0 ? round3(seconds / awake) : 0,
       exceptions: day.exceptions,
+      slot_exception_eligible: day.slot_exception_eligible,
+      slot_exception_candidates: day.slot_exception_candidates,
+      slots: day.slots.map(({ slot_id, role, required, window }) => ({ slot_id, role, required, window })),
       dropped_slots: day.dropped_slots,
       dropped_optional: day.slots
         .filter((s) => t.slots[s.slot_id]?.relaxations.includes("dropped_optional"))

@@ -1,8 +1,9 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { TimelineManifestSchema, TimelineSchema, WorldSchema } from "@vb/core";
+import { TemplatesSchema, TimelineManifestSchema, TimelineSchema, WorldSchema, realizedOf } from "@vb/core";
 import {
+  CONFIG_DIR,
   EXAMPLE_WORLD,
   PERSON_ID,
   POOL_REL,
@@ -96,6 +97,11 @@ describe("timeline tools", () => {
     expect(exported.captions).toBe(manifest.captions.length);
     expect(exported.captions).toBeGreaterThan(0);
     expect(exported.coverage_mean).toBeGreaterThan(0);
+
+    // G24: realized recounts from the manifest alone (days, world, templates).
+    const templates = TemplatesSchema.parse(JSON.parse(readFileSync(join(CONFIG_DIR, "timeline", "templates.v2.json"), "utf8")));
+    const { matching_dropped_slots: _n, matching_dropped_by_role: _r, ...realized } = manifest.realized;
+    expect(realizedOf(manifest.days, manifest.inputs.world, templates)).toEqual(realized);
   });
 
   it("assign with stale expected_revision returns REVISION_MISMATCH and does not save", async () => {

@@ -7,9 +7,19 @@ import {
   type ExceptionCatalog,
   type Realized,
   type ScheduleDay,
+  type Slot,
   type TemplateName,
   type Templates,
 } from "./types.js";
+
+/**
+ * What realizedOf reads from a day: a schedule day, or a manifest day, which
+ * carries the same fields (G24) so realized can be recounted from a manifest.
+ */
+export type RealizedDay = Pick<
+  ScheduleDay,
+  "weekday" | "day_type" | "exceptions" | "slot_exception_eligible" | "slot_exception_candidates" | "dropped_slots"
+> & { slots: readonly Pick<Slot, "role" | "required" | "window">[] };
 
 /** Base day type of every catalog day exception (ExceptionCatalogSchema fixes it to workday). */
 const DAY_EXCEPTION_FROM: ExceptionCatalog["day"][number]["from_day_type"] = "workday";
@@ -20,7 +30,7 @@ const templateOf = (dayType: DayType): TemplateName => (dayType === "leave_day" 
 const ratio = (n: number, d: number): number | null => (d === 0 ? null : n / d);
 
 /** Days that copy the same routine reference (D14): the same weekday on workdays, the same day type otherwise (G15). */
-const sameReference = (a: ScheduleDay, b: ScheduleDay): boolean =>
+const sameReference = (a: RealizedDay, b: RealizedDay): boolean =>
   a.day_type === b.day_type && (a.day_type !== "workday" || a.weekday === b.weekday);
 
 function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
@@ -47,8 +57,8 @@ type ConsistencyValues = Omit<CompositionConsistency, "same_reference">;
 
 /** E2 over the pairs of the given days, which share one template, for which `paired` holds; null without pairs. */
 function consistency(
-  days: readonly ScheduleDay[],
-  paired: (a: ScheduleDay, b: ScheduleDay) => boolean = () => true,
+  days: readonly RealizedDay[],
+  paired: (a: RealizedDay, b: RealizedDay) => boolean = () => true,
 ): ConsistencyValues | null {
   const views = days.map((d) => ({
     optional: new Set(d.slots.filter((s) => !s.required).map((s) => s.role)),
@@ -87,17 +97,19 @@ function consistency(
 /**
  * `realized` for a schedule's days (CR1, E1, E2, G14): what the dials
  * produced, counted from the days alone. Key order is fixed; a ratio with a zero denominator is null.
+ * Slots left empty at matching time still count as kept here (G24): presence and consistency
+ * describe the schedule before matching; the manifest reports matching drops separately.
  */
-export function realizedOf(days: readonly ScheduleDay[], world: World, templates: Templates): Realized {
-  const hasSlotException = (d: ScheduleDay) => d.exceptions.some((e) => e.scope === "slot");
+export function realizedOf(days: readonly RealizedDay[], world: World, templates: Templates): Realized {
+  const hasSlotException = (d: RealizedDay) => d.exceptions.some((e) => e.scope === "slot");
   const eligible = days.filter((d) => d.slot_exception_eligible);
   const slotExceptionList = days.flatMap((d) => d.exceptions.filter((e) => e.scope === "slot"));
   const slotExceptions = slotExceptionList.length;
   const noops = slotExceptionList.filter((e) => e.routine_place === e.meal_place).length;
   const candidates = days.reduce((s, d) => s + d.slot_exception_candidates, 0);
 
-  const dayException = (d: ScheduleDay) => d.exceptions.find((e) => e.scope === "day");
-  const baseType = (d: ScheduleDay) => dayException(d)?.replaces ?? d.day_type;
+  const dayException = (d: RealizedDay) => d.exceptions.find((e) => e.scope === "day");
+  const baseType = (d: RealizedDay) => dayException(d)?.replaces ?? d.day_type;
   const dayExceptionBase = days.filter((d) => baseType(d) === DAY_EXCEPTION_FROM);
 
   // Roles in template order; [kept, days whose template has the role as optional].
