@@ -39,7 +39,10 @@ function composeBlocksCli(worldPath: string, { dataDir, configDir }: Dirs, outDi
   // Block mode: t.slots stay empty; the placements are the source of truth.
   const id = `${world.person_id}-${randomUUID().slice(0, 8)}`;
   const build = (w: World) => createTimeline(w, generateSchedule(scheduleInput(config, w)), () => id);
-  const { timeline: t, placements, summary, slot_overrides } = composeBlocksFit(build(world), catalog, fitRoles, build);
+  const { timeline: t, placements, summary, slot_overrides, fitted } = composeBlocksFit(build(world), catalog, fitRoles, build);
+  for (const r of fitRoles) {
+    if (!fitted.some((f) => f.role === r)) process.stderr.write(`warning: --fit-roles ${r}: no clips are bound to its slots, nothing was fitted\n`);
+  }
   const report = verifyTimeline(t, catalog, { mode: "block", placements });
   if (!report.pass) {
     const failed_rules = RULE_IDS.filter((r) => !report.rules[r].pass);

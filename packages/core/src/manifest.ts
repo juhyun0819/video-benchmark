@@ -191,7 +191,12 @@ function noVideoSpans(day: ScheduleDay, clipSpans: ReadonlyMap<string, [number, 
   const wake = base + minutes(day.wake) * 60;
   const sleep = base + minutes(day.sleep) * 60;
   const slots = slotsByStart(day);
-  const transitionIds = new Map(transitionBlocks(day).map((x) => [`${x.from_slot}>${x.to_slot}`, x.transition_id]));
+  // Duplicate from/to pairs: the first transition owns the span (as in transitionBlocks).
+  const transitionIds = new Map<string, string>();
+  for (const x of transitionBlocks(day)) {
+    const k = `${x.from_slot}>${x.to_slot}`;
+    if (!transitionIds.has(k)) transitionIds.set(k, x.transition_id);
+  }
   /** Walks [from, to) and pushes the parts not covered by the block's clips as `kind`. */
   const uncovered = (id: string | undefined, from: number, to: number, kind: NoVideoSpan["kind"]) => {
     let cursor = from;

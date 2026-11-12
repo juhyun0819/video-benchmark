@@ -7,6 +7,7 @@ import {
   TimelineManifestSchema,
   buildTimelineManifest,
   createTimeline,
+  layoutBlocks,
   type Annotation,
   type Clip,
   type ClipCatalog,
@@ -91,6 +92,21 @@ describe("buildTimelineManifest", () => {
     }
     expect(existsSync(SNAPSHOT), `${SNAPSHOT} is missing; run with UPDATE_GOLDEN=1 to write it`).toBe(true);
     expect(text).toBe(readFileSync(SNAPSHOT, "utf8"));
+  });
+
+  it("duplicate from/to transitions: the first transition id owns the span (as in transitionBlocks)", () => {
+    const { t, clips } = build(1);
+    t.schedule.days[0]!.transitions = [
+      { from_slot: "d1-s1", to_slot: "d1-s2", minutes: 30 },
+      { from_slot: "d1-s1", to_slot: "d1-s2", minutes: 10 },
+    ];
+    const clip = mk("d1-transit", { node: "transit", day_group: "g1" });
+    const catalog = catalogOf([...clips, clip]);
+    // a 10 min clip in the first transition block (d1-t1, 08:30-09:00)
+    const placements = layoutBlocks(t, catalog, [{ slot_id: "d1-t1", clip_id: clip.clip_id, source_start_s: clip.source_start_s, source_end_s: clip.source_start_s + 600 }]);
+    const m = buildTimelineManifest(t, catalog, NOW, TEMPLATES, { placements });
+    const tr = m.days[0]!.no_video_spans.filter((s) => s.kind === "transition");
+    expect(tr).toEqual([{ start: 8.5 * HOUR + 600, end: 9 * HOUR, kind: "transition" }]);
   });
 
   it("caption clipped at clip edge keeps clipped flag", () => {

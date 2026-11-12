@@ -4,6 +4,7 @@ import {
   layoutBlocks,
   parseClock,
   rngFor,
+  TimelineError,
   transitionBlocks,
   type BlockPlacement,
   type BlockPlanEntry,
@@ -430,6 +431,10 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   /** Real-phase candidates of a slot, before removing used clips; `run` keeps only the first run. */
   function phase(slot: Slot): { cands: RealClip[]; run: boolean } {
     const bound = (c: RealClip) => bindingAccepts(world, slot.spec.node, c.clip);
+    // The exercise slot is found by binding (as exerciseNodeOf does), not by its role name.
+    if (eveningNodes(world).has(slot.role) && world.node_binding[slot.spec.node]?.person_source === personSourceOf(world)) {
+      return { cands: exerciseCands(slot), run: false };
+    }
     switch (slot.role) {
       case "breakfast":
         return { cands: meals.filter(inRange(-Infinity, H(11))), run: true };
@@ -462,8 +467,6 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
         return { cands: clips.filter(bound), run: true };
       case "outing_pm":
         return { cands: clips.filter((c) => bound(c) && c.start >= lunchStart), run: false };
-      case "exercise":
-        return { cands: exerciseCands(slot), run: false };
       default:
         // hobby (B15: eveningFill) and any other role stay empty here.
         return { cands: [], run: false };
@@ -764,7 +767,7 @@ export function participantOf(c: Clip): string {
  *
  * B10 with B14: every evening-activity slot whose node is not bound to the NextMe person (hobby_2:
  * Ego-Exo4D) and that has no planned footage takes whole catalog takes accepted by its binding. Takes
- * are the binding's clips grouped by video, in an order shuffled with rngFor(seed, "hobby_2"). The
+ * are the binding's clips grouped by video, in an order shuffled with rngFor(seed, "activity", node). The
  * takes are dealt round-robin over the node's slots (days in index order, slots in window order), one
  * take per slot per round, until every slot is full or no take is left, so the takes spread evenly.
  * A slot takes a take of the participant it already has (participantOf) first; otherwise, of the
@@ -812,7 +815,7 @@ export function eveningFill(
       return videos.flatMap((v) => byVideo.get(v)!.sort(cmp).map((c) => [c]));
     }
     const list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort(cmp));
-    const rng = rngFor(world.seed, "hobby_2");
+    const rng = rngFor(world.seed, "activity", node);
     for (let i = list.length - 1; i > 0; i--) {
       const j = rng.int(0, i + 1);
       [list[i], list[j]] = [list[j]!, list[i]!];
@@ -985,9 +988,12 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
   const per_day = t.schedule.days.map((day): DaySummary => {
     const ps = placements.filter((p) => p.day_index === day.day_index);
     const filled = new Set(ps.map((p) => p.slot_id));
-    const real = ps.map((p) => {
-      const at = realStartOf(p.clip)! - p.clip.source_start_s;
-      return [at + p.source_start_s, at + p.source_end_s] as const;
+    // Only the wearer's own clips have a real time (youtube / Ego-Exo4D clips have no wall clock).
+    const real = ps.flatMap((p) => {
+      const start = realStartOf(p.clip);
+      if (start === undefined) return [];
+      const at = start - p.clip.source_start_s;
+      return [[at + p.source_start_s, at + p.source_end_s] as const];
     });
     const activities = day.slots
       .filter((s) => eveningRoles.has(s.role))
@@ -1021,6 +1027,9 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
   };
 }
 
+/** B17: the roles that can be fitted (the per-clip hobby path). */
+export const FIT_ROLES: ReadonlySet<string> = new Set([HOBBY_ROLE]);
+
 export type FitResult = ComposeResult & {
   timeline: Timeline;
   /** B17: the overrides written into the world (empty when nothing was fitted). */
@@ -1030,7 +1039,10 @@ export type FitResult = ComposeResult & {
 const fitError = (overrides: readonly SlotOverride[], cause: unknown): Error => {
   const list = overrides.map((o) => `day ${o.day_index} ${o.role} ${o.duration_min} min`).join(", ");
   const why = cause instanceof Error ? cause.message : String(cause);
-  return new Error(`fit_roles: the schedule cannot hold the fitted slots (${list}): ${why}`);
+  const message = `fit_roles: the schedule cannot hold the fitted slots (${list}): ${why}`;
+  // Keep the machine-readable code and details of a core failure.
+  if (cause instanceof TimelineError) return new TimelineError(cause.code, message, { ...cause.details, fitted: overrides.map((o) => ({ ...o })) });
+  return new Error(message);
 };
 
 /**
@@ -1045,6 +1057,8 @@ export function composeBlocksFit(
   fitRoles: readonly string[],
   regenerate: (world: World) => Timeline,
 ): FitResult {
+  const bad = fitRoles.filter((r) => !FIT_ROLES.has(r));
+  if (bad.length > 0) throw new Error(`fit_roles: unsupported role ${bad.map((r) => JSON.stringify(r)).join(", ")}; supported: ${[...FIT_ROLES].join(", ")}`);
   const first = composeBlocks(t, catalog, { fit_roles: fitRoles });
   if (fitRoles.length === 0 || first.fitted.length === 0) return { ...first, timeline: t, slot_overrides: [] };
   const computed: SlotOverride[] = first.fitted.map((f) => ({ day_index: f.day_index, role: f.role, duration_min: f.duration_min }));

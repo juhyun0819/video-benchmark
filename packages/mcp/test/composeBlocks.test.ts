@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  TimelineError,
   TimelineManifestSchema,
   createTimeline,
   generateSchedule,
@@ -1144,6 +1145,43 @@ describe("evening activities (B10)", () => {
     expect(eveningFill(days, [], new MemCatalog(clips), world)).toEqual(r);
   });
 
+  it("planDay: the exercise slot is found by its binding, so a role named workout works", () => {
+    const w = parseWorld({
+      ...eveningWorld(),
+      dials: { ...eveningWorld().dials, evening_activities: EVENING.map((a) => (a.role === "exercise" ? { ...a, role: "workout" } : a)) },
+    } as never);
+    const day = mkDay("workday", [slot(1, "work_pm", "workplace", "12:45", "17:00"), hobbySlot(2, "workout", "gym_1", "17:30", "19:30")], [[1, 2, 40]]);
+    expect(byBlock(w, day, gymDate("2026-05-05"), "2026-05-05")).toMatchObject({ "d1-s2": ["17:05", "17:40"], "d1-t1": ["16:50"] });
+  });
+
+  it("eveningFill: each non-wearer node shuffles with its own key, so equal take lists get different orders", () => {
+    const base = worldJson({ trip: false });
+    base.nodes.hobby_2 = { kind: "hobby", activity: "guitar", setting: "venue_indoor", weekly_freq: 0, tags: ["music_guitar"] };
+    base.nodes.hobby_3 = { kind: "hobby", activity: "piano", setting: "venue_indoor", weekly_freq: 0, tags: ["music_piano"] };
+    base.node_binding.hobby_2 = { dataset: ["egoexo4d"], tags_any: ["music_guitar"] };
+    base.node_binding.hobby_3 = { dataset: ["egoexo4d"], tags_any: ["music_piano"] };
+    base.dials.evening_activities = [
+      { node: "hobby_2", role: "hobby_2", position: "after_dinner", duration_min: 45, weekdays: ["Mon"] },
+      { node: "hobby_3", role: "hobby_3", position: "after_dinner", duration_min: 45, weekdays: ["Tue"] },
+    ];
+    const w = parseWorld(base);
+    const names = Array.from({ length: 8 }, (_, i) => `tk${i}`);
+    const clips = names.flatMap((n) => [
+      ...guitar(n, `g-${n}`, 1, 30),
+      ...guitar(`${n}p`, `p-${n}`, 1, 30).map((c): Clip => ({ ...c, tags: ["music_piano"] })),
+    ]);
+    const mk = (n: number, role: string): ScheduleDay => {
+      const s = { ...hobbySlot(1, role, role, "19:30", "20:15"), slot_id: `d${n}-s1` };
+      return { ...mkDay("workday", [s]), day_index: n, slots: [s] };
+    };
+    const days = [...names.map((_, i) => mk(i + 1, "hobby_2")), ...names.map((_, i) => mk(i + 9, "hobby_3"))];
+    const r = eveningFill(days, [], new MemCatalog(clips), w);
+    const order = (role: string) => r.takes.filter((x) => x.role === role).sort((a, b) => a.day_index - b.day_index).map((x) => x.take.replace(/p$/, ""));
+    expect(order("hobby_2")).toHaveLength(8);
+    expect(order("hobby_3")).toHaveLength(8);
+    expect(order("hobby_2")).not.toEqual(order("hobby_3"));
+  });
+
   it("B12: an exercise day takes a gym date for its 10 h bonus over a date that fills more of its other blocks", () => {
     const sparseGym = [...rec("2026-05-05", [{ at: "09:00", min: 60, node: "workplace" }]), ...gymDate("2026-05-05").filter((c) => c.clip_id.includes("-gym:"))];
     const dates = collectDates(new MemCatalog([...workDate("2026-05-04", { extraWork: 120 }), ...sparseGym]), world);
@@ -1308,6 +1346,14 @@ describe("evening activities (B10)", () => {
       expect(result.summary.per_day.every((d) => d.evening === d.activities)).toBe(true);
       const used = result.placements.filter((p) => p.clip.source.dataset === "youtube").map((p) => p.clip.clip_id);
       expect(new Set(used).size).toBe(used.length);
+      // youtube clips have no wall clock: no summary field may be NaN, and a day with only such clips has no real time
+      expect(JSON.stringify(result.summary)).not.toContain("NaN");
+      const hobbyDays = result.summary.per_day.filter((d) => d.activities.some((a) => a.role === "hobby"));
+      expect(hobbyDays.length).toBeGreaterThan(0);
+      for (const d of result.summary.per_day) {
+        expect(d.first_real === null || /^\d\d:\d\d/.test(d.first_real)).toBe(true);
+        expect(d.last_real === null || /^\d\d:\d\d/.test(d.last_real)).toBe(true);
+      }
     });
 
     describe("fit_roles (B17)", () => {
@@ -1393,6 +1439,47 @@ describe("evening activities (B10)", () => {
             throw new Error("SCHEDULE_INFEASIBLE");
           }),
         ).toThrow(/day \d+ hobby 133 min/);
+      });
+
+      it("keeps the TimelineError code and details of a core failure", () => {
+        const { w, build, catalog } = setup();
+        let caught: unknown;
+        try {
+          composeBlocksFit(build(w), catalog, ["hobby"], () => {
+            throw new TimelineError("SCHEDULE_INFEASIBLE", "no room", { day_index: 4 });
+          });
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeInstanceOf(TimelineError);
+        const e = caught as TimelineError;
+        expect(e.code).toBe("SCHEDULE_INFEASIBLE");
+        expect(e.details.day_index).toBe(4);
+        expect(e.message).toMatch(/day \d+ hobby 133 min.*no room/);
+      });
+
+      it("rejects a role that cannot be fitted", () => {
+        const { w, build, catalog } = setup();
+        expect(() => composeBlocksFit(build(w), catalog, ["exercise"], build)).toThrow(/unsupported role "exercise"/);
+      });
+
+      it("CLI --fit-roles: an unsupported role fails; a hobby role without bound clips warns on stderr, stdout stays JSON", { timeout: 120_000 }, () => {
+        const dataDir = makeTempDir();
+        writeAtusPool(dataDir);
+        const work = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+        const rest = Array.from({ length: 10 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+        writeDataset(dataDir, "nextme800", [...work.flatMap((d) => workDate(d)), ...rest.flatMap((d) => restDate(d))]);
+        writeDataset(dataDir, "youtube", []);
+        const worldFile = join(makeTempDir(), "world.json");
+        writeFileSync(worldFile, JSON.stringify(hobbyWorld(true)), "utf8");
+        const base = ["--world", worldFile, "--data", dataDir, "--config", CONFIG_DIR];
+        const bad = run([...base, "--out", makeTempDir(), "--fit-roles", "exercise"]);
+        expect(bad.status).toBe(1);
+        expect(bad.stderr).toMatch(/unsupported role/);
+        const none = run([...base, "--out", makeTempDir(), "--fit-roles", "hobby"]);
+        expect(none.status, none.stderr).toBe(0);
+        expect(none.stderr).toMatch(/warning: --fit-roles hobby: no clips/);
+        expect(JSON.parse(none.stdout).slot_overrides).toEqual([]);
       });
     });
   });
