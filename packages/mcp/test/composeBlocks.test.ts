@@ -721,6 +721,17 @@ describe("narrative coherence (B19, B20)", () => {
     expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["13:30"] });
   });
 
+  it("rejects a produce-stall home clip from home_afternoon and a returning-home clip from home_morning", () => {
+    const afternoon = mkDay("home_day", [slot(1, "home_afternoon", "home", "13:00", "16:00")]);
+    let clips = rec("2026-05-09", [{ at: "13:00", min: 20, node: "home" }, { at: "13:30", min: 20, node: "home" }]);
+    clips = text(clips, "13:00", "I purchase pork belly at the produce stall.");
+    expect(byBlock(world, afternoon, clips, "2026-05-09")).toEqual({ "d1-s1": ["13:30"] });
+    const morning = mkDay("home_day", [slot(1, "home_morning", "home", "08:00", "11:00")]);
+    clips = rec("2026-05-09", [{ at: "08:00", min: 20, node: "home" }, { at: "08:30", min: 20, node: "home" }]);
+    clips = text(clips, "08:00", "I examine items on the dining table upon returning home.");
+    expect(byBlock(world, morning, clips, "2026-05-09")).toEqual({ "d1-s1": ["08:30"] });
+  });
+
   it("rejects a scooter errand workplace clip from work_am", () => {
     const day = mkDay("workday", [slot(1, "work_am", "workplace", "08:30", "12:00")]);
     let clips = rec("2026-05-04", [{ at: "09:00", min: 20, node: "workplace" }, { at: "09:30", min: 20, node: "workplace" }]);

@@ -336,9 +336,9 @@ Tests:
 ## Addendum 7 (2026-11-13): narrative coherence (per-day audit)
 
 - **B19. Stricter slot content.** All matching is whole-word and case-insensitive on the clip's L3 `activity`. It extends B18.
-  - **HOME_REJECT (home_*, chores):** B18 COMMUTE plus walk, walks, walking, street, streets, market, campus, university, library, mall, store, shop, shopping, supermarket, plaza, plazas, navigate, navigates, outdoor, outdoors, tram, elevator, arrive, arrives, arrival, journey, departure.
+  - **HOME_REJECT (home_*, chores):** B18 COMMUTE plus walk, walks, walking, street, streets, market, campus, university, library, mall, store, shop, shopping, supermarket, plaza, plazas, navigate, navigates, outdoor, outdoors, tram, elevator, arrive, arrives, arrival, journey, departure, returning, returned, arriving, arrived, stall, stalls, vendor, vendors, transit.
   - **WORK_REJECT (work_am, work_pm):** B18 COMMUTE plus tram, exit, exits, departure, supermarket, mall, store, shopping, food.
-  - **EATING:** add food (so "wait for my food order" is a meal scene).
+  - **EATING:** add food (so "wait for my food order" is a meal scene), sushi, sashimi.
   - **Meal slots:**
     - The planned run must contain at least one EAT_ACT clip: eat, eats, eating, ate, dine, dines, dining, consume, consumes, consuming, cook, cooks, cooking, cooked, buffet.
     - Keep only the clips from one clip before the first EAT_ACT clip to one clip after the last.

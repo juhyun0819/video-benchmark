@@ -35,12 +35,12 @@ const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
 /** B18: whole-word, case-insensitive word sets matched against a clip's own L3 sentence (`activity`). */
 const EATING = new Set(
-  "eat eats eating ate meal meals breakfast lunch dinner supper snack snacks cook cooks cooking cooked restaurant canteen cafeteria diner eatery noodle noodles dumpling dumplings rice bun buns fry fries frying pancake pancakes food".split(" "),
+  "eat eats eating ate meal meals breakfast lunch dinner supper snack snacks cook cooks cooking cooked restaurant canteen cafeteria diner eatery noodle noodles dumpling dumplings rice bun buns fry fries frying pancake pancakes food sushi sashimi".split(" "),
 );
 const COMMUTE = new Set("commute commuting travel travels traveling depart departs leave leaves return returns mtr bus train taxi scooter station".split(" "));
 /** B19: extra words a home slot rejects (outdoor, shopping and arrival scenes). */
 const HOME_REJECT = new Set(
-  [...COMMUTE, ..."walk walks walking street streets market campus university library mall store shop shopping supermarket plaza plazas navigate navigates outdoor outdoors tram elevator arrive arrives arrival journey departure".split(" ")],
+  [...COMMUTE, ..."walk walks walking street streets market campus university library mall store shop shopping supermarket plaza plazas navigate navigates outdoor outdoors tram elevator arrive arrives arrival journey departure returning returned arriving arrived stall stalls vendor vendors transit".split(" ")],
 );
 /** B19: words a work slot rejects (errands, commutes, food runs). */
 const WORK_REJECT = new Set([...COMMUTE, ..."tram exit exits departure supermarket mall store shopping food".split(" ")]);
