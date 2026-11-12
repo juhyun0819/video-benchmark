@@ -702,6 +702,22 @@ describe("home fill from spare dates", () => {
     expect(r.slots).toEqual(["d1-s1<-2026-05-02", "d1-s2<-2026-05-02"]);
   });
 
+  it("fills home_morning slots of all days (B6, then B6b) before any other home slot", () => {
+    // 05-02 is the only spare with morning home footage; day 1's evening would take it first in day order.
+    const two: [number, string | null][] = [[1, "2026-05-01"], [2, "2026-05-03"]];
+    const days = [dayN(1, [EVENING]), dayN(2, [MORNING])];
+    const evening = rec("2026-05-04", [home("20:50", 30)]);
+    const b6 = fill(days, two, [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("07:10", 30), home("20:40", 30)]), ...evening]);
+    expect(b6.slots).toEqual(["d2-s1<-2026-05-02", "d1-s2<-2026-05-04"]);
+    // the same when day 2's morning can only take 05-02 as the B6b last resort
+    const b6b = fill(days, two, [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("11:40", 30), home("20:40", 30)]), ...evening]);
+    expect(b6b.slots).toEqual(["d2-s1<-2026-05-02", "d1-s2<-2026-05-04"]);
+    expect(b6b.fills.map((f) => f.kind)).toEqual(["home_fallback", "home"]);
+    // a day's morning spare date is preferred for its later home slots
+    const same = fill([dayN(1, [MORNING, EVENING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("11:40", 30), home("20:45", 30)]), ...rec("2026-05-03", [home("20:40", 30)])]);
+    expect(same.slots).toEqual(["d1-s1<-2026-05-02", "d1-s2<-2026-05-02"]);
+  });
+
   it("gives the spare date to the first day in index order and the next spare to the second day", () => {
     const clips = [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("07:00", 30)]), ...rec("2026-05-04", [home("07:20", 30)])];
     const r = fill([dayN(2, [MORNING]), dayN(1, [MORNING])], [[1, "2026-05-01"], [2, "2026-05-03"]], clips);
@@ -845,6 +861,15 @@ describe("top-up fills from spare dates (B13)", () => {
     const sameDay = topUp([dayN(1, [MORNING, PM])], [[1, "2026-05-04"]], [...own, ...spare]);
     expect(sameDay.home.fills.map((f) => f.from_date)).toEqual(["2026-05-06"]);
     expect(sameDay.slots).toEqual(["d1-s1<-2026-05-06"]);
+  });
+
+  it("ranks top-up runs by whole minutes placed, then the day's own spare date, then the smaller |Δt|", () => {
+    // 05-06 already serves day 1 (B6 morning); 05-05 places 20 s more and starts closer, but not a minute more.
+    const ownSpare = rec("2026-05-06", [{ at: "07:00", min: 30, node: "home" }, work("14:15", 60)]);
+    const closer = (min: number) => rec("2026-05-05", [work("13:45", min)]);
+    const days = [dayN(1, [MORNING, PM])];
+    expect(topUp(days, [[1, "2026-05-04"]], [...own, ...ownSpare, ...closer(60 + 1 / 3)]).slots).toEqual(["d1-s1<-2026-05-06"]);
+    expect(topUp(days, [[1, "2026-05-04"]], [...own, ...ownSpare, ...closer(61)]).slots).toEqual(["d1-s1<-2026-05-05"]);
   });
 
   it("tops up a partly filled home slot with the home clips of a spare date", () => {

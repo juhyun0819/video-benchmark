@@ -545,14 +545,17 @@ export type HomeFill = Fill;
 /**
  * B6: every non-trip day's home slot (node kind home or kitchen) with no planned footage is filled from
  * a spare date: not assigned to a day, not a trip date, and serving one day only (it may fill several
- * home blocks of that day, and is preferred for the day's later ones). Days go in index order, slots in
- * window order. Candidates are the date's unused home clips (home meal clips for meal slots) starting
- * within ±180 min of the window start; the smallest |Δt| wins, then the longer run, then the earlier
- * date. The block takes that clip and the following run of candidates (gap ≤ 15 min) until it is full.
- * B6b: afterwards every home_morning still empty gets a last-resort fill (`fallback: true`; normal fills
- * leave it absent) from a spare date not yet taken: its home clips that start before its first non-home
- * clip and before 13:00, no time window; the date whose home run from the first such clip is longest wins
- * (ties: earlier date); the block takes that run until it is full.
+ * home blocks of that day, and the date a day used last is preferred for its next ones). Candidates are
+ * the date's unused home clips (home meal clips for meal slots) starting within ±180 min of the window
+ * start; the smallest |Δt| wins, then the longer run, then the earlier date. The block takes that clip
+ * and the following run of candidates (gap ≤ 15 min) until it is full.
+ * B6b: every home_morning B6 left empty gets a last-resort fill (`kind: "home_fallback"`, `fallback: true`)
+ * from a spare date not yet taken: its home clips that start before its first non-home clip and before
+ * 13:00, no time window; the date whose home run from the first such clip is longest wins (ties: earlier
+ * date); the block takes that run until it is full.
+ * Order (the scarce pre-departure morning footage goes to home_morning first): B6 for the home_morning
+ * slots of all days, then B6b for all of them, then B6 for the other home slots. Within each phase days
+ * go in index order, slots in window order.
  */
 export function homeFill(
   days: readonly ScheduleDay[],
@@ -565,92 +568,96 @@ export function homeFill(
   const spares = [...dates.values()].filter((d) => d.kind !== "trip" && !assigned.has(d.date)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const planned = new Set(plan.map((e) => e.slot_id));
   const taken = new Set<string>(); // spare dates already serving a day
+  const own = new Map<number, RealDate>(); // the spare date a day used last
+  const used = new Set<string>(); // spare-date clips already used (a spare date serves one day)
   const entries: BlockPlanEntry[] = [];
   const fills: Fill[] = [];
-
-  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
-    if (day.trip !== undefined) continue;
-    const empty = day.slots.filter((s) => slotKind(world, s) === "home" && !planned.has(s.slot_id)).sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0]);
-    const used = new Set<string>();
-    let own: RealDate | undefined;
-    for (const slot of empty) {
-      const [ws, we] = windowSeconds(slot);
-      const meal = MEAL_ROLES.has(slot.role);
-      /** The best run start of `d` for this slot: smallest |Δt|, then the longer run, then the earlier clip. */
-      const best = (d: RealDate) => {
-        const pool = d.clips.filter((c) => isHome(world, c.clip) && (!meal || c.clip.category === "meal") && !used.has(c.clip.clip_id));
-        let pick: { run: RealClip[]; delta: number; footage: number } | undefined;
-        pool.forEach((c, i) => {
-          const delta = Math.abs(c.start - ws);
-          if (delta > FILL_WINDOW_S) return;
-          const run = [c];
-          for (const n of pool.slice(i + 1)) {
-            if (n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
-            run.push(n);
-          }
-          const footage = sum(run);
-          if (pick === undefined || delta < pick.delta || (delta === pick.delta && footage > pick.footage)) pick = { run, delta, footage };
-        });
-        return pick;
-      };
-      let chosen: { date: RealDate; run: RealClip[]; delta: number } | undefined;
-      const ownPick = own === undefined ? undefined : best(own);
-      if (own !== undefined && ownPick !== undefined) chosen = { date: own, ...ownPick };
-      else {
-        let top: { date: RealDate; run: RealClip[]; delta: number; footage: number } | undefined;
-        for (const d of spares) {
-          if (taken.has(d.date)) continue;
-          const b = best(d);
-          if (b !== undefined && (top === undefined || b.delta < top.delta || (b.delta === top.delta && b.footage > top.footage))) top = { date: d, ...b };
-        }
-        chosen = top;
-      }
-      if (chosen === undefined) continue;
-      own = chosen.date;
-      taken.add(own.date);
-      let filled = 0;
-      for (const c of chosen.run) {
-        if (filled >= we - ws) break;
-        entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
-        used.add(c.clip.clip_id);
-        filled += c.end - c.start;
-      }
-      fills.push({ kind: "home", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: own.date, delta_min: Math.round(chosen.delta / 60), seconds: Math.min(filled, we - ws) });
+  const byIndex = [...days].sort((a, b) => a.day_index - b.day_index).filter((d) => d.trip === undefined);
+  const emptyHome = (day: ScheduleDay) =>
+    day.slots.filter((s) => slotKind(world, s) === "home" && !planned.has(s.slot_id)).sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0]);
+  const place = (slot: Slot, run: readonly RealClip[]): number => {
+    const [ws, we] = windowSeconds(slot);
+    let filled = 0;
+    for (const c of run) {
+      if (filled >= we - ws) break;
+      entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
+      used.add(c.clip.clip_id);
+      filled += c.end - c.start;
     }
-  }
+    return Math.min(filled, we - ws);
+  };
 
-  // B6b: last resort for home_morning slots B6 left empty.
-  const filledSlots = new Set(fills.map((f) => f.slot_id));
-  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
-    if (day.trip !== undefined) continue;
-    const morning = day.slots.filter((s) => s.role === "home_morning" && slotKind(world, s) === "home" && !planned.has(s.slot_id) && !filledSlots.has(s.slot_id));
-    for (const slot of morning) {
-      const [ws, we] = windowSeconds(slot);
-      let top: { date: RealDate; run: RealClip[]; footage: number } | undefined;
-      for (const d of spares) {
-        if (taken.has(d.date)) continue;
-        const firstAway = d.clips.find((c) => !isHome(world, c.clip));
-        const pool = d.clips.filter((c) => isHome(world, c.clip) && c.start < FALLBACK_BEFORE_S && (firstAway === undefined || c.start < firstAway.start));
-        if (pool.length === 0) continue;
-        const run = [pool[0]!];
-        for (const n of pool.slice(1)) {
+  function b6(day: ScheduleDay, slot: Slot): void {
+    const [ws] = windowSeconds(slot);
+    const meal = MEAL_ROLES.has(slot.role);
+    /** The best run start of `d` for this slot: smallest |Δt|, then the longer run, then the earlier clip. */
+    const best = (d: RealDate) => {
+      const pool = d.clips.filter((c) => isHome(world, c.clip) && (!meal || c.clip.category === "meal") && !used.has(c.clip.clip_id));
+      let pick: { run: RealClip[]; delta: number; footage: number } | undefined;
+      pool.forEach((c, i) => {
+        const delta = Math.abs(c.start - ws);
+        if (delta > FILL_WINDOW_S) return;
+        const run = [c];
+        for (const n of pool.slice(i + 1)) {
           if (n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
           run.push(n);
         }
         const footage = sum(run);
-        if (top === undefined || footage > top.footage) top = { date: d, run, footage };
+        if (pick === undefined || delta < pick.delta || (delta === pick.delta && footage > pick.footage)) pick = { run, delta, footage };
+      });
+      return pick;
+    };
+    let chosen: { date: RealDate; run: RealClip[]; delta: number } | undefined;
+    const mine = own.get(day.day_index);
+    const minePick = mine === undefined ? undefined : best(mine);
+    if (mine !== undefined && minePick !== undefined) chosen = { date: mine, ...minePick };
+    else {
+      let top: { date: RealDate; run: RealClip[]; delta: number; footage: number } | undefined;
+      for (const d of spares) {
+        if (taken.has(d.date)) continue;
+        const b = best(d);
+        if (b !== undefined && (top === undefined || b.delta < top.delta || (b.delta === top.delta && b.footage > top.footage))) top = { date: d, ...b };
       }
-      if (top === undefined) continue;
-      taken.add(top.date.date);
-      let filled = 0;
-      for (const c of top.run) {
-        if (filled >= we - ws) break;
-        entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
-        filled += c.end - c.start;
-      }
-      fills.push({ kind: "home_fallback", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: top.date.date, delta_min: Math.round(Math.abs(top.run[0]!.start - ws) / 60), seconds: Math.min(filled, we - ws), fallback: true });
+      chosen = top;
     }
+    if (chosen === undefined) return;
+    own.set(day.day_index, chosen.date);
+    taken.add(chosen.date.date);
+    const seconds = place(slot, chosen.run);
+    fills.push({ kind: "home", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: chosen.date.date, delta_min: Math.round(chosen.delta / 60), seconds });
   }
+
+  function b6b(day: ScheduleDay, slot: Slot): void {
+    const [ws] = windowSeconds(slot);
+    let top: { date: RealDate; run: RealClip[]; footage: number } | undefined;
+    for (const d of spares) {
+      if (taken.has(d.date)) continue;
+      const firstAway = d.clips.find((c) => !isHome(world, c.clip));
+      const pool = d.clips.filter((c) => isHome(world, c.clip) && c.start < FALLBACK_BEFORE_S && (firstAway === undefined || c.start < firstAway.start));
+      if (pool.length === 0) continue;
+      const run = [pool[0]!];
+      for (const n of pool.slice(1)) {
+        if (n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
+        run.push(n);
+      }
+      const footage = sum(run);
+      if (top === undefined || footage > top.footage) top = { date: d, run, footage };
+    }
+    if (top === undefined) return;
+    own.set(day.day_index, top.date);
+    taken.add(top.date.date);
+    const seconds = place(slot, top.run);
+    fills.push({ kind: "home_fallback", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: top.date.date, delta_min: Math.round(Math.abs(top.run[0]!.start - ws) / 60), seconds, fallback: true });
+  }
+
+  const morning = (s: Slot) => s.role === "home_morning";
+  for (const day of byIndex) for (const slot of emptyHome(day).filter(morning)) b6(day, slot);
+  const filledSlots = () => new Set(fills.map((f) => f.slot_id));
+  for (const day of byIndex) {
+    const done = filledSlots();
+    for (const slot of emptyHome(day).filter((s) => morning(s) && !done.has(s.slot_id))) b6b(day, slot);
+  }
+  for (const day of byIndex) for (const slot of emptyHome(day).filter((s) => !morning(s))) b6(day, slot);
   return { entries, fills };
 }
 
@@ -664,7 +671,7 @@ const TOPUP_MIN_S = 10 * 60;
  * with B6/B6b (`prior` fills say which day each spare date already serves). Candidates are the
  * date's unused clips that the slot's node binding accepts (no meal clips for work slots) whose real
  * start is within ±180 min of the unfilled part's start (window start + placed seconds); each starts a
- * run of the following candidates (gap ≤ 15 min). The run that places the most seconds wins, then a
+ * run of the following candidates (gap ≤ 15 min). The run that places the most whole minutes wins, then a
  * date already serving the day, then the smaller |Δt|, then the earlier date. The slot takes the run
  * until full; its entries come after the slot's earlier ones, so layoutBlocks places them right after
  * the primary clips. Days go in index order, slots in window order.
@@ -714,10 +721,12 @@ export function topUpFill(
             run.push(n);
           }
           const seconds = Math.min(sum(run), need);
+          // Whole minutes first, so a few seconds more never beat the day's own date or a closer start.
+          const [mins, topMins] = [Math.round(seconds / 60), top === undefined ? -1 : Math.round(top.seconds / 60)];
           const better =
             top === undefined ||
-            seconds > top.seconds ||
-            (seconds === top.seconds && (Number(own) > Number(top.own) || (own === top.own && delta < top.delta)));
+            mins > topMins ||
+            (mins === topMins && (Number(own) > Number(top.own) || (own === top.own && delta < top.delta)));
           if (better) top = { date: d, run, seconds, own, delta };
         });
       }
