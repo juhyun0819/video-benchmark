@@ -1,11 +1,11 @@
 import type { Clip, ClipCatalog } from "./clip.js";
 import { parseClock } from "./clock.js";
-import { blockSpans, type BlockPlacement } from "./blocks.js";
-import { bindingAccepts, hardFilterFailures, matchesSlotNode, slotWindow, tripDayGroup, type HardFilter } from "./match/filters.js";
+import { blockSpans, transitionBlocks, type BlockPlacement } from "./blocks.js";
+import { bindingAccepts, hardFilterFailures, slotWindow, tripDayGroup, type HardFilter } from "./match/filters.js";
 import { layoutTimeline } from "./layout.js";
-import type { Exception, ScheduleDay } from "./schedule/types.js";
+import type { Exception, ScheduleDay, Slot } from "./schedule/types.js";
 import { unassignClip, type Timeline } from "./timeline.js";
-import { tripClipNode, tripPlaceOf } from "./world.js";
+import { TRIP_PLACES, tripClipNode, tripPlaceOf, type World } from "./world.js";
 
 export const RULE_IDS = [
   "day_type",
@@ -56,8 +56,8 @@ const FILTER_RULE: Partial<Record<HardFilter, RuleId>> = {
  * B4: verify block placements (layoutBlocks) instead of t.slots. The placements are the source of truth
  * for clips; t.slots clip ids are not read. time_of_day is skipped (reported as pass with a note);
  * slot_window checks only that each placement lies inside its slot window or transition span, so empty
- * blocks are allowed; clip_unique, day_group_single_day, node_binding (slot placements) and trip are
- * checked over the placements, a transition counting as its day. Other rules are unchanged.
+ * blocks are allowed; clip_unique, day_group_single_day, node_binding (place only, see placeAccepts)
+ * and trip are checked over the placements, a transition counting as its day. Other rules are unchanged.
  */
 export type VerifyOptions = { mode: "block"; placements: readonly BlockPlacement[] };
 
@@ -219,19 +219,68 @@ const sameException = (a: Exception, b: Exception): boolean => JSON.stringify(a)
 
 const videoKey = (c: Clip) => `${c.source.dataset}:${c.source.video_id}`;
 
+const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
+
 /**
- * B4 block mode: node_binding for slot placements, clip_unique (a clip placed once, no footage of a
- * video placed twice) and day_group_single_day (a transition counts as its day) over the placements.
+ * Person sources of the world's fixed (home and workplace) bindings: the bound NextMe wearer.
+ * Empty when none of them names one.
+ */
+function boundPersons(world: World): Set<string> {
+  const out = new Set<string>();
+  for (const [name, def] of Object.entries(world.nodes)) {
+    if (def.kind !== "home" && def.kind !== "workplace") continue;
+    const ps = world.node_binding[name]?.person_source;
+    if (ps !== undefined) out.add(ps);
+  }
+  return out;
+}
+
+/**
+ * B4 node_binding in block mode checks the clip's place only, never category or setting:
+ * - a meal slot (breakfast, lunch, dinner) takes a clip of any bound place of the world, or on a
+ *   trip day of any place of the day's trip (meals use the real place);
+ * - another slot takes a clip its node's binding accepts;
+ * - a transition takes a transit clip: one the `transit` binding accepts when the world has one,
+ *   otherwise a clip labeled node `transit` from the bound person (boundPersons).
+ * Returns the violation detail, or undefined when the place is accepted.
+ */
+function placeAccepts(world: World, day: ScheduleDay, slot: Slot | undefined, clip: Clip): string | undefined {
+  if (slot === undefined) {
+    const persons = boundPersons(world);
+    const ok = world.node_binding["transit"] !== undefined
+      ? bindingAccepts(world, "transit", clip)
+      : clip.node === "transit" && (persons.size === 0 || persons.has(clip.person_source));
+    return ok ? undefined : `clip ${clip.clip_id}: not a transit clip of the bound person`;
+  }
+  if (MEAL_ROLES.has(slot.role)) {
+    const places = day.trip !== undefined
+      ? TRIP_PLACES.map((p) => `${day.trip!.node}:${p}`)
+      : Object.entries(world.nodes).filter(([, def]) => def.kind !== "trip").map(([name]) => name);
+    return places.some((name) => bindingAccepts(world, name, clip)) ? undefined : `clip ${clip.clip_id}: not accepted by any bound place`;
+  }
+  return bindingAccepts(world, slot.spec.node, clip) ? undefined : `clip ${clip.clip_id}: not accepted by the binding of node ${slot.spec.node}`;
+}
+
+/**
+ * B4 block mode: node_binding (placeAccepts), clip_unique (a clip placed once, no footage of a video
+ * placed twice) and day_group_single_day (a transition counts as its day) over the placements.
  */
 function checkPlacements(t: Timeline, placements: readonly BlockPlacement[], add: Add): void {
+  const days = new Map(t.schedule.days.map((day) => [day.day_index, day] as const));
   const slots = new Map(t.schedule.days.flatMap((day) => day.slots.map((s) => [s.slot_id, s] as const)));
+  const transitions = new Set(t.schedule.days.flatMap((day) => transitionBlocks(day).map((x) => x.transition_id)));
   const groupDays = new Map<string, Set<number>>();
   for (const p of placements) groupDays.set(p.clip.day_group, (groupDays.get(p.clip.day_group) ?? new Set()).add(p.day_index));
   placements.forEach((p, i) => {
     const at = { day_index: p.day_index, slot_id: p.slot_id };
     const id = p.clip.clip_id;
     const slot = slots.get(p.slot_id);
-    if (slot !== undefined && !matchesSlotNode(t.world, slot, p.clip)) add("node_binding", { ...at, detail: `clip ${id}: category_setting_node` });
+    const day = days.get(p.day_index);
+    // Unknown blocks are reported by slot_window.
+    if (day !== undefined && (slot !== undefined || transitions.has(p.slot_id))) {
+      const bad = placeAccepts(t.world, day, slot, p.clip);
+      if (bad !== undefined) add("node_binding", { ...at, detail: bad });
+    }
     const reused = placements.some(
       (q, j) =>
         j !== i &&

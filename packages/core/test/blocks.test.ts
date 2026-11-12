@@ -279,6 +279,59 @@ describe("verifyTimeline block mode (B4)", () => {
     expect(r.rules.node_binding.pass).toBe(false);
   });
 
+  describe("node_binding checks the place only", () => {
+    const breakfast = at("g1-bf", "g1", 100 * M, 110 * M, { category: "meal" });
+    const lunchAtWork = at("g1-lunch", "g1", 5 * H, 5 * H + 20 * M, { category: "meal", node: "work" });
+    const strangerBus = at("x-bus", "g1", 6 * H, 6 * H + 10 * M, { ...transit, person_source: "someone-else" });
+    const nc = memoryCatalog([...CLIPS, breakfast, lunchAtWork, strangerBus]);
+    const nb = (tt: Timeline, plan: BlockPlanEntry[]) => {
+      const r = verifyTimeline(tt, nc, { mode: "block", placements: layoutBlocks(tt, nc, plan) });
+      return r.rules.node_binding;
+    };
+    const span = (slot_id: string, c: Clip): BlockPlanEntry => ({ slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
+
+    it("a breakfast-at-home clip may sit in home_morning (category is not checked)", () => {
+      expect(nb(t, [span("d1-s1", breakfast)])).toEqual({ pass: true, violations: [] });
+    });
+
+    it("a lunch clip from the workplace may sit in a lunch slot at frequent_1 (meals use the real place)", () => {
+      const w = makeWorld();
+      const world = WorldSchema.parse({
+        ...w,
+        nodes: { ...w.nodes, frequent_1: { kind: "frequent_place", setting: "venue_indoor", optional: true } },
+        node_binding: { ...w.node_binding, frequent_1: { dataset: ["nextme800"], person_source: "p1", node: "cafe" } },
+      });
+      const tt: Timeline = {
+        ...t,
+        world,
+        schedule: {
+          ...t.schedule,
+          days: t.schedule.days.map((d) => ({ ...d, slots: d.slots.map((s) => (s.slot_id === "d1-s3" ? { ...s, spec: { ...s.spec, node: "frequent_1" } } : s)) })),
+        },
+      };
+      expect(nb(tt, [span("d1-s3", lunchAtWork)])).toEqual({ pass: true, violations: [] });
+      // A meal clip bound to no place of the world is still rejected.
+      const nowhere = at("g1-nowhere", "g1", 7 * H, 7 * H + 10 * M, { category: "meal", node: "street-stall" });
+      const nc2 = memoryCatalog([...nc.clips(), nowhere]);
+      const r = verifyTimeline(tt, nc2, { mode: "block", placements: layoutBlocks(tt, nc2, [span("d1-s3", nowhere)]) });
+      expect(r.rules.node_binding.violations).toEqual([{ day_index: 1, slot_id: "d1-s3", detail: "clip g1-nowhere: not accepted by any bound place" }]);
+    });
+
+    it("a workplace clip in home_morning fails", () => {
+      const r = nb(t, [e("d1-s1", "g1-w1", 3 * H, 3 * H + 10 * M)]);
+      expect(r.pass).toBe(false);
+      expect(r.violations).toEqual([{ day_index: 1, slot_id: "d1-s1", detail: "clip g1-w1: not accepted by the binding of node home" }]);
+    });
+
+    it("a transition takes only transit clips of the bound person", () => {
+      expect(nb(t, [e("d1-t1", "g1-bus")])).toEqual({ pass: true, violations: [] });
+      const home = nb(t, [e("d1-t1", "g1-h1")]);
+      expect(home.pass).toBe(false);
+      expect(home.violations).toEqual([{ day_index: 1, slot_id: "d1-t1", detail: "clip g1-h1: not a transit clip of the bound person" }]);
+      expect(nb(t, [span("d1-t1", strangerBus)]).pass).toBe(false);
+    });
+  });
+
   it("does not require empty slots to be filled in block mode", () => {
     const r = block([]);
     expect(r.pass).toBe(true);
