@@ -57,6 +57,18 @@ uv run --isolated --no-project --with pandas --with numpy \
 
 출력은 `data/distributions/atus2025/`에 둔다.
 
+rev3에서 쉬는 날 끼니 사전값과 평일 저녁 집 슬롯 확률은 별도 스크립트로 계산한다. 입력은 위 `atus2025_stats_per_respondent.csv`이고, 출력은 `data/distributions/atus2025/atus2025_extra.json`이다.
+
+```bash
+uv run --isolated --no-project --with pandas --with numpy \
+  python scripts/atus/atus_extra.py <activity.csv> <respondent.csv> \
+  data/distributions/atus2025/atus2025_stats_per_respondent.csv \
+  data/distributions/atus2025/atus2025_extra.json
+```
+
+- 근무하지 않은 주말 응답자(n=910)의 끼니별 장소 비율과 시각 → `config/schedule_defaults_atus2025.json`의 `meal_location_priors.rest_day`(점심: 집 0.67, 외식 0.27, 남의 집 0.06 / 저녁: 집 0.79, 외식 0.14, 남의 집 0.07).
+- 평일 근무자(n=752)가 퇴근 후 취침 전까지 집에서 30분 이상 깨어 활동한 비율 0.91과 길이 분포(p25/p50/p75 = 105/187/270분) → `weekday_evening_home.slot_probability`, `weekday_evening_home.minutes`.
+
 ### NextMe-800 (집·직장 클립)
 
 NextMe-800은 Hugging Face의 gated 데이터셋(`mmm8383/NextMe-800`)이다. 먼저 접근 승인을 받아야 한다. 토큰은 둘 중 하나로 준다.
@@ -159,7 +171,35 @@ world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/wo
 | `exceptions.v1.json` | 날 단위·슬롯 단위 예외 |
 | `gaps.v1.json` | 전환 사이 공백 시간 표. `reviewed: false`이므로 통근 외 전환은 사람이 검토해야 한다(스펙 13절 열린 항목 1) |
 
+### templates.v2
+
+`templates.v2.json`은 `day_types`(workday, hobby_day, home_day)와 `reduce_order`를 가진다. leave_day는 home_day 템플릿을 쓴다.
+
+- 평일 저녁 식사(`dinner`)는 필수 슬롯이다. 필수 슬롯은 줄이거나 빼지 않는다.
+- 평일에 시간이 모자라면 `reduce_order.workday` 순서로 줄인다: 취미 길이 줄이기(90분 → 최소 30분), 취미 빼기, `home_evening` 빼기. `home_evening`은 취침까지 채우는 슬롯이고 최소 길이가 30분(ATUS의 30분 이상 정의)이라 "길이 줄이기"는 저절로 일어난다.
+- `reduce_order`가 없는 템플릿(hobby_day, home_day)은 기존 규칙을 쓴다: 실패한 슬롯이 선택 슬롯이면 그것을, 아니면 그 앞의 가장 가까운 선택 슬롯을, 없으면 뒤의 마지막 선택 슬롯을 뺀다.
+- 평일 저녁 `home_evening`이 있을 확률은 `config/schedule_defaults_atus2025.json`의 `weekday_evening_home.slot_probability`(0.91)다. 이 슬롯은 취침까지 채워지므로 확률은 슬롯이 없는 날에만 영향을 준다. 그 시간은 집에 있는 `unscheduled` 시간이 된다.
+- 쉬는 날(hobby_day)의 저녁은 필수가 아니어서 ATUS 기반 sport 시각이 늦으면 빠질 수 있다(비교 리포트 참고, 사용자 결정 대기).
+
+### world의 `meal_style`과 검증
+
+`meal_style`은 `workday`(lunch, dinner)와 `rest_day`(breakfast, lunch, dinner)를 가진다. 이전 이름 `weekend`는 `rest_day`로 바뀌었다. `rest_day`는 주말뿐 아니라 연차·병가 같은 하루 예외에도 쓴다. 예시는 `config/worlds/example-nextme.json`이다.
+
+world 검증은 생성 전에 다음을 확인하고, 어기면 `WORLD_INVALID: <path>: <message>` 형식 오류를 낸다. 문제가 여러 개면 `; `로 이어 붙인다.
+
+- 끼니별 장소 확률의 합은 1 ± 0.01이어야 한다. 합이 0이어도 오류다. 예: `WORLD_INVALID: meal_style.workday.dinner: meal weights must sum to 1 +/- 0.01, got 0.5`
+- `rest_day`의 끼니에는 `workplace`가 있으면 안 된다(`meal_style.rest_day.lunch.workplace: rest_day meals cannot take place at the workplace`).
+- 취미 노드는 1~3개여야 한다.
+- 바인딩되지 않은 장소를 뺀 뒤에도 평일 저녁 확률이 남아 있어야 한다(생성 시점에 검사).
+
 `config/categories.json`의 `clip` 항목은 Ego4D 카테고리가 클립 bank에서 어떤 category, setting, node, tags로 쓰일지 정한다.
+
+### 일정 생성 규칙 (rev3)
+
+- **donor 다시 뽑기**: donor(ATUS 응답자)의 시각이 범위를 벗어나면 잘라내지 않고 같은 backoff 단계에서 다시 뽑는다(최대 5회). 범위는 기상 04:00 이후, 취침 27:59 이전, 아침 ≥ 기상+10분, 저녁 ≤ 취침−60분, 평일은 퇴근 ≥ 출근+240분과 점심이 근무 안에 들어가는 것, 평일 필수 슬롯이 들어갈 시간이 있는 것, 주말은 운동 ≤ 취침−180분이다. 5회 모두 실패했을 때만 값을 범위 안으로 당기고 `{item, from, to}`로 기록한다. 기록 위치는 schedule의 `donors.<weekday|weekend>.adjustments`와 manifest의 `donor_adjustments`다. 평일 donor가 그래도 필수 슬롯 검사를 못 넘으면 `work_end`를 필수 슬롯이 들어가는 가장 늦은 분으로 당기고 같은 곳에 기록한다.
+- **날 단위 jitter**: 날마다 앵커(기상, 취침, 출근, 퇴근, 끼니, 운동)에 jitter를 더한다. 그 날의 템플릿이 쓰는 앵커만 범위를 검사하고, 어긴 항목만 항목별로 다시 뽑는다(최대 5회). 그래도 안 되면 당기고 ScheduleDay의 `anchor_adjustments`에 기록한다. 총 다시 뽑은 횟수는 `jitter_redraws`다.
+- **운동 시각 채우기**: donor에게 운동 기록이 없으면 같은 backoff 단계에서 운동 기록이 있는 응답자(30명 이상)의 값으로 채운다(`sport_fill: "level"`). 30명 미만이면 주말 pool 전체에서 채운다(`"pool"`). 둘 다 `filled`에 `sport_time`으로 남는다.
+- **슬롯 예외**: 선택 슬롯을 정리한 뒤에 추첨한다. 후보는 남은 슬롯 중 예외 카탈로그의 `replaces_role`에 해당하고 장소를 쓸 수 있는 끼니이다. 예외가 슬롯 정리 때문에 지워지는 경로는 없다. 추첨된 예외의 약 16%는 루틴과 같은 장소라 실제로는 아무것도 바꾸지 않는다(`slot_exception_noop_share`).
 
 ### 한 번에 만들기 (CLI)
 
@@ -205,6 +245,64 @@ data/exports/<timeline_id>-r<revision>.manifest.json
 ```
 
 manifest의 구조와 필드는 스펙 8절을 따른다. 검증을 통과하지 못한 타임라인은 내보내지 않는다.
+
+### 영상이 없는 구간 (`days[].no_video_spans`)
+
+날마다 `no_video_spans: [{start, end, kind}]`가 있다. 시각은 1일차 00:00부터의 초(소수 셋째 자리)이고, 클립과 이 구간이 [기상, 취침]을 빈틈과 겹침 없이 채운다.
+
+| kind | 뜻 |
+|---|---|
+| `transition` | 슬롯 사이 전환 공백(통근 등). 일정에 잡힌 길이만큼 |
+| `unrecorded` | 슬롯 안에서 클립이 덮지 못한 시간. 매칭 단계에서 비워진 슬롯은 전체가 `unrecorded`다 |
+| `unscheduled` | 전환 뒤에도 남는 슬롯 사이 시간과 마지막 슬롯부터 취침까지의 시간. 그 사람은 직전 슬롯의 장소에 있는 것으로 본다 |
+
+### `realized`: 다이얼이 실제로 만든 값
+
+`schedule.realized`와 manifest의 `realized`는 다이얼(`routine_strength`, `exception_rate`)이 생성 결과에 실제로 얼마나 반영됐는지를 날들에서 세어 기록한다. manifest의 값은 매칭이 끝난 최종 날들로 다시 계산한 값이고, `schedule.realized`는 매칭 전 값이다. manifest에는 `matching_dropped_slots`, `matching_dropped_by_role`(매칭 단계에서 비워진 슬롯)이 더 붙는다. 분모가 0인 비율은 `null`이다.
+
+| 필드 | 뜻 |
+|---|---|
+| `slot_exception_rate` | 슬롯 예외가 있는 날 ÷ 예외가 가능한 날(하루 예외가 없고 후보 슬롯이 하나 이상). `exception_rate.slot`과 맞아야 하는 값 |
+| `slot_exception_share` | 슬롯 예외 수 ÷ 후보 슬롯 수 |
+| `slot_exception_noop_share` | 슬롯 예외 중 루틴과 같은 장소인 비율(분석에서 제외할 때 쓴다) |
+| `slot_exception_eligible_days` | 예외가 가능했던 날 수 |
+| `day_exception_rate` | 하루 예외 ÷ 하루 예외 대상 날(평일) |
+| `optional_presence` | 선택 슬롯별 등장률: 그 슬롯을 선택으로 둔 템플릿의 날 중 남은 날의 비율 |
+| `shrunk` | 줄이기 단계가 있는 역할(예: hobby)이 줄어든 채 남은 날 수. 줄었다가 빠진 슬롯은 빠진 것으로 센다 |
+| `composition_consistency` | 템플릿별로 날 쌍들의 구성 일치도(아래) |
+| `dials` | 이 값이 나온 다이얼 |
+
+`composition_consistency.<template>`는 `{optional_jaccard, order_similarity, start_diff_minutes, pairs, same_reference}`다.
+
+- `optional_jaccard`: 선택 슬롯 역할 집합의 평균 Jaccard
+- `order_similarity`: 역할 순서의 평균 `1 − 편집거리 ÷ 최대 길이`
+- `start_diff_minutes`: 같은 역할 슬롯 시작 시각 차이의 평균(분)
+- `pairs`: 그 템플릿을 쓴 날의 모든 쌍 수
+- 위 세 값은 모든 쌍(all-pairs)에 대한 평균이다. 평일 쌍의 Jaccard와 순서 일치도는 `routine_strength`를 바꿔도 거의 움직이지 않는다(0.81/0.81/0.81). 루틴 기준이 요일마다 따로 있어서 다른 요일끼리는 원래 다르기 때문이다.
+- `same_reference`: 같은 세 값을 루틴 기준을 공유하는 쌍(평일은 같은 요일, 나머지는 같은 날 유형)에만 적용한 것이다. 쌍이 없으면 `null`. 다이얼 효과는 이 값에서 읽는다(0.81 → 0.85 → 1.00). all-pairs 값은 사용자가 승인한 정의이고 `same_reference`는 거기에 더한 것이라, 다른 정의를 원하면 바꿀 수 있다.
+
+### 통계 보기
+
+```bash
+npm run stats -- <manifest.json 또는 폴더> [...]
+```
+
+인자는 manifest 파일이나 `*.manifest.json`이 있는 폴더이고 여러 개를 줄 수 있다. 다이얼 조합(`routine_strength`, `exception_rate.slot`, `exception_rate.day`)별로 묶어 `realized`의 각 필드(점 경로, 예: `composition_consistency.workday.same_reference.optional_jaccard`)의 평균, 최솟값, 최댓값, manifest 수 n을 JSON으로 stdout에 낸다. 값이 없거나 `null`인 manifest는 그 필드에서 빠지므로 n이 manifest 수보다 작을 수 있다. 또 donor 다시 뽑기 횟수 분포와 당김이 있는 donor·날의 비율을 낸다.
+
+### rev3 전후 비교
+
+rev3 변경(기준 ea048f5)이 분포를 어떻게 바꿨는지는 [비교 리포트](docs/superpowers/reports/2026-11-12-rev3-comparison.md)에 있다. 다시 돌리는 명령은 다음과 같다. `$BASE`(기준 worktree)와 `$OUT`(출력 디렉터리)은 저장소 밖에 둔다. 기본값은 `--seeds 200 --full-seeds 20 --rs 0,0.5,1 --slot 0.5 --day 0.1`이다.
+
+```bash
+BASE=<저장소 밖 경로>/rev3-baseline
+OUT=<저장소 밖 경로>/rev3cmp
+git worktree add "$BASE" ea048f5
+ln -s "$PWD/node_modules" "$BASE/node_modules"
+npx tsx scripts/compare/rev3_compare.ts run --root "$BASE" --label old --data data --out "$OUT"
+npx tsx scripts/compare/rev3_compare.ts run --root . --label new --data data --out "$OUT"
+npx tsx scripts/compare/rev3_compare.ts report --old "$OUT/old.json" --new "$OUT/new.json"
+rm "$BASE/node_modules" && git worktree remove "$BASE"
+```
 
 ## 5. 라이선스와 데이터 취급
 

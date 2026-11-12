@@ -60,6 +60,11 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 - 새 CLI로 `ingest ego4d`와 `ingest egoexo`를 다시 실행해 클립 카탈로그를 만든다. 지금 로컬에는 예전 `annotations/`와 `candidates.jsonl`만 있고 클립 카탈로그가 없어서 bank가 비어 있다. 순서는 README 2절의 Ego4D, Ego-Exo4D 절을 따른다.
 - 이력(클립 bank 이전): Ego4D는 2026-11-10에 주석을 받아 ingest했고, 2026-11-11에 walking, transit 키워드를 넣고 단어 단위 비교로 바꿔 다시 ingest했다(walking 1811, transit 542, hobby_tent 37, hobby_lego 29). 이 결과는 예전 `candidates.jsonl`이며 새 bank에는 없다. 주석 다운로드 절차는 README의 Ego4D 절이고, Lab22 키는 저장소 `.env`의 `LAB22_API_KEY`다.
 
+## 결정 대기 (타임라인 rev3)
+
+- 쉬는 날(hobby_day)의 저녁이 CR8(운동 시각 채우기) 뒤 hobby day의 12%에서 빠진다(이전 4.5%). 원인은 비교 리포트(`docs/superpowers/reports/2026-11-12-rev3-comparison.md`)에서 분리했다. 선택지는 쉬는 날 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 주는 것이다. 사용자가 정한다.
+- seed 149에서 평일 donor가 G9(`work_end` 당김) 뒤에도 필수 슬롯 검사를 못 넘는다. 일정은 그래도 생성된다. core에서 따로 볼지는 미정이다.
+
 ## 서버 환경
 
 - Node 24는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`에 있다(홈은 서버를 옮기면 사라질 수 있어서 여기에 둔다). PATH에 없으면 `export PATH="/NHNHOME/langlab/zzuhyun/.node/current/bin:$PATH"`.

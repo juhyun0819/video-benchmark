@@ -98,3 +98,64 @@
 - Task 12: minor (deferred): golden test self-writes when snapshot missing (should fail unless UPDATE flag); coverage gaps (exceptions/relaxations/dropped_slots passthrough, clipped/point captions, multi-dataset licenses, idle-time coverage); per-day filter O(days×clips)
 - Task 13: minor (deferred): timeline id collision overwrites silently; generate writes world copy before store.save re-parse; failed_rules derivation duplicated 3×; out-of-range day → INTERNAL; renderDay prints raw minutes not HH:MM; **list_slot_candidates lacks recent picks (§6.3 says LLM sees recent days' choices) — spec gap, triage in final review**; WorldStore.load doesn't check person_id vs file name; list() fails wholesale on one bad file; fsCatalog unsafe videoId returns [] silently; test temp dirs not cleaned
 - Task 14: minor (deferred): CLAUDE.md:13 still lists HD-EPIC as data source and omits YouTube; sample section refers to old manifests; README ATUS paragraph lacks raw source/output filename; README Ego-Exo4D "이벤트 후보" wording; commit cbf8fdf trailer says Sonnet 5.5 (others Opus 5.5)
+
+## rev3 반영 (2026-11-12)
+
+변경 요청(CR1~CR9)과 그 구현 결정(E1~E11, G1~G19)을 반영했다. 전후 비교는 [rev3 비교 리포트](../reports/2026-11-12-rev3-comparison.md)에 있다.
+
+### 대체된 이전 판단
+
+- R12 (끼니 확률 합 0이면 "skip") → CR7: world 검증이 `WORLD_INVALID`로 거부한다. 합 0도 오류다.
+- R13 (운동 시각은 채우지 않고 defaults 사용) → CR8: 같은 backoff 단계의 운동 기록 응답자로 채운다(30명 미만이면 pool 전체).
+- R14 (donor 시각을 잘라냄) → CR5: 먼저 다시 뽑고, 5회 실패 시에만 당기고 `adjustments`에 기록한다. 정수 분 반올림은 유지.
+- R15 (평일 저녁 `home_evening` 확률 0.5) → CR3: `weekday_evening_home.slot_probability` 0.91, 설정에서 읽는다.
+- R16 (쉬는 날 직장 식사를 분포에서 제거) → CR4: 사전값을 `rest_day`로 바꿔 직장이 없고, 직장이 들어오면 world 검증 오류.
+- R21 (못 들어가는 선택 슬롯 제거) → CR2: 평일 저녁이 필수이고 줄이는 순서가 `reduce_order`로 템플릿 설정이 됐다.
+- R22 (점심 상한 work_end − 60 − 45 보정) → CR5: donor와 날 단위 모두 다시 뽑기 우선, 마지막에만 당김.
+- R24 (줄일 슬롯 선택 규칙) → CR2: 평일은 `reduce_order`, 다른 템플릿만 R24 규칙을 유지한다.
+- R25 (운동 시각 ≤ 취침 − 180분 보정) → CR5: donor 수락 조건으로 옮겨 다시 뽑는다.
+- R26 (슬롯 밖 빈 시간은 그냥 둠) → CR6: `transition` / `unrecorded` / `unscheduled`로 기록한다.
+- R44 (기상 04:00, 취침 27:59 보정) → CR5: 같은 범위를 donor 수락 조건에 두고 다시 뽑는다.
+- R45 (제거된 슬롯의 예외 삭제) → CR1: 슬롯 정리 뒤에 예외를 추첨하므로 삭제 경로 자체를 없앴다.
+
+### CR9
+
+커밋 작성자(R11)는 이 작업을 하는 사용자 본인의 이름과 이메일이라 바꿀 것이 없다. 코드 변경 없음(E11).
+
+### 구현 결정 E1~E11
+
+- E1: 슬롯 예외 비율은 `slot_exception_rate` = 예외 있는 날 ÷ 예외가 가능한 날이고, 스펙의 `slot_exception_share`도 함께 기록한다. 비용: 필드 하나 추가.
+- E2: `composition_consistency`는 템플릿별 날 쌍 전체의 optional_jaccard, order_similarity, start_diff_minutes다. 사용자가 승인했고 사용자가 내용을 확장했다. 비용: 없음.
+- E3: 슬롯 예외는 창 계산과 제거 뒤에, `replaces_role`에 맞는 남은 끼니 중 균등 추첨한다. 비용: 없음.
+- E4: 줄이는 순서는 템플릿 설정 `reduce_order`다(평일: 취미 줄이기, 취미 빼기, home_evening 빼기). home_evening은 취침까지 채우므로 0.91 확률은 이 슬롯이 없는 날에만 영향을 주고, 그 시간은 집에 있는 unscheduled가 된다. 비용: 없음.
+- E5: donor 수락 조건(기상·취침 범위, 끼니 간격, 평일 필수 슬롯 배치, 주말 운동 시각)을 어기면 같은 단계에서 최대 5회 다시 뽑고, 그래도 안 되면 당기고 기록한다. 비용: donor 분포가 약간 이동.
+- E6: 날 단위 jitter는 범위를 벗어나면 다시 뽑고 마지막에만 당겨 `anchor_adjustments`에 기록한다(G13이 방식을 수정). 비용: 일정이 바뀐다.
+- E7: 운동 시각 채우기는 level(30명 이상) 또는 pool로 하고 `sport_fill`에 기록한다. 비용: 필드 하나 추가.
+- E8: world 검증(끼니 합 1 ± 0.01, rest_day에 workplace 금지, 평일 저녁 질량 유지, 취미 1~3개)과 `weekend` → `rest_day` 이름 변경. 비용: 이전 world 파일은 이름을 바꿔야 한다.
+- E9: `no_video_spans`는 전환·미기록·미배정 세 종류이고 클립과 함께 [기상, 취침]을 정확히 채운다. 비용: manifest 필드 추가.
+- E10: `npm run stats`는 다이얼 조합별 `realized` 필드의 평균·최솟값·최댓값과 donor 다시 뽑기·당김 통계를 낸다. 집계는 core의 순수 함수다. 비용: 없음.
+- E11: CR9는 변경 없음. 비용: 없음.
+
+### 구현 중 추가 판정 G1~G19
+
+- G1: Task 1의 첫 커밋에 이미 쓰인 판단 문서와 계획을 함께 넣었다. 비용: 없음.
+- G2: 0.91 빈도 테스트는 레이아웃 전의 `DayDecisions.optional.home_evening`을 잰다. 제거는 `realized`에서 따로 본다. 비용: 없음.
+- G3: 예시 world의 rest_day 아침은 {home 0.91, others_home 0.04, eat_out 0.05}다(노드가 없는 "other" 질량은 home으로). 비용: 아침이 집 쪽으로 약간 치우침.
+- G4: 평일 저녁 질량 검사는 생성 시점에 `WORLD_INVALID`를 낸다. 비용: 없음.
+- G5: donor 수락 재추출 키, 5회 실패 시 wake, sleep, rest 순 당김, 운동 채우기 level·pool 규칙을 확정했다. 비용: 없음.
+- G6: 주말 이른 기상 하한을 수락 조건에 넣고 하한은 당기지 않는다. 비용: 일부 seed의 주말 donor가 달라진다.
+- G7: donor 선택 뒤 생성기가 최종 프로필에 템플릿 수락 검사를 다시 하고, 실패하면 날 단위 경로로 간다. 이전 schedule은 raw JSON으로 읽는다. 비용: 없음.
+- G8: jitter 재추출 키 모양, 평일 donor 검사는 필수 슬롯만 p50 간격으로 배치, `reduce_order`는 템플릿 최상위에 둔다. 비용: 없음.
+- G9: G7의 평일 프로필이 그래도 실패하면 `work_end`를 필수 슬롯이 들어가는 가장 늦은 분으로 당기고 기록한다. 안 되는 값이 없을 때만 SCHEDULE_INFEASIBLE. 비용: 그 donor의 퇴근이 빨라진다(기록됨).
+- G10: `reduce_order` 단계는 실패한 슬롯에 영향을 줄 수 있을 때만 실행한다. 비용: 없음.
+- G11: 수리와 수락 검사는 p90 간격과 취침 − σ 여유를 쓴다. 비용: 수리된 donor의 퇴근이 조금 더 빨라진다.
+- G12: 날 단위 범위 검사는 그 날 템플릿이 쓰는 앵커에만 한다. 비용: 없음.
+- G13: 날 단위 재추출은 전체 벡터가 아니라 항목별 의존 순서로 한다. 사용자가 승인했고 E6을 수정한다. 비용: E6 문구와 달라지고 일정이 다시 바뀐다.
+- G14: `shrunk`는 줄어든 채 남은 슬롯만 세고, 예외 재배치도 같은 레이아웃 도우미를 쓴다. 비용: 없음.
+- G15: `composition_consistency`에 `same_reference`를 더한다. 사용자가 승인한 E2에 더한 것이라 사용자가 다른 정의를 원할 수 있다. 비용: 블록 하나 추가.
+- G16: mcp generate CLI 테스트에 30초 타임아웃을 준다. 비용: 없음.
+- G17: manifest는 최종 날들로 `realized`를 다시 계산한다(`schedule.realized`는 매칭 전 값). 비용: 빌더 인자 하나 추가.
+- G18: stats는 `realized`를 점 경로로 펼치고 null은 건너뛰며 n을 함께 낸다. 비용: 없음.
+- G19: 비교는 old와 new에 같은 world 값을 주고 분포로만 비교한다(날별 비교는 의미 없음). 비용: 없음.
+- 참고(R17 유지): 슬롯 예외의 약 16%는 루틴과 같은 장소라 무변화다. `slot_exception_noop_share`로 기록한다.
+- 사용자 결정 대기: 쉬는 날(hobby_day) 저녁이 CR8 뒤 12%의 날에서 빠진다. 원인은 비교 리포트에 있다. 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄 수 있다. seed 149의 평일 donor는 G9 뒤에도 필수 슬롯 검사를 못 넘지만 일정은 생성된다.
