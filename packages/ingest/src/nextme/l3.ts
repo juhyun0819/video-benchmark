@@ -85,7 +85,7 @@ function labelText(text: string, rules: L3Rules, trip: boolean): Label | undefin
   }
   const place = rules.places.find((p) => hasAny(cleaned, p.words));
   if (!place) return undefined;
-  const category = place.node !== "transit" && hasAny(text, rules.meal_words) ? "meal" : place.category;
+  const category = place.node !== "transit" && place.node !== "hobby" && hasAny(text, rules.meal_words) ? "meal" : place.category;
   return { node: place.node, setting: place.setting, category, tags: place.tags };
 }
 

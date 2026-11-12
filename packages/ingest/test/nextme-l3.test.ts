@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ClipContractRowSchema } from "@vb/core";
+import { ClipContractRowSchema, type ClipContractRow } from "@vb/core";
 import { main, makeLocalFetcher, ingestNextme } from "../src/cli.js";
 import { loadLabelRules } from "../src/nextme/draft.js";
 import { loadL3Rules } from "../src/nextme/l3.js";
@@ -21,7 +21,11 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-type Row = ReturnType<typeof ClipContractRowSchema.parse> | any;
+type Row = Omit<ClipContractRow, "category" | "setting" | "node"> & {
+  category: string | null;
+  setting: string | null;
+  node: string | null;
+};
 
 async function run(days: string[]): Promise<Row[]> {
   const out = join(dir, "l3.jsonl");
@@ -41,10 +45,17 @@ const byActivity = (rows: Row[], text: string): Row => {
   return r;
 };
 
+const EXPECTED_L4: unknown[] = [
+  ["nextme800:2026-04-15_0900-1000:0.000-1200.000", 0, 1200, "home", "meal", "nextme-draft.v1"],
+  ["nextme800:2026-04-15_0900-1000:1200.000-2460.000", 1200, 2460, null, null, "nextme-draft.v1"],
+  ["nextme800:2026-04-15_0900-1000:2460.000-3600.000", 2460, 3600, "transit", "transit", "nextme-draft.v1"],
+  ["nextme800:2026-04-15_1100-1105:0.000-300.000", 0, 300, null, null, "nextme-draft.v1"],
+];
+
 describe("L3 labeler", () => {
   it("yields one clip per L3 segment of at least 120 s", async () => {
     const rows = await run(["2026-06-02"]);
-    expect(rows).toHaveLength(5); // the 60 s "home screen" segment is dropped
+    expect(rows).toHaveLength(6); // the 60 s "home screen" segment is dropped
     expect(rows.every((r) => r.source_end_s - r.source_start_s >= 120)).toBe(true);
     expect(rows.every((r) => r.extractor_version === "nextme-l3.v1")).toBe(true);
     expect(rows.every((r) => ClipContractRowSchema.safeParse(r).success)).toBe(true);
@@ -68,6 +79,8 @@ describe("L3 labeler", () => {
     const rows = await run(["2026-06-02"]);
     expect(byActivity(rows, "I hike along a trail.")).toMatchObject({ node: "hobby", category: "hobby", setting: "outdoor", tags: ["walking"] });
     expect(byActivity(rows, "I eat lunch in the canteen.")).toMatchObject({ node: "workplace", category: "meal" });
+    // meal words do not change hobby (or transit) clips
+    expect(byActivity(rows, "I eat lunch on the hiking trail.")).toMatchObject({ node: "hobby", category: "hobby", setting: "outdoor", tags: ["walking"] });
   });
 
   it("labels trip-date clips with trip:* nodes and leaves other places unlabeled", async () => {
@@ -84,6 +97,28 @@ describe("L3 labeler", () => {
     expect(byActivity(rows, "I scroll through my phone.")).toMatchObject({ node: null }); // 11:00, before 11:12
     expect(byActivity(rows, "I read the home screen.")).toMatchObject({ node: "home", setting: "home_indoor", category: "home" });
     expect(byActivity(rows, "I sit in the library.")).toMatchObject({ node: "workplace", category: "work" });
+  });
+
+  it("never-home phrases do not count as home and the clip stays unlabeled", async () => {
+    const rows = await run(["2026-06-03"]);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.node === null && r.category === null)).toBe(true);
+  });
+
+  it("the default L4 clip level output is unchanged", async () => {
+    const out = join(dir, "l4.jsonl");
+    await ingestNextme({
+      days: ["2026-04-15"],
+      outPath: out,
+      rules: loadLabelRules(join(ROOT, "config", "nextme_label_rules.json")),
+      fetchText: async (path: string) => {
+        const m = /^captions\/1_nextme\/([^/]+)\/([^/]+)$/.exec(path);
+        const flat = path === "raw/recordings.csv" ? "recordings.csv" : m ? `${m[1]}/${m[2]}` : path;
+        return readFileSync(join(HERE, "fixtures", "nextme", flat), "utf8");
+      },
+    });
+    const rows: Row[] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(rows.map((r) => [r.clip_id, r.source_start_s, r.source_end_s, r.node, r.category, r.extractor_version])).toEqual(EXPECTED_L4);
   });
 
   it("--source-dir reads local files through the CLI", async () => {
