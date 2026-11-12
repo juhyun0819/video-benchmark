@@ -33,6 +33,25 @@ const RUN_GAP_S = 15 * 60;
 const FILL_WINDOW_S = 180 * 60;
 const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
+/** B18: whole-word, case-insensitive word sets matched against a clip's own L3 sentence (`activity`). */
+const EATING = new Set(
+  "eat eats eating ate meal meals breakfast lunch dinner supper snack snacks cook cooks cooking cooked restaurant canteen cafeteria diner eatery noodle noodles dumpling dumplings rice bun buns fry fries frying pancake pancakes".split(" "),
+);
+const COMMUTE = new Set("commute commuting travel travels traveling depart departs leave leaves return returns mtr bus train taxi scooter station".split(" "));
+const hasWord = (text: string, set: ReadonlySet<string>): boolean => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).some((w) => set.has(w));
+
+/**
+ * B18: the one content predicate per slot role. Meal slots need an EATING word in the clip's activity;
+ * every other slot rejects one; home slots (home_*, chores, or a home/kitchen node) also reject COMMUTE words.
+ */
+function contentOk(world: World, slot: Slot, c: Clip): boolean {
+  if (MEAL_ROLES.has(slot.role)) return hasWord(c.activity, EATING);
+  if (hasWord(c.activity, EATING)) return false;
+  const kind = world.nodes[slot.spec.node]?.kind;
+  const home = slot.role.startsWith("home_") || slot.role === "chores" || kind === "home" || kind === "kitchen";
+  return !(home && hasWord(c.activity, COMMUTE));
+}
+
 /** A catalog clip with its real start and end, in seconds since its date's 00:00. */
 export type RealClip = { clip: Clip; start: number; end: number };
 
@@ -396,7 +415,7 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const away = clips.filter((c) => !home(c));
   const firstAway = away[0]?.start ?? Infinity;
   const lastAway = away[away.length - 1]?.start ?? -Infinity;
-  const meals = clips.filter((c) => mealAccepts(world, day, c.clip));
+  const meals = clips.filter((c) => mealAccepts(world, day, c.clip) && hasWord(c.clip.activity, EATING));
   const lunchStart = meals.find((c) => c.start >= H(11) && c.start < H(15))?.start ?? H(13);
   const inRange = (from: number, to: number) => (c: RealClip) => c.start >= from && c.start < to;
 
@@ -489,7 +508,7 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const ordered = [...slots.filter((s) => MEAL_ROLES.has(s.role)), ...slots.filter((s) => !MEAL_ROLES.has(s.role))];
   for (const slot of ordered) {
     const { cands, run } = phase(slot);
-    const free = cands.filter((c) => !used.has(c.clip.clip_id));
+    const free = cands.filter((c) => !used.has(c.clip.clip_id) && contentOk(world, slot, c.clip));
     const [ws, we] = windowSeconds(slot);
     take(slot.slot_id, run ? firstRun(free) : free, we - ws);
   }
@@ -597,7 +616,7 @@ export function homeFill(
     const meal = MEAL_ROLES.has(slot.role);
     /** The best run start of `d` for this slot: smallest |Δt|, then the longer run, then the earlier clip. */
     const best = (d: RealDate) => {
-      const pool = d.clips.filter((c) => isHome(world, c.clip) && (!meal || c.clip.category === "meal") && !used.has(c.clip.clip_id));
+      const pool = d.clips.filter((c) => isHome(world, c.clip) && (!meal || c.clip.category === "meal") && contentOk(world, slot, c.clip) && !used.has(c.clip.clip_id));
       let pick: { run: RealClip[]; delta: number; footage: number } | undefined;
       pool.forEach((c, i) => {
         const delta = Math.abs(c.start - ws);
@@ -638,7 +657,7 @@ export function homeFill(
     for (const d of spares) {
       if (taken.has(d.date)) continue;
       const firstAway = d.clips.find((c) => !isHome(world, c.clip));
-      const pool = d.clips.filter((c) => isHome(world, c.clip) && (firstAway === undefined || c.start < firstAway.start));
+      const pool = d.clips.filter((c) => isHome(world, c.clip) && (firstAway === undefined || c.start < firstAway.start) && contentOk(world, slot, c.clip));
       if (pool.length === 0) continue;
       const run = [pool[0]!];
       for (const n of pool.slice(1)) {
@@ -710,7 +729,7 @@ export function topUpFill(
       if (need < TOPUP_MIN_S) continue;
       const at = ws + filled;
       const work = slot.role === "work_am" || slot.role === "work_pm";
-      const accepts = (c: RealClip) => bindingAccepts(world, slot.spec.node, c.clip) && (!work || c.clip.category !== "meal") && !usedClips.has(c.clip.clip_id);
+      const accepts = (c: RealClip) => bindingAccepts(world, slot.spec.node, c.clip) && (!work || c.clip.category !== "meal") && contentOk(world, slot, c.clip) && !usedClips.has(c.clip.clip_id);
       let top: { date: RealDate; run: RealClip[]; seconds: number; own: boolean; delta: number } | undefined;
       for (const d of spares) {
         const by = owner.get(d.date);

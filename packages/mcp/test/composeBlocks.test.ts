@@ -66,12 +66,14 @@ function rec(date: string, specs: Spec[], o: { wall?: string; video?: string; gr
   const video = o.video ?? `rec-${date}`;
   return specs.map((s) => {
     const start = sec(s.at) - sec(wall);
+    const category = s.category ?? DEFAULT_CATEGORY[s.node] ?? "home";
     return {
       clip_id: `nextme800:${video}:${s.at}`,
-      category: s.category ?? DEFAULT_CATEGORY[s.node] ?? "home",
+      category,
       setting: SETTING[s.node] ?? "venue_indoor",
       node: s.node,
-      activity: `synthetic ${s.node}`,
+      // B18: a meal-category fixture clip carries an eating word in its L3 text, as a real one does.
+      activity: category === "meal" ? `eating a meal (synthetic ${s.node})` : `synthetic ${s.node}`,
       time_of_day: "unknown",
       tags: [],
       source: { dataset: "nextme800", video_id: video, media: { kind: "frames", approx_fps: 1, tar: `${video}.tar`, start_wallclock: `${date} ${wall}:00` } },
@@ -500,7 +502,7 @@ describe("real day phases", () => {
     ];
     const day = mkDay("workday", WORKDAY, [[1, 2, 30], [4, 5, 45]]);
     expect(byBlock(world, day, clips, "2026-05-04")).toEqual({
-      "d1-s1": ["07:00", "07:30"],
+      "d1-s1": ["07:00"], // B18: the 07:30 breakfast clip (eating word) no longer fills home_morning
       "d1-s2": ["08:40", "10:45"],
       "d1-s3": ["12:00", "12:25"],
       "d1-s4": ["13:00", "14:40"],
@@ -566,8 +568,9 @@ describe("real day phases", () => {
       slot(2, "home_afternoon", "home", "13:00", "17:00"),
     ]);
     expect(byBlock(world, day, restDate("2026-05-09"), "2026-05-09")).toEqual({
-      "d1-s1": ["08:00", "09:10", "10:00"],
-      "d1-s2": ["12:30", "13:10", "14:20", "15:30"],
+      // B18: the 09:10 and 12:30 meal clips (eating words) stay out of the home slots
+      "d1-s1": ["08:00", "10:00"],
+      "d1-s2": ["13:10", "14:20", "15:30"],
     });
   });
 
@@ -647,6 +650,62 @@ describe("real day phases", () => {
 
   it("returns no plan for a day without a real date", () => {
     expect(planDay(mkDay("workday", WORKDAY), undefined, world)).toEqual([]);
+  });
+});
+
+describe("content filters from the L3 text (B18)", () => {
+  const world = makeWorld();
+  const text = (clips: Clip[], at: string, activity: string): Clip[] =>
+    clips.map((c) => (c.clip_id.endsWith(`:${at}`) ? { ...c, activity } : c));
+
+  it("excludes a cooking clip labeled home from home_evening", () => {
+    const day = mkDay("home_day", [slot(1, "home_evening", "home", "19:00", "21:00")]);
+    let clips = rec("2026-05-09", [{ at: "19:00", min: 20, node: "home" }, { at: "19:30", min: 20, node: "home" }]);
+    clips = text(clips, "19:00", "I am Cooking noodles in the kitchen");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["19:30"] });
+  });
+
+  it("excludes a mall walk labeled meal from dinner", () => {
+    const day = mkDay("home_day", [slot(1, "dinner", "home", "18:00", "19:00")]);
+    let clips = rec("2026-05-09", [
+      { at: "18:00", min: 20, node: "home", category: "meal" },
+      { at: "18:30", min: 20, node: "home", category: "meal" },
+    ]);
+    clips = text(clips, "18:00", "I walk through the mall");
+    clips = text(clips, "18:30", "I eat dinner at the restaurant");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["18:30"] });
+  });
+
+  it("uses a canteen lunch clip in lunch and never in work_pm", () => {
+    const day = mkDay("workday", [
+      slot(1, "work_am", "workplace", "08:30", "12:00"),
+      slot(2, "lunch", "workplace", "12:00", "12:45"),
+      slot(3, "work_pm", "workplace", "12:45", "17:30"),
+    ]);
+    let clips = rec("2026-05-04", [
+      { at: "09:00", min: 60, node: "workplace" },
+      { at: "12:00", min: 30, node: "workplace", category: "meal" },
+      { at: "13:30", min: 60, node: "workplace" },
+      { at: "15:00", min: 20, node: "workplace", category: "work" },
+    ]);
+    clips = text(clips, "12:00", "I eat lunch at the canteen");
+    clips = text(clips, "15:00", "Eating a Snack at my desk");
+    expect(byBlock(world, day, clips, "2026-05-04")).toEqual({ "d1-s1": ["09:00"], "d1-s2": ["12:00"], "d1-s3": ["13:30"] });
+  });
+
+  it("excludes a commute sentence labeled home from home_morning", () => {
+    const day = mkDay("home_day", [slot(1, "home_morning", "home", "07:00", "09:00")]);
+    let clips = rec("2026-05-09", [{ at: "07:00", min: 20, node: "home" }, { at: "07:30", min: 20, node: "home" }]);
+    clips = text(clips, "07:00", "I leave home and take the MTR");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["07:30"] });
+  });
+
+  it("matches whole words only, so a hobby text without them is kept", () => {
+    const day = mkDay("home_day", [slot(1, "home_evening", "home", "19:00", "21:00")]);
+    let clips = rec("2026-05-09", [{ at: "19:00", min: 20, node: "home" }, { at: "19:30", min: 20, node: "home" }]);
+    clips = text(clips, "19:00", "I build the LEGO set (brice cream)");
+    clips = text(clips, "19:30", "Playing Guitar");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["19:00", "19:30"] });
   });
 });
 
