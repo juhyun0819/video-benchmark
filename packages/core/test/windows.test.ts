@@ -287,3 +287,47 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     );
   });
 });
+
+describe("hobby_day slot order follows the sport anchor (G20)", () => {
+  const hobbyDay: DayDecisions = {
+    day_index: 6,
+    weekday: "Sat",
+    day_type: "hobby_day",
+    template: "hobby_day",
+    meal_place: { breakfast: "home", lunch: "home", dinner: "home" },
+    optional: {},
+    hobby_node: "hobby_a",
+    exceptions: [],
+  };
+  const resolveHobbyDay = (anchors: DayAnchors) => resolveDayWindows(templates().day_types.hobby_day, anchors, hobbyDay, world(), gap20);
+
+  it("a morning sport keeps the template order", () => {
+    const { slots } = resolveHobbyDay({ wake: 480, breakfast: 510, sport: 645, lunch: 780, dinner: 1100, sleep: 1380 });
+    expect(slots.map((s) => s.role)).toEqual([
+      "home_morning", "breakfast", "hobby", "lunch", "home_afternoon", "dinner", "home_evening",
+    ]);
+  });
+
+  it("a sport at 18:30 moves the hobby after lunch and the afternoon, before dinner; lunch starts at its anchor", () => {
+    const { slots } = resolveHobbyDay({ wake: 480, breakfast: 510, sport: 1110, lunch: 750, dinner: 1260, sleep: 1440 });
+    expect(slots.map((s) => s.role)).toEqual([
+      "home_morning", "breakfast", "lunch", "home_afternoon", "hobby", "dinner", "home_evening",
+    ]);
+    const lunch = slots.find((s) => s.role === "lunch")!;
+    expect(lunch.window).toEqual(["12:30", "13:15"]);
+    expect(slots.find((s) => s.role === "hobby")!.window).toEqual(["18:30", "20:30"]);
+  });
+
+  it("a sport after the dinner anchor puts the hobby after dinner", () => {
+    const { slots } = resolveHobbyDay({ wake: 480, breakfast: 510, sport: 1170, lunch: 750, dinner: 1080, sleep: 1500 });
+    expect(slots.map((s) => s.role)).toEqual([
+      "home_morning", "breakfast", "lunch", "home_afternoon", "dinner", "hobby", "home_evening",
+    ]);
+    expect(slots.find((s) => s.role === "hobby")!.window).toEqual(["19:30", "21:30"]);
+  });
+
+  it("a sport before breakfast puts the hobby before breakfast", () => {
+    const { slots } = resolveHobbyDay({ wake: 420, breakfast: 600, sport: 450, lunch: 780, dinner: 1100, sleep: 1380 });
+    expect(slots.map((s) => s.role).slice(0, 3)).toEqual(["home_morning", "hobby", "breakfast"]);
+  });
+});

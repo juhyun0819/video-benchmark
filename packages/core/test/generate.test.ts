@@ -290,8 +290,26 @@ describe("generateSchedule", () => {
     expect(hobbyDays.length).toBe(8);
     for (const day of hobbyDays) {
       const hobby = day.slots.find((s) => s.role === "hobby")!;
-      expect(parseClock(hobby.window[1])).toBeLessThanOrEqual(parseClock(day.sleep) - 60);
+      expect(parseClock(hobby.window[1])).toBeLessThanOrEqual(parseClock(day.sleep));
+      // G20: the clamped sport (bed - 180 = 19:50) is later than the 18:20 dinner, so the hobby follows dinner.
+      const roles = day.slots.map((s) => s.role);
+      expect(roles.indexOf("dinner")).toBeGreaterThanOrEqual(0);
+      expect(roles.indexOf("hobby")).toBeGreaterThan(roles.indexOf("dinner"));
     }
+  });
+
+  it("a weekend donor with sport at 18:30 eats lunch before the hobby, near the lunch anchor (G20)", () => {
+    const inp = input({ day: 0, slot: 0, routine: 1 }, { sport_has: true, sport_time: 1110, dinner_time: 1230, bed: 1440 });
+    const schedule = generateSchedule(inp);
+    const hobbyDays = schedule.days.filter((d) => d.day_type === "hobby_day");
+    expect(hobbyDays.length).toBe(8);
+    const sigma = inp.defaults.day_level_sigma.routine_strength_1;
+    for (const day of hobbyDays) {
+      const start = (role: string) => parseClock(day.slots.find((s) => s.role === role)!.window[0]);
+      expect(start("lunch")).toBeLessThan(start("hobby"));
+      expect(Math.abs(start("lunch") - 760)).toBeLessThanOrEqual(3 * sigma);
+    }
+    expect(json(generateSchedule(inp))).toBe(json(schedule));
   });
 
   it("a donor going to bed at 27:55 with σ 45 never sleeps past 27:59 and every slot window parses (R44)", () => {

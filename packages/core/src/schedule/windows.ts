@@ -148,11 +148,36 @@ function applyReduceStep(
 }
 
 /**
+ * G20: a slot anchored at sport (the hobby_day hobby) goes in anchor order
+ * among the anchored meal slots: right before the first meal whose anchor is
+ * later than the sport anchor, else right after the last meal. Other slots
+ * keep their template order. Templates without such a slot are unchanged.
+ */
+export function orderBySportAnchor(template: readonly TemplateSlot[], anchors: DayAnchors): TemplateSlot[] {
+  const at = template.findIndex((s) => s.anchor === "sport");
+  const sport = anchors.sport;
+  if (at < 0 || sport === undefined) return [...template];
+  const hobby = template[at]!;
+  const rest = template.filter((_, i) => i !== at);
+  const isMeal = (s: TemplateSlot) => s.meal !== undefined && s.anchor !== undefined && anchors[s.anchor] !== undefined;
+  const later = rest.findIndex((s) => isMeal(s) && anchors[s.anchor!]! > sport);
+  let insert = later;
+  if (insert < 0) {
+    insert = at;
+    rest.forEach((s, i) => {
+      if (isMeal(s)) insert = i + 1;
+    });
+  }
+  return [...rest.slice(0, insert), hobby, ...rest.slice(insert)];
+}
+
+/**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
  * "skip" meals, absent optional keys and unresolved optional nodes. While the
  * windows do not fit, the day type's reduce order is applied step by step (E4);
  * a failure no remaining step can affect drops an optional slot by R24 (R21).
- * Every change is recorded.
+ * Every change is recorded. A sport-anchored slot is first put in anchor
+ * order among the meals (G20).
  * Required slots are never shrunk or dropped; when no optional slot is left it throws.
  */
 export function resolveDayWindows(
@@ -168,7 +193,7 @@ export function resolveDayWindows(
     new TimelineError("SCHEDULE_INFEASIBLE", `day ${day}: slot ${role} is infeasible (${reason})`, { day, role, reason });
 
   const kept: Kept[] = [];
-  for (const slot of template) {
+  for (const slot of orderBySportAnchor(template, anchors)) {
     if (slot.optional_key !== undefined && decisions.optional[slot.optional_key] === false) continue;
     const node = resolveNode(slot, decisions, world);
     if (node === null) continue;
