@@ -302,6 +302,16 @@ describe("donor acceptance redraws", () => {
     expect(r.weekend.redraws).toBe(0);
   });
 
+  it("a weekday donor with breakfast before wake + 10 is neither redrawn nor clamped (G22)", () => {
+    const src = atus2025Source([...many(40, { breakfast_time: 400 }), ...weekendRows(40)]);
+    for (let seed = 0; seed < 20; seed++) {
+      const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
+      expect(r.weekday.redraws).toBe(0);
+      expect(r.weekday.adjustments).toEqual([]);
+      expect(r.weekday.profile.breakfast).toBe(400);
+    }
+  });
+
   it("is deterministic per seed", () => {
     const src = atus2025Source([...many(40), ...weekendRows(20, { bed: 1700 }), ...weekendRows(20)]);
     expect(selectDonors(ATTRS, src, OPTS)).toEqual(selectDonors(ATTRS, src, OPTS));
@@ -367,7 +377,7 @@ describe("donorBoundViolations", () => {
       { item: "wake", bound: 240, value: 200 },
       { item: "sleep", bound: 1679, value: 1700 },
     ]);
-    expect(donorBoundViolations("weekday", { ...ok, breakfast: 425 }, 45, 120)).toEqual([
+    expect(donorBoundViolations("weekend", { ...ok, breakfast: 425 }, 45, 120)).toEqual([
       { item: "breakfast", bound: 430, value: 425 },
     ]);
     expect(donorBoundViolations("weekday", { ...ok, dinner: 1330 }, 45, 120)).toEqual([
@@ -380,6 +390,16 @@ describe("donorBoundViolations", () => {
     expect(donorBoundViolations("weekday", { ...ok, lunch: 590 }, 45, 120)).toEqual([
       { item: "lunch", bound: 600, value: 590 },
     ]);
+  });
+  it("checks breakfast only on weekends: workdays have no breakfast slot (G22)", () => {
+    expect(donorBoundViolations("weekday", { ...ok, breakfast: 400 }, 45, 120)).toEqual([]);
+    expect(donorBoundViolations("weekend", { ...ok, breakfast: 400 }, 45, 120)).toEqual([
+      { item: "breakfast", bound: 430, value: 400 },
+    ]);
+  });
+  it("checks work items only on weekdays (G22)", () => {
+    const p = { ...ok, work_end: 700, lunch: 590 };
+    expect(donorBoundViolations("weekend", p, 45, 120)).toEqual([]);
   });
   it("checks sport only on weekends", () => {
     const p = { ...ok, sport: 1250 };

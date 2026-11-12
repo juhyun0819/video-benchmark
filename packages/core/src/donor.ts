@@ -281,7 +281,11 @@ const LUNCH_MARGIN = 60;
 const SPORT_BEFORE_SLEEP_EXTRA = 60;
 const MAX_ACCEPT_REDRAWS = 5;
 
-/** Generic donor bounds (E5); the template-dependent check comes in through `accept`. */
+/**
+ * Generic donor bounds (E5); the template-dependent check comes in through `accept`.
+ * Only anchors the kind's templates use are checked (G22, as G12 for days):
+ * weekday donors skip breakfast and sport, weekend donors skip the work items.
+ */
 export function donorBoundViolations(
   kind: DayKind,
   profile: DayProfile,
@@ -297,7 +301,7 @@ export function donorBoundViolations(
   };
   low("wake", profile.wake, WAKE_MIN);
   high("sleep", profile.sleep, SLEEP_MAX);
-  low("breakfast", profile.breakfast, profile.wake + BREAKFAST_AFTER_WAKE);
+  if (kind === "weekend") low("breakfast", profile.breakfast, profile.wake + BREAKFAST_AFTER_WAKE);
   high("dinner", profile.dinner, profile.sleep - DINNER_BEFORE_SLEEP);
   if (kind === "weekday" && profile.work_start !== undefined && profile.work_end !== undefined) {
     low("work_end", profile.work_end, profile.work_start + WORK_MIN_SPAN);

@@ -383,8 +383,8 @@ describe("generateSchedule", () => {
   });
 
   it("a workday does not check breakfast: a breakfast jitter before wake + 10 is neither redrawn nor adjusted (G12)", () => {
-    // Weekday donors eat breakfast 20-40 min before waking (the donor clamp moves it to wake + 10);
-    // σ 20 then puts the day's breakfast before wake + 10 on about half the workdays.
+    // Weekday donors eat breakfast 20-40 min before waking (G22: the donor check skips breakfast too),
+    // so the day's breakfast is before wake + 10 on most workdays.
     const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { breakfast_time: 380 });
     const schedule = generateSchedule(inp);
     const p = schedule.donors.weekday.profile;
