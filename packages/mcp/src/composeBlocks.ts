@@ -328,6 +328,9 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
   return days.map((d) => out.get(d.day_index)!);
 }
 
+/** B15: the rest-day hobby role; its slots are filled from clips like the evening activities. */
+const HOBBY_ROLE = "hobby";
+
 /** B10: the roles of the world's evening activities, with the node each one uses. */
 const eveningNodes = (world: World): Map<string, string> => new Map((world.dials.evening_activities ?? []).map((a) => [a.role, a.node]));
 
@@ -461,7 +464,7 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
       case "exercise":
         return { cands: exerciseCands(slot), run: false };
       default:
-        // hobby (spec §3.2.4) and any other role stay empty.
+        // hobby (B15: eveningFill) and any other role stay empty here.
         return { cands: [], run: false };
     }
   }
@@ -754,6 +757,10 @@ export function participantOf(c: Clip): string {
 }
 
 /**
+ * B15: role `hobby` (rest-day slot, e.g. node hobby_1) is filled the same way, but from the node's
+ * binding with any dataset, and a unit is one clip (not a whole video), so a few clips of one video
+ * spread over the hobby days, each with its own day_group.
+ *
  * B10 with B14: every evening-activity slot whose node is not bound to the NextMe person (hobby_2:
  * Ego-Exo4D) and that has no planned footage takes whole catalog takes accepted by its binding. Takes
  * are the binding's clips grouped by video, in an order shuffled with rngFor(seed, "hobby_2"). The
@@ -771,7 +778,7 @@ export function eveningFill(
   world: World,
 ): { entries: BlockPlanEntry[]; takes: EveningTake[] } {
   const person = personSourceOf(world);
-  const roles = eveningNodes(world);
+  const roles = new Set([...eveningNodes(world).keys(), HOBBY_ROLE]);
   const planned = new Set(plan.map((e) => e.slot_id));
   const groupDay = new Map<string, number>(); // day_group -> the day that uses it
   const dayOfSlot = new Map(days.flatMap((d) => d.slots.map((s) => [s.slot_id, d.day_index] as const)));
@@ -781,14 +788,14 @@ export function eveningFill(
   }
   const catalogClips = catalog.clips();
   /** The node's takes in shuffled order. */
-  const takesOf = (node: string): Clip[][] => {
+  const takesOf = (node: string, perClip: boolean): Clip[][] => {
     const byTake = new Map<string, Clip[]>();
     for (const c of deOverlap(catalogClips.filter((x) => x.person_source !== person && bindingAccepts(world, node, x)))) {
-      const key = `${c.source.dataset}:${c.source.video_id}`;
+      const key = perClip ? c.clip_id : `${c.source.dataset}:${c.source.video_id}`;
       byTake.set(key, [...(byTake.get(key) ?? []), c]);
     }
     const list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1)));
-    const rng = rngFor(world.seed, "hobby_2");
+    const rng = rngFor(world.seed, perClip ? "hobby" : "hobby_2");
     for (let i = list.length - 1; i > 0; i--) {
       const j = rng.int(0, i + 1);
       [list[i], list[j]] = [list[j]!, list[i]!];
@@ -807,11 +814,13 @@ export function eveningFill(
   }
   const usedTakes = new Set<string>();
   for (const node of [...new Set(open.map((o) => o.slot.spec.node))].sort()) {
-    const takes = takesOf(node);
     const slots = open.filter((o) => o.slot.spec.node === node);
+    const perClip = slots.every((o) => o.slot.role === HOBBY_ROLE);
+    const takes = takesOf(node, perClip);
+    const keyOf = (take: Clip[]) => (perClip ? take[0]!.clip_id : `${take[0]!.source.dataset}:${take[0]!.source.video_id}`);
     const usable = (o: Open) => (take: Clip[]) => {
       const group = take[0]!.day_group;
-      return !usedTakes.has(`${take[0]!.source.dataset}:${take[0]!.source.video_id}`) && (!groupDay.has(group) || groupDay.get(group) === o.day);
+      return !usedTakes.has(keyOf(take)) && (!groupDay.has(group) || groupDay.get(group) === o.day);
     };
     /** B14: the next take for slot `o`: its participant's first, else the free participant with the most takes left. */
     const pick = (o: Open): Clip[] | undefined => {
@@ -844,7 +853,7 @@ export function eveningFill(
         const take = pick(o);
         if (take === undefined) continue;
         progress = true;
-        usedTakes.add(`${take[0]!.source.dataset}:${take[0]!.source.video_id}`);
+        usedTakes.add(keyOf(take));
         groupDay.set(take[0]!.day_group, o.day);
         o.participant = participantOf(take[0]!);
         let seconds = 0;
@@ -875,7 +884,9 @@ export type DaySummary = {
   last_real: string | null;
   /** Roles of the day's slots with no placement, in slot order. */
   empty_roles: string[];
-  /** B10: what filled the day's evening-activity blocks (exercise, hobby_2): the real date or the take, with placed seconds. */
+  /** B10 and B15: what filled the day's activity blocks (exercise, hobby_2, hobby): the real date or the take, with placed seconds. */
+  activities: EveningSource[];
+  /** @deprecated alias of `activities` (the B10 name), the same list. */
   evening: EveningSource[];
 };
 
@@ -928,7 +939,7 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
   for (const d of t.schedule.days) days_by_type[d.day_type] = (days_by_type[d.day_type] ?? 0) + 1;
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
   const person = personSourceOf(world);
-  const eveningRoles = eveningNodes(world);
+  const eveningRoles = new Set([...eveningNodes(world).keys(), HOBBY_ROLE]);
   const per_day = t.schedule.days.map((day): DaySummary => {
     const ps = placements.filter((p) => p.day_index === day.day_index);
     const filled = new Set(ps.map((p) => p.slot_id));
@@ -936,6 +947,16 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
       const at = realStartOf(p.clip)! - p.clip.source_start_s;
       return [at + p.source_start_s, at + p.source_end_s] as const;
     });
+    const activities = day.slots
+      .filter((s) => eveningRoles.has(s.role))
+      .flatMap((s) => {
+        const by = new Map<string, number>();
+        for (const p of ps.filter((x) => x.slot_id === s.slot_id)) {
+          const src = p.clip.person_source === person ? p.clip.day_group : p.clip.source.video_id;
+          by.set(src, (by.get(src) ?? 0) + p.synthetic_end_s - p.synthetic_start_s);
+        }
+        return [...by].map(([source_date_or_take, seconds]) => ({ role: s.role, source_date_or_take, seconds: round3(seconds) }));
+      });
     return {
       day_index: day.day_index,
       day_type: day.day_type,
@@ -944,16 +965,8 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
       first_real: real.length > 0 ? formatClock(Math.min(...real.map((r) => r[0])) / 60) : null,
       last_real: real.length > 0 ? formatClock(Math.max(...real.map((r) => r[1])) / 60) : null,
       empty_roles: day.slots.filter((s) => !filled.has(s.slot_id)).map((s) => s.role),
-      evening: day.slots
-        .filter((s) => eveningRoles.has(s.role))
-        .flatMap((s) => {
-          const by = new Map<string, number>();
-          for (const p of ps.filter((x) => x.slot_id === s.slot_id)) {
-            const src = p.clip.person_source === person ? p.clip.day_group : p.clip.source.video_id;
-            by.set(src, (by.get(src) ?? 0) + p.synthetic_end_s - p.synthetic_start_s);
-          }
-          return [...by].map(([source_date_or_take, seconds]) => ({ role: s.role, source_date_or_take, seconds: round3(seconds) }));
-        }),
+      activities,
+      evening: activities,
     };
   });
   return {

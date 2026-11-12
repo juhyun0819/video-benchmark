@@ -251,3 +251,23 @@ Tests:
 - a spare date never serves two days;
 - hobby_2 takes are spread so that every hobby_2 day gets at least one when takes ≥ days;
 - block verify passes.
+
+## Addendum 4 (2026-11-13): hobby_1 = LEGO from YouTube
+
+- **B15. hobby_1 fill.** The role `hobby` (the rest-day hobby slot, node hobby_1) is no longer left empty. It is filled like hobby_2 (B14):
+  - The clips come from the catalog clips accepted by the slot node's binding, from any dataset.
+  - Clips are spread round-robin over the hobby days in day order. Each clip is used once.
+  - A clip's day_group is never used on another day.
+  - Clips are placed from the block start and trimmed at the block end.
+  - The summary's per-day `evening` list is renamed `activities` and includes hobby. `evening` is kept as an alias.
+  - World: `hobby_1: { kind: "hobby", activity: "lego building", setting: "home_indoor", weekly_freq: 1, tags: ["lego"] }`, bound `{ dataset: ["youtube"], tags_any: ["lego"] }`. The bank has 3 YouTube clips (MALryOlc3TU parts 1–3, each with its own day_group).
+
+### Task 9: hobby_1 fill (B15)
+Files: `packages/mcp/src/composeBlocks.ts`, tests.
+
+Tests:
+- 3 bound clips over 3 hobby days give one clip each;
+- a 132-min clip in a 120-min window is trimmed;
+- a clip is never reused;
+- hobby slots with no bound clips stay empty;
+- block verify passes.

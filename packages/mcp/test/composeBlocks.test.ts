@@ -1223,4 +1223,73 @@ describe("evening activities (B10)", () => {
     const dateOf = new Map(result.assignments.map((a) => [a.day_index, a.date]));
     for (const d of result.summary.per_day) for (const e of d.evening.filter((x) => x.role === "exercise")) expect(e.source_date_or_take).toBe(dateOf.get(d.day_index));
   });
+
+  describe("hobby_1 (B15)", () => {
+    function hobbyWorld(bound: boolean): World {
+      const base = worldJson({ trip: false });
+      base.nodes.hobby_1 = { kind: "hobby", activity: "lego building", setting: "home_indoor", weekly_freq: 1, tags: ["lego"] };
+      if (bound) base.node_binding.hobby_1 = { dataset: ["youtube"], tags_any: ["lego"] };
+      return parseWorld(base);
+    }
+    const lego = (i: number, min: number): Clip => ({
+      clip_id: `youtube:lego:${i}`,
+      category: "hobby",
+      setting: "home_indoor",
+      node: "hobby",
+      activity: "lego building",
+      time_of_day: "unknown",
+      tags: ["lego"],
+      source: { dataset: "youtube", video_id: "lego", media: { kind: "video", fps: 30, path: "lego.mp4" } },
+      source_start_s: i * 200 * 60,
+      source_end_s: i * 200 * 60 + min * 60,
+      day_group: `youtube:lego:${i}`,
+      person_source: "youtube:lego",
+      fingerprint: null,
+      extractor_version: "fixture.v1",
+    });
+    const hobbyDay = (n: number): ScheduleDay => {
+      const s = { ...hobbySlot(1, "hobby", "hobby_1", "10:00", "12:00"), slot_id: `d${n}-s1` };
+      return { ...mkDay("hobby_day", [s]), day_index: n, slots: [s] };
+    };
+
+    it("gives each of 3 hobby days one clip, trims a 132-min clip to the 120-min window, never reuses a clip", () => {
+      const w = hobbyWorld(true);
+      const clips = [lego(0, 60), lego(1, 132), lego(2, 45)];
+      const days = [1, 2, 3].map(hobbyDay);
+      const r = eveningFill(days, [], new MemCatalog(clips), w);
+      expect(r.takes.map((x) => x.day_index).sort()).toEqual([1, 2, 3]);
+      expect(new Set(r.entries.map((e) => e.clip_id)).size).toBe(3);
+      expect(r.takes.every((x) => x.role === "hobby")).toBe(true);
+      expect(Math.max(...r.takes.map((x) => x.seconds))).toBe(7200);
+      expect(eveningFill(days, [], new MemCatalog(clips), w)).toEqual(r);
+      // two clips, three days: no reuse
+      expect(eveningFill(days, [], new MemCatalog(clips.slice(0, 2)), w).entries).toHaveLength(2);
+    });
+
+    it("leaves hobby slots empty without bound clips", () => {
+      const days = [1, 2, 3].map(hobbyDay);
+      expect(eveningFill(days, [], new MemCatalog([lego(0, 60)]), hobbyWorld(false)).entries).toEqual([]);
+      expect(eveningFill(days, [], new MemCatalog([]), hobbyWorld(true)).entries).toEqual([]);
+    });
+
+    it("composeBlocks: fills hobby days from youtube clips, lists them in activities and block verify passes", () => {
+      const dataDir = makeTempDir();
+      writeAtusPool(dataDir);
+      const config = loadConfig(CONFIG_DIR, dataDir);
+      const w = hobbyWorld(true);
+      const t = createTimeline(w, generateSchedule(scheduleInput(config, w)), () => "compose-test-hobby");
+      const work = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+      const rest = Array.from({ length: 10 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+      const catalog = new MemCatalog([...work.flatMap((d) => workDate(d)), ...rest.flatMap((d) => restDate(d)), lego(0, 60), lego(1, 132), lego(2, 45)]);
+      const result = composeBlocks(t, catalog);
+      const report = verifyTimeline(t, catalog, { mode: "block", placements: result.placements });
+      expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+      const hobbySlots = t.schedule.days.flatMap((d) => d.slots).filter((s) => s.role === "hobby").length;
+      const acts = result.summary.per_day.flatMap((d) => d.activities).filter((a) => a.role === "hobby");
+      expect(acts.length).toBe(Math.min(3, hobbySlots));
+      expect(result.summary.per_day.every((d) => d.evening === d.activities)).toBe(true);
+      const used = result.placements.filter((p) => p.clip.source.dataset === "youtube").map((p) => p.clip.clip_id);
+      expect(new Set(used).size).toBe(used.length);
+    });
+  });
 });
