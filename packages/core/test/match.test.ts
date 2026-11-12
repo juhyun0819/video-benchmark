@@ -183,6 +183,35 @@ describe("fillTimeline", () => {
     expect(new Set(day12.map((x) => x.clip.day_group))).toEqual(new Set(["nextme800:g01", "nextme800:g02"]));
   });
 
+  describe("missing_required_allowance (N6)", () => {
+    const allowing = (max_days: number) => {
+      const w = makeWorld();
+      return { ...w, dials: { ...w.dials, missing_required_allowance: [{ role: "home_morning", max_days }] } };
+    };
+    const regen = (d: number, a: number): ScheduleDay => makeDay(d, a);
+
+    it("leaves home_morning empty for one day when the bank misses exactly one morning home date", () => {
+      const cat = memoryCatalog(makeClips({ homeGroups: 27 }));
+      const t = fillTimeline(createTimeline(allowing(1), makeSchedule(28), genId), cat, rankSelector, regen);
+      const dropped = Object.entries(t.slots).filter(([, e]) => e.relaxations.includes("dropped_required"));
+      expect(dropped).toHaveLength(1);
+      expect(dropped[0]![1].clip_ids).toEqual([]);
+    });
+
+    it("two missing dates exceed max_days 1 and fail UNFILLABLE naming the slot", () => {
+      const cat = memoryCatalog(makeClips({ homeGroups: 26 }));
+      const err = errorOf(() => fillTimeline(createTimeline(allowing(1), makeSchedule(28), genId), cat, rankSelector, regen));
+      expect(err.code).toBe("UNFILLABLE");
+      expect((err.details as { slots: string[] }).slots).toEqual(["d28-s1"]);
+    });
+
+    it("without the dial a missing required slot still fails", () => {
+      const cat = memoryCatalog(makeClips({ homeGroups: 27 }));
+      const err = errorOf(() => fillTimeline(createTimeline(makeWorld(), makeSchedule(28), genId), cat, rankSelector, regen));
+      expect(err.code).toBe("UNFILLABLE");
+    });
+  });
+
   it("every clip longer than every window → UNFILLABLE", () => {
     const huge = memoryCatalog(makeClips({ durationS: 25 * 3600 }));
     const t0 = createTimeline(makeWorld(), makeSchedule(28), genId);

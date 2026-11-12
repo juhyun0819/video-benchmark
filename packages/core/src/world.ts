@@ -120,6 +120,8 @@ export const WorldSchema = z
       late_workdays_per_week: z.number().int().min(0).max(5).default(0),
       /** Multi-day trip exceptions (N3); each length equals its binding's day_group_sequence length. */
       trips: z.array(z.object({ node: z.string(), length_days: z.number().int().min(1) })).default([]),
+      /** N6: a required slot of `role` may be left empty on up to `max_days` distinct days when no clip fits. */
+      missing_required_allowance: z.array(z.object({ role: z.string(), max_days: z.number().int().min(1) })).default([]),
     }),
     seed: z.number().int().min(0),
   })

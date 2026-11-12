@@ -76,6 +76,23 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
     for (const rule of needClips) add(rule, { detail: `clips missing from the catalog: ${missing_clips.join(", ")}` });
   }
 
+  // N6: a dropped required slot needs an allowance for its role, spent on at most max_days days.
+  const droppedDays = new Map<string, number[]>();
+  for (const day of t.schedule.days) {
+    for (const s of day.slots) {
+      if (!t.slots[s.slot_id]?.relaxations.includes("dropped_required")) continue;
+      const days = droppedDays.get(s.role) ?? [];
+      if (!days.includes(day.day_index)) days.push(day.day_index);
+      droppedDays.set(s.role, days);
+    }
+  }
+  for (const [role, days] of droppedDays) {
+    const max = t.world.dials.missing_required_allowance.find((a) => a.role === role)?.max_days ?? 0;
+    if (days.length > max) {
+      add("slot_window", { day_index: days[max], detail: `required ${role} is empty on ${days.length} days (days ${days.join(", ")}); allowance is ${max}` });
+    }
+  }
+
   for (const day of t.schedule.days) {
     const d = day.day_index;
     const roles = new Set(day.slots.map((s) => s.role));
@@ -98,7 +115,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
       if (lo < wake || hi > sleep) {
         add("wake_sleep", { day_index: d, slot_id: s.slot_id, detail: `window ${s.window[0]}-${s.window[1]} is outside ${day.wake}-${day.sleep}` });
       }
-      if (s.required && (t.slots[s.slot_id]?.clip_ids.length ?? 0) === 0) {
+      if (s.required && (t.slots[s.slot_id]?.clip_ids.length ?? 0) === 0 && !t.slots[s.slot_id]?.relaxations.includes("dropped_required")) {
         add("slot_window", { day_index: d, slot_id: s.slot_id, detail: `required slot ${s.role} has no clip` });
       }
     }

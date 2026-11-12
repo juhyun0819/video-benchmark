@@ -116,7 +116,8 @@
         "wake_sleep": "default_v1",
         "start_weekday": "Mon",
         "late_workdays_per_week": 0,
-        "trips": []
+        "trips": [],
+        "missing_required_allowance": []
       },
       "seed": 4242
     },
@@ -130,7 +131,8 @@
       "wake_sleep": "default_v1",
       "start_weekday": "Mon",
       "late_workdays_per_week": 0,
-      "trips": []
+      "trips": [],
+      "missing_required_allowance": []
     },
     "seed": 4242,
     "node_binding": {

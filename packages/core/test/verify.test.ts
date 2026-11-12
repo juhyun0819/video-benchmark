@@ -98,6 +98,29 @@ function withExceptionLunch(): Built {
   return { t: setSlot(u, "d1-s3", ["d1-diner"]), clips: [...clips, diner] };
 }
 
+describe("verifyTimeline missing_required_allowance", () => {
+  const withAllowance = (t: Timeline, max_days: number): Timeline => ({
+    ...t,
+    world: { ...t.world, dials: { ...t.world.dials, missing_required_allowance: [{ role: "home_morning", max_days }] } },
+  });
+  const drop = (t: Timeline, id: string) => setSlot(t, id, [], ["dropped_required"]);
+
+  it("passes with one dropped day within the allowance and fails with two", () => {
+    const { t, clips } = base();
+    const one = withAllowance(drop(t, "d1-s1"), 1);
+    expect(verifyTimeline(one, memoryCatalog(clips)).pass).toBe(true);
+    const two = withAllowance(drop(drop(t, "d1-s1"), "d2-s1"), 1);
+    const r = verifyTimeline(two, memoryCatalog(clips));
+    expect(r.pass).toBe(false);
+    expect(r.rules.slot_window.pass).toBe(false);
+  });
+
+  it("fails a dropped required slot when no allowance is configured", () => {
+    const { t, clips } = base();
+    expect(verifyTimeline(drop(t, "d1-s1"), memoryCatalog(clips)).rules.slot_window.pass).toBe(false);
+  });
+});
+
 describe("verifyTimeline", () => {
   it("valid timeline passes every rule", () => {
     const { t, clips } = base();

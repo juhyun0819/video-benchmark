@@ -148,6 +148,18 @@ export function preflightCapacity(t: Timeline, catalog: ClipCatalog): void {
   }
 }
 
+/** N6: whether `day` may leave a required `role` slot empty: fewer than max_days other days have used the allowance. */
+function allowanceLeft(t: Timeline, day: ScheduleDay, role: string): boolean {
+  const max = t.world.dials.missing_required_allowance.find((a) => a.role === role)?.max_days ?? 0;
+  if (max === 0) return false;
+  const used = t.schedule.days.filter(
+    (d) =>
+      d.day_index !== day.day_index &&
+      d.slots.some((s) => s.role === role && t.slots[s.slot_id]?.relaxations.includes("dropped_required")),
+  ).length;
+  return used < max;
+}
+
 /** Fills the empty slots of one day in order; mutates `t.slots` (a private copy) and returns unfillable required slots. */
 function fillDay(t: Timeline, catalog: ClipCatalog, selector: Selector, day: ScheduleDay): string[] {
   const failed: string[] = [];
@@ -164,7 +176,8 @@ function fillDay(t: Timeline, catalog: ClipCatalog, selector: Selector, day: Sch
       }
     }
     if (level === undefined) {
-      if (slot.required) failed.push(slot.slot_id);
+      if (slot.required && allowanceLeft(t, day, slot.role)) t.slots[slot.slot_id] = { clip_ids: [], relaxations: ["dropped_required"] };
+      else if (slot.required) failed.push(slot.slot_id);
       else t.slots[slot.slot_id] = { clip_ids: [], relaxations: ["dropped_optional"] };
       continue;
     }

@@ -5,7 +5,7 @@ import { findSlot, hardFilterFailures } from "./match/filters.js";
 import { ScheduleSchema, type Schedule, type ScheduleDay } from "./schedule/types.js";
 import { WorldSchema, type World } from "./world.js";
 
-export const RelaxationSchema = z.enum(["ignore_tags", "widen_window_30m", "dropped_optional"]);
+export const RelaxationSchema = z.enum(["ignore_tags", "widen_window_30m", "dropped_optional", "dropped_required"]);
 export type Relaxation = z.infer<typeof RelaxationSchema>;
 
 export const SlotAssignmentSchema = z.object({
@@ -67,9 +67,10 @@ export function assignClip(
   const clip = catalog.getClip(a.clipId);
   if (!clip) throw new TimelineError("CLIP_NOT_FOUND", `clip ${a.clipId} is not in the catalog`, { clip_id: a.clipId });
   const relax = a.relaxations ?? [];
-  if (relax.includes("dropped_optional")) {
+  const dropRelax = relax.find((r) => r === "dropped_optional" || r === "dropped_required");
+  if (dropRelax !== undefined) {
     // R36: only fillTimeline marks a slot dropped; an assigned slot is never dropped.
-    throw new TimelineError("CLIP_INELIGIBLE", `"dropped_optional" is not a relaxation a clip can be assigned with`, {
+    throw new TimelineError("CLIP_INELIGIBLE", `"${dropRelax}" is not a relaxation a clip can be assigned with`, {
       slot_id: a.slotId,
       clip_id: a.clipId,
       failed: ["invalid_relaxation"],
@@ -84,7 +85,7 @@ export function assignClip(
     });
   }
   const entry = t.slots[a.slotId] ?? { clip_ids: [], relaxations: [] };
-  const used = new Set([...entry.relaxations.filter((r) => r !== "dropped_optional"), ...relax]);
+  const used = new Set([...entry.relaxations.filter((r) => r !== "dropped_optional" && r !== "dropped_required"), ...relax]);
   return withSlot(t, a.slotId, {
     clip_ids: [...entry.clip_ids, a.clipId],
     relaxations: RELAXATION_ORDER.filter((r) => used.has(r)),

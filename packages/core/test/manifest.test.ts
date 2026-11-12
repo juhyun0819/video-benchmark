@@ -224,6 +224,18 @@ describe("buildTimelineManifest", () => {
     expect(none.realized.matching_dropped_by_role).toEqual({});
   });
 
+  it("realized.dropped_required counts dropped_required slots by role", () => {
+    const { t, clips } = build(3);
+    const t2 = {
+      ...t,
+      world: { ...t.world, dials: { ...t.world.dials, missing_required_allowance: [{ role: "home_morning", max_days: 1 }] } },
+      slots: { ...t.slots, "d2-s1": { clip_ids: [], relaxations: ["dropped_required" as const] } },
+    };
+    const m = buildTimelineManifest(t2, catalogOf(clips.filter((c) => c.clip_id !== "d2-home")), NOW, TEMPLATES);
+    expect(TimelineManifestSchema.parse(m)).toEqual(m);
+    expect(m.realized.dropped_required).toEqual({ home_morning: 1 });
+  });
+
   it("days carry slot_exception_eligible/candidates and slot windows, so realized recounts from the manifest alone (G24)", () => {
     const { t, clips } = build(3);
     t.schedule.days[1] = { ...t.schedule.days[1]!, slot_exception_eligible: true, slot_exception_candidates: 2 };
@@ -235,7 +247,7 @@ describe("buildTimelineManifest", () => {
     expect(m.days[0]!.slots).toEqual(
       t.schedule.days[0]!.slots.map(({ slot_id, role, required, window }) => ({ slot_id, role, required, window })),
     );
-    const { matching_dropped_slots: _n, matching_dropped_by_role: _r, ...realized } = m.realized;
+    const { matching_dropped_slots: _n, matching_dropped_by_role: _r, dropped_required: _d, ...realized } = m.realized;
     expect(realizedOf(m.days, m.inputs.world, TEMPLATES)).toEqual(realized);
     expect(realized.slot_exception_eligible_days).toBe(2);
     expect(realized.slot_exception_share).toBe(0);

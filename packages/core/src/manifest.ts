@@ -148,6 +148,8 @@ export const TimelineManifestSchema = z.object({
     /** Slots left empty at matching time (relaxation "dropped_optional"). */
     matching_dropped_slots: z.number().int().min(0),
     matching_dropped_by_role: z.record(z.string(), z.number().int().min(1)),
+    /** Required slots left empty under dials.missing_required_allowance (N6), by role; present only when that dial is set. */
+    dropped_required: z.record(z.string(), z.number().int().min(1)).optional(),
   }),
   donor_adjustments: z.object({
     weekday: DonorAdjustmentSchema,
@@ -318,10 +320,14 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
   captions.sort(compareCaptions);
   const s = t.schedule;
   const matchingDropped: Record<string, number> = {};
+  const droppedRequired: Record<string, number> = {};
   for (const d of t.schedule.days) {
     for (const slot of d.slots) {
       if (t.slots[slot.slot_id]?.relaxations.includes("dropped_optional")) {
         matchingDropped[slot.role] = (matchingDropped[slot.role] ?? 0) + 1;
+      }
+      if (t.slots[slot.slot_id]?.relaxations.includes("dropped_required")) {
+        droppedRequired[slot.role] = (droppedRequired[slot.role] ?? 0) + 1;
       }
     }
   }
@@ -358,6 +364,7 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       ...realizedOf(s.days, t.world, templates),
       matching_dropped_slots: Object.values(matchingDropped).reduce((a, b) => a + b, 0),
       matching_dropped_by_role: matchingDropped,
+      ...(t.world.dials.missing_required_allowance.length > 0 ? { dropped_required: droppedRequired } : {}),
     },
     donor_adjustments: {
       weekday: pickOf(s.donors.weekday),
