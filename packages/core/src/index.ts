@@ -18,3 +18,4 @@ export * from "./match.js";
 export * from "./layout.js";
 export * from "./verify.js";
 export * from "./manifest.js";
+export * from "./stats.js";

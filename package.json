@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "ingest": "tsx packages/ingest/src/cli.ts",
     "mcp": "tsx packages/mcp/src/main.ts",
-    "generate": "tsx packages/mcp/src/generate.ts"
+    "generate": "tsx packages/mcp/src/generate.ts",
+    "stats": "tsx packages/mcp/src/stats.ts"
   },
   "devDependencies": {
     "@types/node": "^24",
