@@ -165,3 +165,59 @@ Steps (TDD):
 - [ ] Implement. Run `npm test && npm run typecheck`. Commit.
 
 - **B6b. Home-morning last resort.** This applies after B6 to every home_morning that is still empty. Use a spare date not yet taken, under the same one-day-per-date rule. Its candidates are home clips that start before that date's first non-home labeled clip and before 13:00, with no time window. Pick the date whose run is longest, breaking ties by earlier date. Record it in `home_fills` with `fallback: true`.
+
+## Addendum 2 (2026-11-13): weekday dates, gym, hobby 2
+
+- **B7. Weekday dates and work_am fallback.**
+  - workday and workday_late days take real Mon–Fri dates first. Sat/Sun work dates are used only when the weekday pool runs out.
+  - If the real lunch comes before the first workplace clip (so work_am would be empty), work_am takes the date's workplace clips from the start, in order, until its window is full. work_pm continues with the rest.
+- **B8. Evening activities in the schedule (core).** A new optional dial is `dials.evening_activities: [{ node, role, position: "before_dinner" | "after_dinner", duration_min, weekdays?: Weekday[], count?: int, max_per_week?: int }]`. The default is [].
+  - **Eligible days:** template `workday` days only. Late, trip, leave and exception days are excluded.
+  - **Days chosen:**
+    - With `weekdays`, every eligible day on those weekdays.
+    - With `count`, the eligible days with the earliest work_pm window end. At most `max_per_week` per ISO week. Ties are broken by `rngFor(seed, "evening", node)`.
+  - **Slot:** inserted after work_pm (before_dinner) or right after dinner (after_dinner).
+  - **Window:** starts after the previous slot plus the gap-table travel, and lasts `duration_min`.
+  - **Following slots:** they shift later by the overlap (a before_dinner activity pushes dinner, and an after_dinner one pushes home_evening). Nothing may pass sleep. If it would, shrink home_evening first, then the activity, to no less than 20 min.
+  - **Record:** the slot spec uses the activity node's place, setting, category hobby and tags.
+  - Existing worlds are byte-identical.
+- **B9. Gym label.** `config/nextme_label_rules.l3.json` gains a place rule `gym` (venue_indoor, category hobby, tags ["gym"]) placed before workplace. Its words are gym, fitness center, fitness centre, workout, dumbbell, dumbbells, bench press, pull-up, cable machine, treadmill.
+- **B10. compose-blocks for evening activities.**
+  - Exercise days prefer real dates that have gym clips. The exercise block takes that date's gym run (contiguous, gap ≤ 15 min, including the transit just before it).
+  - hobby_2 blocks take Ego-Exo4D clips bound to the hobby_2 node. Each take is used once. The take's `day_group` must not be used on another day.
+  - Commute stays as now.
+- **B11. Ego-Exo4D guitar category.** `config/categories.json` gains `hobby_guitar` (egoexo4d, scenario Music, keywords ["guitar"], clip hobby/venue_indoor/node "hobby", tags ["music_guitar"]) placed before `hobby_music`.
+
+### Task 5: Weekday dates and work_am fallback (B7)
+Files: `packages/mcp/src/composeBlocks.ts`, tests.
+- Tests:
+  - a Saturday work date is used only after the weekday dates;
+  - a date whose lunch precedes work fills work_am from its first workplace clips.
+
+### Task 6: Evening activities in the schedule (B8)
+Files:
+- `packages/core/src/world.ts`
+- `packages/core/src/schedule/{decisions,windows,generate,types}.ts`
+- tests
+
+Tests:
+- Tue/Thu exercise is inserted before dinner on Tue/Thu workdays only;
+- count 6 with max 2 per week picks the earliest work-end days;
+- an after_dinner activity pushes home_evening later and never past sleep;
+- late, trip and leave days get nothing;
+- the golden test is unchanged for worlds without the dial.
+
+### Task 7: Labels and compose for gym and hobby_2 (B9–B11)
+Files:
+- `config/nextme_label_rules.l3.json`
+- `config/categories.json`
+- `packages/mcp/src/composeBlocks.ts`
+- ingest tests
+- compose tests
+
+Tests:
+- gym words label a clip as `gym` before workplace;
+- the egoexo guitar take maps to hobby_guitar;
+- exercise days get gym dates and the gym run;
+- hobby_2 takes egoexo clips, each once;
+- block verify passes.
