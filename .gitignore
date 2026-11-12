@@ -9,9 +9,11 @@ dist/
 coverage/
 .vitest/
 
-# Local data — derived from gated/licensed datasets (NextMe-800 CC BY-NC, HD-EPIC, Ego4D).
-# Never commit: raw annotations, normalized catalog, compositions, exported manifests.
-data/
+# Local data — derived from gated/licensed datasets (NextMe-800 CC BY-NC, Ego4D, Ego-Exo4D).
+# Never commit: raw annotations, normalized catalog, timelines, exported manifests.
+# Exception: data/distributions/ holds ATUS outputs (US public-domain survey data), committed so new servers work after clone.
+data/*
+!data/distributions/
 
 # Python helper (HD-EPIC pkl conversion)
 __pycache__/

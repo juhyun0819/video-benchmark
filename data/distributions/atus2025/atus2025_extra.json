@@ -1,0 +1,72 @@
+{
+ "weekend_nonwork_n": 910,
+ "weekend_worked_share": 0.30360616763045295,
+ "weekend_nonwork_meals": {
+  "breakfast": {
+   "share_reporting": 0.53,
+   "n_reporting": 493,
+   "time_p25_p50_p75": [
+    "07:15",
+    "08:02",
+    "09:00"
+   ],
+   "location_share": {
+    "home": 0.861,
+    "workplace": 0.0,
+    "others_home": 0.039,
+    "restaurant": 0.053,
+    "other": 0.047
+   }
+  },
+  "lunch": {
+   "share_reporting": 0.438,
+   "n_reporting": 424,
+   "time_p25_p50_p75": [
+    "11:31",
+    "12:25",
+    "13:20"
+   ],
+   "location_share": {
+    "home": 0.668,
+    "workplace": 0.0,
+    "others_home": 0.058,
+    "restaurant": 0.192,
+    "other": 0.082
+   }
+  },
+  "dinner": {
+   "share_reporting": 0.699,
+   "n_reporting": 651,
+   "time_p25_p50_p75": [
+    "17:15",
+    "18:01",
+    "19:00"
+   ],
+   "location_share": {
+    "home": 0.785,
+    "workplace": 0.0,
+    "others_home": 0.074,
+    "restaurant": 0.103,
+    "other": 0.038
+   }
+  }
+ },
+ "weekday_evening_home": {
+  "n_workers": 752,
+  "share_any_home_activity_ge30min": 0.908,
+  "share_any_home_activity_ge60min": 0.87,
+  "minutes_p25_p50_p75": [
+   105,
+   187,
+   270
+  ],
+  "share_with_leisure_12_ge30": 0.766,
+  "share_with_household_02_ge30": 0.457,
+  "definition": "at home (TEWHERE=1), between last workplace work end and bedtime, excluding sleep(0101), eating(1101), travel(18)"
+ },
+ "weekday_after_work_minutes_p10_p50_p90": [
+  140,
+  330,
+  496
+ ]
+}

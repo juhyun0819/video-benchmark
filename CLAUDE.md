@@ -11,6 +11,7 @@
 ## 데이터 규칙
 
 - `data/`는 NextMe-800, HD-EPIC, Ego-Exo4D, Ego4D에서 파생된 라이선스 데이터다. 커밋하거나 공개하지 않는다.
+- 예외: `data/distributions/`(ATUS 산출물)는 미국 정부 공개 자료라 git에 커밋한다. 새 서버에서 clone만 하면 donor pool을 쓸 수 있게 하기 위해서다. 다른 `data/` 폴더는 계속 커밋하지 않는다.
 - 공개 저장소에 올리지 않는다. 서버 간 동기화는 비공개 저장소 `zzu819/videomem`과 `scripts/sync_data.py`로 한다. 이 스크립트는 저장소가 비공개가 아니면 올리지 않는다.
 - 동기화 대상은 `catalog`, `worlds`, `timelines`, `exports`, `renders`, `distributions`뿐이다. 원본 미디어와 `raw`는 올리지 않고 각 출처에서 받는다.
 - 테스트 fixture는 합성 데이터만 쓴다.
@@ -69,7 +70,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
      - 공용 서버이므로 `hf auth login`을 하지 않는다.
      - 사용자가 자기 터미널에서 `read -rs HF_TOKEN && export HF_TOKEN`으로 그 셸에만 토큰을 넣고 실행한다.
      - Claude 셸에서는 이 환경변수가 보이지 않으므로, 토큰이 필요한 다운로드는 사용자가 직접 실행한다.
-  2. ATUS 산출물(`data/distributions/atus2025/`)은 `scripts/sync_data.py pull`로 받거나 다시 계산한다.
+  2. ATUS 산출물(`data/distributions/atus2025/`)은 git에 들어 있어 따로 받을 필요가 없다.
   3. 계획 Task 1부터 진행한다.
 - NextMe 라벨은 키워드 규칙과 Claude의 caption 검토로 만든 초안이다. manifest에 검수 전으로 표시하고, 사람이 검수해야 한다(D9).
 

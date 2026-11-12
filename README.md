@@ -48,7 +48,7 @@ Ego4D와 Ego-Exo4D는 실행할 때마다 그 데이터셋의 카탈로그를 �
 
 ### ATUS 분포
 
-`data/distributions/atus2025/`에 ATUS 2025에서 뽑은 시간 분포(`atus2025_stats.json` 등)가 있다. 이 폴더는 동기화 대상이라 `sync_data.py pull`로 받으면 된다. 다시 계산하려면 BLS 원자료(Activity, Respondent csv)를 받아 아래를 실행한다. pandas와 numpy가 필요하다.
+`data/distributions/atus2025/`에 ATUS 2025에서 뽑은 시간 분포(`atus2025_stats.json` 등)가 있다. ATUS는 미국 정부 공개 자료라 이 폴더만 예외로 git에 커밋되어 있다(clone하면 바로 쓸 수 있다). `data/`의 다른 폴더는 커밋하지 않는다. 다시 계산하려면 BLS 원자료(Activity, Respondent csv)를 받아 아래를 실행한다. pandas와 numpy가 필요하다.
 
 ```bash
 uv run --isolated --no-project --with pandas --with numpy \
