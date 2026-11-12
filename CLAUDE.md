@@ -64,7 +64,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
   - 시각표는 ATUS donor가 정한다.
   - 각 블록에는 합성 하루마다 고른 실제 NextMe 날짜의 영상을 통째로 넣는다.
   - 빈 집 블록과 덜 찬 근무·집 블록은 남는 날짜의 영상으로 채운다.
-  - 실행: `npm run compose-blocks -- --world config/worlds/nextme-p00.json --fit-roles hobby`
+  - 실행: `npm run compose-blocks -- --world config/worlds/nextme-p00.json --fit-roles hobby --pins config/worlds/nextme-p00.pins.json`
 - 데이터(커밋하지 않음):
   - `data/raw/nextme-hf`(caption)
   - `data/raw/egoexo`(메타데이터)
