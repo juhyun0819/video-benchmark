@@ -5,6 +5,7 @@ import {
   parseClock,
   rngFor,
   TimelineError,
+  TRIP_PLACES,
   transitionBlocks,
   type BlockPlacement,
   type BlockPlanEntry,
@@ -47,6 +48,10 @@ const WORK_REJECT = new Set([...COMMUTE, ..."tram exit exits departure supermark
 /** B19: a meal run must contain one of these. */
 const EAT_ACT = new Set("eat eats eating ate dine dines dining consume consumes consuming cook cooks cooking cooked buffet".split(" "));
 const DRIVE = new Set("drive drives driving car".split(" "));
+/** B25: phrases that mark a trip clip as an eating scene without an EAT_ACT word. */
+const EAT_PHRASE = /\b(?:shared? a meal|shared a meal|over (?:my|our|a)\b[^.]*?\bmeal|during a meal|meal of)\b/i;
+/** B25: the eating test of a trip-day meal slot, on the clip's L3 text only (category is ignored). */
+const tripEating = (c: Clip): boolean => hasWord(c.activity, EAT_ACT) || EAT_PHRASE.test(c.activity);
 const hasWord = (text: string, set: ReadonlySet<string>): boolean => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).some((w) => set.has(w));
 
 /**
@@ -67,8 +72,8 @@ function contentOk(world: World, slot: Slot, c: Clip): boolean {
  * B19: trims a meal run to one clip before the first EAT_ACT clip through one after the last, and drops
  * drive/car clips. No EAT_ACT clip: empty.
  */
-function trimMeal<T extends { clip: Clip }>(run: readonly T[]): T[] {
-  const idx = run.flatMap((c, i) => (hasWord(c.clip.activity, EAT_ACT) ? [i] : []));
+function trimMeal<T extends { clip: Clip }>(run: readonly T[], eats: (c: Clip) => boolean = (c) => hasWord(c.activity, EAT_ACT)): T[] {
+  const idx = run.flatMap((c, i) => (eats(c.clip) ? [i] : []));
   if (idx.length === 0) return [];
   return run.slice(Math.max(0, idx[0]! - 1), idx[idx.length - 1]! + 2).filter((c) => !hasWord(c.clip.activity, DRIVE));
 }
@@ -440,8 +445,13 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const away = clips.filter((c) => !home(c));
   const firstAway = away[0]?.start ?? Infinity;
   const lastAway = away[away.length - 1]?.start ?? -Infinity;
-  const meals = clips.filter((c) => mealAccepts(world, day, c.clip) && hasWord(c.clip.activity, EATING));
-  const lunchStart = meals.find((c) => c.start >= H(11) && c.start < H(15))?.start ?? H(13);
+  // B25: on a trip day the meals are the date's clips whose L3 text is an eating scene, whatever their label.
+  const trip = day.trip;
+  const tripPlace = (c: Clip) => trip !== undefined && TRIP_PLACES.some((p) => bindingAccepts(world, `${trip.node}:${p}`, c));
+  const meals = trip !== undefined
+    ? clips.filter((c) => tripPlace(c.clip) && tripEating(c.clip))
+    : clips.filter((c) => mealAccepts(world, day, c.clip) && hasWord(c.clip.activity, EATING));
+  const lunchStart = meals.find((c) => c.start >= H(11) && c.start < H(trip !== undefined ? 16 : 15))?.start ?? H(13);
   const inRange = (from: number, to: number) => (c: RealClip) => c.start >= from && c.start < to;
 
   /**
@@ -483,9 +493,9 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
       case "breakfast":
         return { cands: meals.filter(inRange(-Infinity, H(11))), run: true };
       case "lunch":
-        return { cands: meals.filter(inRange(H(11), H(15))), run: true };
+        return { cands: meals.filter(inRange(H(11), H(trip !== undefined ? 16 : 15))), run: true };
       case "dinner":
-        return { cands: meals.filter(inRange(H(17), Infinity)), run: true };
+        return { cands: meals.filter(inRange(H(trip !== undefined ? 16 : 17), Infinity)), run: true };
       case "home_morning":
         // Fix ruling 3: on rest dates only the morning (before 12:00).
         return { cands: clips.filter((c) => bound(c) && c.start < firstAway && (!rest || c.start < H(12))), run: false };
@@ -533,11 +543,12 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const ordered = [...slots.filter((s) => MEAL_ROLES.has(s.role)), ...slots.filter((s) => !MEAL_ROLES.has(s.role))];
   for (const slot of ordered) {
     const { cands, run } = phase(slot);
-    const free = cands.filter((c) => !used.has(c.clip.clip_id) && contentOk(world, slot, c.clip));
+    const tripMeal = trip !== undefined && MEAL_ROLES.has(slot.role);
+    const free = cands.filter((c) => !used.has(c.clip.clip_id) && (tripMeal || contentOk(world, slot, c.clip)));
     const [ws, we] = windowSeconds(slot);
     const picked = run ? firstRun(free) : free;
     // B22: seconds already taken by pinned clips come off the window.
-    take(slot.slot_id, MEAL_ROLES.has(slot.role) ? trimMeal(picked) : picked, we - ws - (reserved.get(slot.slot_id) ?? 0));
+    take(slot.slot_id, MEAL_ROLES.has(slot.role) ? trimMeal(picked, trip !== undefined ? tripEating : undefined) : picked, we - ws - (reserved.get(slot.slot_id) ?? 0));
   }
 
   // B10: the transit right before a gym run fills the transition into its exercise slot.
@@ -587,7 +598,7 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
 }
 
 /** home: B6; home_fallback: B6b (also `fallback: true`, kept for compatibility); topup: B13. */
-export type FillKind = "home" | "home_fallback" | "topup";
+export type FillKind = "home" | "home_fallback" | "topup" | "meal_external";
 /** A block filled (or topped up) from a spare date: real-time distance of the first clip and placed seconds. */
 export type Fill = { kind: FillKind; day_index: number; slot_id: string; role: string; from_date: string; delta_min: number; seconds: number; fallback?: true };
 /** @deprecated the B6 name of Fill. */
@@ -951,6 +962,64 @@ export function eveningFill(
   return { entries: open.flatMap((o) => o.entries), takes: open.flatMap((o) => o.takes) };
 }
 
+/**
+ * B24: every lunch or dinner slot of a non-trip day that is still empty takes one catalog clip accepted
+ * by the binding of `node` (an external place, e.g. Ego4D eat-out footage). Slots go in day then window
+ * order. A clip is used once and a source day_group serves one synthetic day only (counting the day_groups
+ * of every entry already in `plan`). The clip is the one whose length is closest to the slot window with at
+ * least min(20 min, window); ties are broken with rngFor(seed, "meal_external"). The block takes it from
+ * its start (layoutBlocks trims it at the block end).
+ */
+export function externalMealFill(
+  days: readonly ScheduleDay[],
+  plan: readonly BlockPlanEntry[],
+  catalog: ClipCatalog,
+  world: World,
+  node: string,
+): { entries: BlockPlanEntry[]; fills: Fill[] } {
+  if (world.node_binding[node] === undefined) throw new Error(`--meal-fill-node ${JSON.stringify(node)}: the world has no binding for that node`);
+  const planned = new Set(plan.map((e) => e.slot_id));
+  const dayOfSlot = new Map(days.flatMap((d) => d.slots.map((s) => [s.slot_id, d.day_index] as const)));
+  const groupDay = new Map<string, number>();
+  const usedClips = new Set<string>();
+  const spans = new Map<string, [number, number][]>();
+  for (const e of plan) {
+    const c = catalog.getClip(e.clip_id);
+    if (c === undefined) continue;
+    usedClips.add(c.clip_id);
+    if (!groupDay.has(c.day_group)) groupDay.set(c.day_group, dayOfSlot.get(e.slot_id)!);
+    const key = `${c.source.dataset}:${c.source.video_id}`;
+    spans.set(key, [...(spans.get(key) ?? []), [e.source_start_s, e.source_end_s]]);
+  }
+  const cands = deOverlap(catalog.clips().filter((c) => bindingAccepts(world, node, c)))
+    .filter((c) => !usedClips.has(c.clip_id))
+    .filter((c) => !(spans.get(`${c.source.dataset}:${c.source.video_id}`) ?? []).some(([s, e]) => c.source_start_s < e && s < c.source_end_s))
+    .sort((a, b) => (a.clip_id < b.clip_id ? -1 : a.clip_id > b.clip_id ? 1 : 0));
+  const rng = rngFor(world.seed, "meal_external");
+  const entries: BlockPlanEntry[] = [];
+  const fills: Fill[] = [];
+  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
+    if (day.trip !== undefined) continue;
+    const slots = day.slots.filter((s) => (s.role === "lunch" || s.role === "dinner") && !planned.has(s.slot_id));
+    for (const slot of slots.sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0])) {
+      const [ws, we] = windowSeconds(slot);
+      const window = we - ws;
+      const need = Math.min(20 * 60, window);
+      const len = (c: Clip) => c.source_end_s - c.source_start_s;
+      const ok = cands.filter((c) => !usedClips.has(c.clip_id) && len(c) >= need && (!groupDay.has(c.day_group) || groupDay.get(c.day_group) === day.day_index));
+      if (ok.length === 0) continue;
+      const best = Math.min(...ok.map((c) => Math.abs(len(c) - window)));
+      const tied = ok.filter((c) => Math.abs(len(c) - window) === best);
+      const c = tied.length === 1 ? tied[0]! : tied[rng.int(0, tied.length)]!;
+      usedClips.add(c.clip_id);
+      groupDay.set(c.day_group, day.day_index);
+      entries.push({ slot_id: slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
+      fills.push({ kind: "meal_external", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: c.day_group, delta_min: 0, seconds: Math.min(len(c), window) });
+    }
+  }
+  return { entries, fills };
+}
+
 export type EveningSource = { role: string; source_date_or_take: string; seconds: number };
 
 export type DaySummary = {
@@ -1037,7 +1106,7 @@ function withoutClips(catalog: ClipCatalog, ids: ReadonlySet<string>): ClipCatal
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** B5 steps 2–5 for a timeline whose schedule is already generated: dates, plan, placements and summary. */
-export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit_roles?: readonly string[]; pins?: readonly Pin[] } = {}): ComposeResult {
+export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit_roles?: readonly string[]; pins?: readonly Pin[]; meal_fill_node?: string } = {}): ComposeResult {
   const world = t.world;
   const resolved = resolvePins(t, fullCatalog, opts.pins ?? []);
   const catalog = resolved.length === 0 ? fullCatalog : withoutClips(fullCatalog, new Set(resolved.flatMap((r) => r.clips.map((c) => c.clip_id))));
@@ -1090,9 +1159,12 @@ export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit
       const clip_id = evening.entries.find((e) => e.slot_id === x.slot_id)!.clip_id;
       return { day_index: slotOf.get(x.slot_id)!.day, slot_id: x.slot_id, role: x.role, clip_id, seconds: x.seconds, duration_min: Math.ceil(x.seconds / 60) };
     });
-  const full = [...plan, ...filled.entries, ...topped.entries, ...evening.entries];
+  const before = [...plan, ...filled.entries, ...topped.entries, ...evening.entries];
+  // B24: last of all, still-empty non-trip lunch/dinner slots take external clips.
+  const external = opts.meal_fill_node === undefined ? { entries: [], fills: [] } : externalMealFill(t.schedule.days, before, catalog, world, opts.meal_fill_node);
+  const full = [...before, ...external.entries];
   const placements = layoutBlocks(t, fullCatalog, full);
-  const fills = [...filled.fills, ...topped.fills];
+  const fills = [...filled.fills, ...topped.fills, ...external.fills];
   return { assignments, plan: full, placements, fitted, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills, pins: pinApplied } };
 }
 
@@ -1174,10 +1246,11 @@ export function composeBlocksFit(
   fitRoles: readonly string[],
   regenerate: (world: World) => Timeline,
   pins: readonly Pin[] = [],
+  mealFillNode?: string,
 ): FitResult {
   const bad = fitRoles.filter((r) => !FIT_ROLES.has(r));
   if (bad.length > 0) throw new Error(`fit_roles: unsupported role ${bad.map((r) => JSON.stringify(r)).join(", ")}; supported: ${[...FIT_ROLES].join(", ")}`);
-  const first = composeBlocks(t, catalog, { fit_roles: fitRoles, pins });
+  const first = composeBlocks(t, catalog, { fit_roles: fitRoles, pins, ...(mealFillNode !== undefined ? { meal_fill_node: mealFillNode } : {}) });
   if (fitRoles.length === 0 || first.fitted.length === 0) return { ...first, timeline: t, slot_overrides: [] };
   const computed: SlotOverride[] = first.fitted.map((f) => ({ day_index: f.day_index, role: f.role, duration_min: f.duration_min }));
   const keep = (t.world.dials.slot_overrides ?? []).filter((o) => !computed.some((c) => c.day_index === o.day_index && c.role === o.role));
@@ -1189,10 +1262,12 @@ export function composeBlocksFit(
   } catch (e) {
     throw fitError(computed, e);
   }
-  const second = composeBlocks(timeline, catalog, { fit_roles: fitRoles, pins });
+  const second = composeBlocks(timeline, catalog, { fit_roles: fitRoles, pins, ...(mealFillNode !== undefined ? { meal_fill_node: mealFillNode } : {}) });
   const key = (r: ComposeResult) => JSON.stringify(r.fitted.map((f) => [f.day_index, f.slot_id, f.clip_id]));
   if (key(first) !== key(second)) throw new Error("fit_roles: the clip assignment changed after the schedule was regenerated with the slot overrides");
   const pinKey = (r: ComposeResult) => JSON.stringify(r.summary.pins.map((p) => [p.day_index, p.slot_id, p.video_id, p.clips, p.seconds]));
   if (pinKey(first) !== pinKey(second)) throw new Error("fit_roles: the pinned assignment changed after the schedule was regenerated with the slot overrides");
+  const extKey = (r: ComposeResult) => JSON.stringify(r.summary.fills.filter((f) => f.kind === "meal_external").map((f) => [f.day_index, f.slot_id, f.from_date]));
+  if (extKey(first) !== extKey(second)) throw new Error("fit_roles: the external meal assignment changed after the schedule was regenerated with the slot overrides");
   return { ...second, timeline, slot_overrides };
 }

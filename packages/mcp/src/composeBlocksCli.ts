@@ -14,7 +14,7 @@ import { TimelineStore, WorldStore, isSafeId, writeFileAtomic } from "./store.js
 // timeline, verifier report and manifest under --out (default: --data). Nothing is written unless
 // every step succeeded.
 
-const USAGE = "usage: npm run compose-blocks -- --world <path> [--data <dir>] [--config <dir>] [--out <dir>] [--fit-roles hobby[,role...]] [--pins <json>]";
+const USAGE = "usage: npm run compose-blocks -- --world <path> [--data <dir>] [--config <dir>] [--out <dir>] [--fit-roles hobby[,role...]] [--pins <json>] [--meal-fill-node <node>]";
 
 type ComposeBlocksOutput = {
   timeline_id: string;
@@ -25,7 +25,7 @@ type ComposeBlocksOutput = {
   slot_overrides: SlotOverride[];
 } & ComposeSummary;
 
-function composeBlocksCli(worldPath: string, { dataDir, configDir }: Dirs, outDir: string, now: Date, fitRoles: string[] = [], pins: Pin[] = []): ComposeBlocksOutput {
+function composeBlocksCli(worldPath: string, { dataDir, configDir }: Dirs, outDir: string, now: Date, fitRoles: string[] = [], pins: Pin[] = [], mealFillNode?: string): ComposeBlocksOutput {
   if (!existsSync(worldPath)) throw new Error(`world file not found: ${worldPath}`);
   const worldText = readFileSync(worldPath, "utf8");
   const world = parseWorld(JSON.parse(worldText));
@@ -39,7 +39,7 @@ function composeBlocksCli(worldPath: string, { dataDir, configDir }: Dirs, outDi
   // Block mode: t.slots stay empty; the placements are the source of truth.
   const id = `${world.person_id}-${randomUUID().slice(0, 8)}`;
   const build = (w: World) => createTimeline(w, generateSchedule(scheduleInput(config, w)), () => id);
-  const { timeline: t, placements, summary, slot_overrides, fitted } = composeBlocksFit(build(world), catalog, fitRoles, build, pins);
+  const { timeline: t, placements, summary, slot_overrides, fitted } = composeBlocksFit(build(world), catalog, fitRoles, build, pins, mealFillNode);
   for (const r of fitRoles) {
     if (!fitted.some((f) => f.role === r)) process.stderr.write(`warning: --fit-roles ${r}: no clips are bound to its slots, nothing was fitted\n`);
   }
@@ -81,7 +81,7 @@ function parsePins(arg: string | undefined): Pin[] {
 
 try {
   const { values } = parseArgs({
-    options: { world: { type: "string" }, data: { type: "string" }, config: { type: "string" }, out: { type: "string" }, "fit-roles": { type: "string" }, pins: { type: "string" } },
+    options: { world: { type: "string" }, data: { type: "string" }, config: { type: "string" }, out: { type: "string" }, "fit-roles": { type: "string" }, pins: { type: "string" }, "meal-fill-node": { type: "string" } },
     strict: true,
   });
   if (values.world === undefined) throw new Error(USAGE);
@@ -89,7 +89,7 @@ try {
   const out = values.out !== undefined ? resolve(values.out) : dirs.dataDir;
   const fitRoles = (values["fit-roles"] ?? "").split(",").map((r) => r.trim()).filter((r) => r !== "");
   if (values["fit-roles"] !== undefined && fitRoles.length === 0) throw new Error(USAGE);
-  const result = composeBlocksCli(values.world, dirs, out, new Date(), fitRoles, parsePins(values.pins));
+  const result = composeBlocksCli(values.world, dirs, out, new Date(), fitRoles, parsePins(values.pins), values["meal-fill-node"]);
   process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 } catch (e) {
   process.stderr.write(JSON.stringify({ error: describeError(e) }, null, 2) + "\n");

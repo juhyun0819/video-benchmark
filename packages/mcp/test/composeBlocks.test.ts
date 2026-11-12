@@ -1723,3 +1723,131 @@ describe("evening activities (B10)", () => {
     });
   });
 });
+
+describe("external meal fill (B24) and trip meals by text (B25)", () => {
+  const withText = (cs: Clip[], text: Record<string, string>): Clip[] => cs.map((c) => ({ ...c, activity: text[c.clip_id.slice(c.clip_id.lastIndexOf(":") - 2)] ?? c.activity }));
+  const tripWorld = makeWorld();
+  const tripDay = (slots: Slot[]): ScheduleDay => mkDay("trip_day", slots, [], { node: "trip_1", index: 0 } as ScheduleDay["trip"]);
+  const TRIP_SLOTS = [slot(1, "lunch", "trip_1:meal", "12:00", "13:00"), slot(2, "dinner", "trip_1:meal", "18:30", "19:30")];
+
+  function tripPlan(clips: Clip[], slots = TRIP_SLOTS) {
+    const dates = collectDates(new MemCatalog(clips), tripWorld);
+    const plan = planDay(tripDay(slots), dates.get(TRIP[0]!), tripWorld);
+    const at = (id: string) => id.slice(id.lastIndexOf(":") - 2);
+    const out: Record<string, string[]> = {};
+    for (const e of plan) (out[e.slot_id] ??= []).push(at(e.clip_id));
+    return out;
+  }
+
+  it("a trip dinner picks 'I dine at the X restaurant' labeled trip:lodging", () => {
+    const clips = withText(rec(TRIP[0]!, [
+      { at: "09:00", min: 30, node: "trip:outing" },
+      { at: "17:57", min: 20, node: "trip:lodging" },
+      { at: "19:00", min: 30, node: "trip:lodging" },
+    ]), { "17:57": "I dine at the Mingshi Shanye Restaurant" });
+    expect(tripPlan(clips)).toEqual({ "d1-s2": ["17:57"] });
+  });
+
+  it("a trip lunch starting at 15:30 is found; a phrase like 'share a meal' counts, a non-meal does not", () => {
+    const clips = withText(rec(TRIP[0]!, [
+      { at: "13:00", min: 30, node: "trip:outing" },
+      { at: "15:30", min: 20, node: "trip:outing" },
+      { at: "17:00", min: 20, node: "trip:outing" },
+    ]), { "15:30": "We share a meal at the park", "13:00": "I walk along the river" });
+    // 15:30 is lunch (11:00-16:00); 17:00 has no eating text, so dinner stays empty.
+    expect(tripPlan(clips)).toEqual({ "d1-s1": ["15:30"] });
+  });
+
+  it("the lunch run uses the first eating run and leaves the later one to dinner", () => {
+    const clips = withText(rec(TRIP[0]!, [
+      { at: "13:09", min: 20, node: "trip:outing" },
+      { at: "16:37", min: 20, node: "trip:outing" },
+    ]), { "13:09": "I eat a meal at the park restaurant", "16:37": "I eat my meal, featuring chicken and sticky rice" });
+    expect(tripPlan(clips)).toEqual({ "d1-s1": ["13:09"], "d1-s2": ["16:37"] });
+  });
+
+  describe("compose", () => {
+    const dataDir = makeTempDir();
+    writeAtusPool(dataDir);
+    const config = loadConfig(CONFIG_DIR, dataDir);
+    function extWorld(): World {
+      const base = worldJson();
+      base.nodes.eat_out_ext = { kind: "frequent_place", setting: "venue_indoor", optional: true };
+      base.node_binding.eat_out_ext = { dataset: ["ego4d"], tags_any: ["eat_out"] };
+      return parseWorld(base);
+    }
+    const ego = (id: string, group: string, min: number, i = 0): Clip => ({
+      clip_id: `ego4d:${id}:${i}`,
+      category: "meal",
+      setting: "venue_indoor",
+      node: "eat_out",
+      activity: "I eat at a restaurant",
+      time_of_day: "unknown",
+      tags: ["eat_out"],
+      source: { dataset: "ego4d", video_id: id, media: { kind: "video", fps: 30, path: `${id}.mp4` } },
+      source_start_s: i * 4000,
+      source_end_s: i * 4000 + min * 60,
+      day_group: group,
+      person_source: `ego4d:${id}`,
+      fingerprint: null,
+      extractor_version: "fixture.v1",
+    });
+    const WORK = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+    const REST = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+    // Work/rest dates without a home dinner, so dinners stay empty after every other fill.
+    const base = [...WORK.flatMap((d) => workDate(d)), ...REST.flatMap(restDate), ...TRIP.flatMap(tripDate)].filter((c) => !(c.node === "home" && c.category === "meal" && c.source_start_s + sec(c.source.media.kind === "frames" ? c.source.media.start_wallclock!.slice(11, 16) : "00:00") >= sec("17:00")));
+    // 12 clips, in 8 day_groups (clips 8-11 share groups with 0-3).
+    const egos = Array.from({ length: 12 }, (_, i) => ego(`e${i}`, `eg${i % 8}`, 20 + (i % 5) * 10));
+    const run = (flag: boolean, extra = egos) => {
+      const world = extWorld();
+      const t = createTimeline(world, generateSchedule(scheduleInput(config, world)), () => "compose-test-ext");
+      const catalog = new MemCatalog([...base, ...extra]);
+      return { t, catalog, result: composeBlocks(t, catalog, flag ? { meal_fill_node: "eat_out_ext" } : {}) };
+    };
+
+    it("fills empty non-trip lunch/dinner with external clips trimmed to the window, each clip and day_group once, verify passes", () => {
+      const { t, catalog, result } = run(true);
+      const ext = result.summary.fills.filter((f) => f.kind === "meal_external");
+      expect(ext.length).toBeGreaterThan(0);
+      const slots = new Map(t.schedule.days.flatMap((d) => d.slots.map((s) => [s.slot_id, { s, d }] as const)));
+      const ps = result.placements.filter((p) => p.clip.source.dataset === "ego4d");
+      expect(ps.length).toBe(ext.length);
+      for (const p of ps) {
+        const { s, d } = slots.get(p.slot_id)!;
+        expect(d.trip).toBeUndefined();
+        expect(["lunch", "dinner"]).toContain(s.role);
+        expect(p.synthetic_end_s - p.synthetic_start_s).toBeLessThanOrEqual((parseClock(s.window[1]) - parseClock(s.window[0])) * 60 + 1e-6);
+      }
+      expect(new Set(ps.map((p) => p.clip.clip_id)).size).toBe(ps.length);
+      const dayOfGroup = new Map<string, number>();
+      for (const p of ps) {
+        const d = slots.get(p.slot_id)!.d.day_index;
+        expect(dayOfGroup.get(p.clip.day_group) ?? d).toBe(d);
+        dayOfGroup.set(p.clip.day_group, d);
+      }
+      const report = verifyTimeline(t, catalog, { mode: "block", placements: result.placements });
+      expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+    });
+
+    it("trip days get no external clip", () => {
+      const { t, result } = run(true);
+      const tripSlots = new Set(t.schedule.days.filter((d) => d.trip !== undefined).flatMap((d) => d.slots.map((s) => s.slot_id)));
+      expect(result.placements.filter((p) => p.clip.source.dataset === "ego4d" && tripSlots.has(p.slot_id))).toEqual([]);
+    });
+
+    it("without the flag nothing changes: no external clips, no meal_external fills", () => {
+      const { result } = run(false);
+      expect(result.placements.some((p) => p.clip.source.dataset === "ego4d")).toBe(false);
+      expect(result.summary.fills.some((f) => f.kind === "meal_external")).toBe(false);
+      const again = run(false).result;
+      expect(again.plan).toEqual(result.plan);
+    });
+
+    it("is deterministic, and an unknown node is an error", () => {
+      expect(run(true).result.plan).toEqual(run(true).result.plan);
+      const world = extWorld();
+      const t = createTimeline(world, generateSchedule(scheduleInput(config, world)), () => "compose-test-ext");
+      expect(() => composeBlocks(t, new MemCatalog(base), { meal_fill_node: "nope" })).toThrow(/no binding/);
+    });
+  });
+});
