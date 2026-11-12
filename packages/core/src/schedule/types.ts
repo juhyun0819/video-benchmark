@@ -22,6 +22,8 @@ export const ExceptionSchema = z.object({
   day_range: z.tuple([z.number().int().min(1), z.number().int().min(1)]),
   /** Where the replaced meal happens; set for slot exceptions (R39). */
   meal_place: MealPlaceSchema.optional(),
+  /** Slot exceptions: the day's routine place for the replaced meal before the exception (equal to meal_place for a no-op). */
+  routine_place: MealPlaceSchema.optional(),
 });
 export type Exception = z.infer<typeof ExceptionSchema>;
 
@@ -219,8 +221,8 @@ void _donorPickMatches;
 
 const MealDistributionSchema = z.record(MealPlaceSchema, z.number());
 
-/** Routine consistency over all pairs of days that use one template (E2). */
-export const CompositionConsistencySchema = z.object({
+/** Routine consistency over pairs of days (E2). */
+const ConsistencyValuesSchema = z.object({
   /** Mean Jaccard of the sets of kept optional roles. */
   optional_jaccard: Prob01,
   /** Mean of 1 − edit distance ÷ max length of the kept role sequences. */
@@ -228,6 +230,15 @@ export const CompositionConsistencySchema = z.object({
   /** Mean |start difference| in minutes over roles kept on both days; null when no pair shares a role. */
   start_diff_minutes: z.number().min(0).nullable(),
   pairs: z.number().int().min(1),
+});
+
+/**
+ * E2 over all pairs of days that use one template, plus (G15) the same values
+ * over pairs that share a routine reference: the same weekday on workdays, the
+ * same day type otherwise; null when no pair shares one.
+ */
+export const CompositionConsistencySchema = ConsistencyValuesSchema.extend({
+  same_reference: ConsistencyValuesSchema.nullable(),
 });
 export type CompositionConsistency = z.infer<typeof CompositionConsistencySchema>;
 
@@ -237,6 +248,8 @@ export const RealizedSchema = z.object({
   slot_exception_rate: Prob01.nullable(),
   /** Slot exceptions ÷ feasible candidate slots, summed over days (E1). */
   slot_exception_share: Prob01.nullable(),
+  /** Slot exceptions whose meal_place equals their routine_place ÷ slot exceptions. */
+  slot_exception_noop_share: Prob01.nullable(),
   slot_exception_eligible_days: z.number().int().min(0),
   /** Day exceptions ÷ days whose base day type has a catalog day exception (workdays). */
   day_exception_rate: Prob01.nullable(),

@@ -19,6 +19,10 @@ const templateOf = (dayType: DayType): TemplateName => (dayType === "leave_day" 
 
 const ratio = (n: number, d: number): number | null => (d === 0 ? null : n / d);
 
+/** Days that copy the same routine reference (D14): the same weekday on workdays, the same day type otherwise (G15). */
+const sameReference = (a: ScheduleDay, b: ScheduleDay): boolean =>
+  a.day_type === b.day_type && (a.day_type !== "workday" || a.weekday === b.weekday);
+
 function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   const union = new Set([...a, ...b]).size;
   if (union === 0) return 1;
@@ -39,8 +43,13 @@ function editDistance(a: readonly string[], b: readonly string[]): number {
   return prev[b.length]!;
 }
 
-/** E2 over all pairs of the given days, which share one template. */
-function consistency(days: readonly ScheduleDay[]): CompositionConsistency {
+type ConsistencyValues = Omit<CompositionConsistency, "same_reference">;
+
+/** E2 over the pairs of the given days, which share one template, for which `paired` holds; null without pairs. */
+function consistency(
+  days: readonly ScheduleDay[],
+  paired: (a: ScheduleDay, b: ScheduleDay) => boolean = () => true,
+): ConsistencyValues | null {
   const views = days.map((d) => ({
     optional: new Set(d.slots.filter((s) => !s.required).map((s) => s.role)),
     order: d.slots.map((s) => s.role),
@@ -53,6 +62,7 @@ function consistency(days: readonly ScheduleDay[]): CompositionConsistency {
   let diffPairs = 0;
   for (let i = 0; i < views.length; i++) {
     for (let j = i + 1; j < views.length; j++) {
+      if (!paired(days[i]!, days[j]!)) continue;
       const a = views[i]!;
       const b = views[j]!;
       pairs += 1;
@@ -65,6 +75,7 @@ function consistency(days: readonly ScheduleDay[]): CompositionConsistency {
       }
     }
   }
+  if (pairs === 0) return null;
   return {
     optional_jaccard: jac / pairs,
     order_similarity: order / pairs,
@@ -75,12 +86,14 @@ function consistency(days: readonly ScheduleDay[]): CompositionConsistency {
 
 /**
  * `realized` for a schedule's days (CR1, E1, E2, G14): what the dials
- * produced, counted from the days alone. Key order is fixed.
+ * produced, counted from the days alone. Key order is fixed; a ratio with a zero denominator is null.
  */
 export function realizedOf(days: readonly ScheduleDay[], world: World, templates: Templates): Realized {
   const hasSlotException = (d: ScheduleDay) => d.exceptions.some((e) => e.scope === "slot");
   const eligible = days.filter((d) => d.slot_exception_eligible);
-  const slotExceptions = days.reduce((s, d) => s + d.exceptions.filter((e) => e.scope === "slot").length, 0);
+  const slotExceptionList = days.flatMap((d) => d.exceptions.filter((e) => e.scope === "slot"));
+  const slotExceptions = slotExceptionList.length;
+  const noops = slotExceptionList.filter((e) => e.routine_place === e.meal_place).length;
   const candidates = days.reduce((s, d) => s + d.slot_exception_candidates, 0);
 
   const dayException = (d: ScheduleDay) => d.exceptions.find((e) => e.scope === "day");
@@ -119,12 +132,14 @@ export function realizedOf(days: readonly ScheduleDay[], world: World, templates
   const composition: Realized["composition_consistency"] = {};
   for (const name of TemplateNameSchema.options) {
     const same = days.filter((d) => templateOf(d.day_type) === name);
-    if (same.length >= 2) composition[name] = consistency(same);
+    if (same.length < 2) continue;
+    composition[name] = { ...consistency(same)!, same_reference: consistency(same, sameReference) };
   }
 
   return {
     slot_exception_rate: ratio(eligible.filter(hasSlotException).length, eligible.length),
     slot_exception_share: ratio(slotExceptions, candidates),
+    slot_exception_noop_share: ratio(noops, slotExceptions),
     slot_exception_eligible_days: eligible.length,
     day_exception_rate: ratio(dayExceptionBase.filter((d) => dayException(d) !== undefined).length, dayExceptionBase.length),
     optional_presence: Object.fromEntries(

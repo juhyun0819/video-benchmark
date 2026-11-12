@@ -18,7 +18,8 @@ function generate(dataDir: string, world = EXAMPLE_WORLD) {
 }
 
 describe("npm run generate", () => {
-  it("generate CLI exits 0 and prints manifest path", () => {
+  // G16: spawning tsx can exceed vitest's 5 s default under full-suite load.
+  it("generate CLI exits 0 and prints manifest path", { timeout: 30_000 }, () => {
     const dataDir = setupDataDir({ world: false });
     const r = generate(dataDir);
     expect(r.stderr).toBe("");

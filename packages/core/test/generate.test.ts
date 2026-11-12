@@ -521,8 +521,9 @@ describe("slot exceptions after windows (CR1, E1, E3)", () => {
     expect(Math.abs(mean - 0.5)).toBeLessThanOrEqual(0.05);
   });
 
-  it("every slot exception replaces a kept slot whose node is the place node, and verify passes", () => {
+  it("every slot exception replaces a kept slot whose node is the place node, records its routine place, and verify passes", () => {
     let count = 0;
+    let noops = 0;
     for (let seed = 1; seed <= 10; seed++) {
       const inp = input({ seed, slot: 0.5 });
       const schedule = generateSchedule(inp);
@@ -535,12 +536,17 @@ describe("slot exceptions after windows (CR1, E1, E3)", () => {
           const slot = day.slots.find((s) => s.role === ex.replaces);
           expect(slot, `day ${day.day_index} ${ex.type}`).toBeDefined();
           expect(slot!.spec.node).toBe(placeNode(inp.world, ex.meal_place!));
+          const decided = decideDay(inp.world, inp.exceptions, { boundNodes: inp.boundNodes, defaults: inp.defaults }, day.day_index, day.attempt);
+          expect(ex.routine_place).toBe(decided.meal_place[ex.replaces as "lunch" | "dinner"]);
+          if (ex.routine_place === ex.meal_place) noops += 1;
         }
       }
       const report = verifyTimeline(createTimeline(inp.world, schedule, () => `tl-exc-${seed}`), emptyClips);
       expect(report.rules.exceptions).toEqual({ pass: true, violations: [] });
     }
     expect(count).toBeGreaterThan(0);
+    expect(noops).toBeGreaterThan(0);
+    expect(noops).toBeLessThan(count);
   });
 
   it("exception_rate.slot 1 places one on every eligible day, never on a slot that does not fit (R45 removed)", () => {
@@ -589,6 +595,7 @@ describe("slot exceptions after windows (CR1, E1, E3)", () => {
     expect(none.days.every((d) => d.exceptions.length === 0 && !d.slot_exception_eligible)).toBe(true);
     expect(none.realized.slot_exception_eligible_days).toBe(0);
     expect(none.realized.slot_exception_rate).toBeNull();
+    expect(none.realized.slot_exception_noop_share).toBeNull();
   });
 
   it("day exceptions do not depend on exception_rate.slot", () => {
@@ -615,6 +622,9 @@ describe("realized (CR1, E1, E2)", () => {
     expect(realized.slot_exception_eligible_days).toBe(eligible);
     expect(realized.slot_exception_rate).toBe(slotDays / eligible);
     expect(realized.slot_exception_share).toBe(slotExc / candidates);
+    const slotList = days.flatMap((d) => d.exceptions.filter((e) => e.scope === "slot"));
+    const noop = slotList.filter((e) => e.routine_place === e.meal_place).length;
+    expect(realized.slot_exception_noop_share).toBe(noop / slotList.length);
 
     const base = (d: (typeof days)[number]) => d.exceptions.find((e) => e.scope === "day")?.replaces ?? d.day_type;
     const leave = days.filter((d) => d.day_type === "leave_day").length;
@@ -658,6 +668,12 @@ describe("realized (CR1, E1, E2)", () => {
     expect(cc.optional_jaccard).toBeCloseTo(2 / 3, 12);
     expect(cc.order_similarity).toBeCloseTo(1 - 1 / 6, 12);
     expect(cc.start_diff_minutes).toBeCloseTo(10 / 5, 12);
+    // Days 1 (Mon) and 2 (Tue) use different weekday references: no same-reference pair.
+    expect(cc.same_reference).toBeNull();
+    // Day 8 is a Monday identical to day 1: one same-reference pair.
+    const withMonday = realizedOf([a, noLunch, makeDay(8)], inp.world, inp.templates).composition_consistency.workday!;
+    expect(withMonday.pairs).toBe(3);
+    expect(withMonday.same_reference).toEqual({ optional_jaccard: 1, order_similarity: 1, start_diff_minutes: 0, pairs: 1 });
     // A template used on fewer than 2 days is omitted.
     expect(r.composition_consistency).not.toHaveProperty("hobby_day");
     // Lunch is optional in both templates: kept on day 1 only of the two workdays and the hobby day.
@@ -666,12 +682,12 @@ describe("realized (CR1, E1, E2)", () => {
     expect(r.optional_presence.dinner).toBe(1);
   });
 
-  it("composition_consistency rises with routine_strength on workdays (E2 monotonicity)", () => {
-    const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+  it("same_reference consistency rises with routine_strength on workdays (E2 monotonicity, G15)", () => {
+    const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
     const avg = (routine: number) => {
       const sum = { optional_jaccard: 0, order_similarity: 0, start_diff_minutes: 0 };
       for (const seed of seeds) {
-        const cc = generateSchedule(input({ seed, routine })).realized.composition_consistency.workday!;
+        const cc = generateSchedule(input({ seed, routine })).realized.composition_consistency.workday!.same_reference!;
         sum.optional_jaccard += cc.optional_jaccard / seeds.length;
         sum.order_similarity += cc.order_similarity / seeds.length;
         sum.start_diff_minutes += cc.start_diff_minutes! / seeds.length;

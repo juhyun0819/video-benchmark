@@ -153,6 +153,7 @@ export function makeSchedule(days = 28, defsFor: (d: number) => SlotDef[] | unde
     realized: {
       slot_exception_rate: null,
       slot_exception_share: null,
+      slot_exception_noop_share: null,
       slot_exception_eligible_days: 0,
       day_exception_rate: 0,
       optional_presence: {},

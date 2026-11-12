@@ -261,12 +261,15 @@ function placeSlotException(
   const placed: SlotExceptionPlacement = { ...none, eligible: true, candidates: feasible.length };
   if (!rngFor(world.seed, "day", d, attempt, "slot_exception").bernoulli(world.dials.exception_rate.slot)) return placed;
   const { entry, layout } = feasible[rngFor(world.seed, "day", d, attempt, "slot_exception_pick").int(0, feasible.length)]!;
+  const routine = decisions.meal_place[entry.replaces_role];
   const exception: Exception = {
     scope: "slot",
     type: entry.type,
     replaces: entry.replaces_role,
     day_range: [d, d],
     meal_place: entry.meal_place,
+    // The replaced slot was kept, so its routine place is a place, never "skip".
+    ...(routine !== undefined && routine !== "skip" ? { routine_place: routine } : {}),
   };
   return { ...placed, layout, exceptions: [exception] };
 }
