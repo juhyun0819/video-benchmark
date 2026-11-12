@@ -12,7 +12,8 @@ export type MealPlace = z.infer<typeof MealPlaceSchema>;
 export const NodeDefSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("home") }),
   z.object({ kind: z.literal("kitchen"), default: z.literal("home") }),
-  z.object({ kind: z.literal("workplace"), job: z.string() }),
+  /** `setting` defaults to venue_indoor; outdoor or in-vehicle jobs (roofer, truck driver) set it explicitly. */
+  z.object({ kind: z.literal("workplace"), job: z.string(), setting: SettingSchema.optional() }),
   z.object({
     kind: z.literal("hobby"),
     activity: z.string(),

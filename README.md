@@ -161,7 +161,7 @@ ingest가 끝나면 `data/catalog/` 아래에 클립 카탈로그가 만들어�
 
 ## 3. 타임라인 생성
 
-world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/worlds/example-nextme.json`이다. world는 노드(집, 직장, 취미), 노드와 bank 소스의 연결(`node_binding`), 식사 습관, 다이얼(`length_days`, `routine_strength`, `exception_rate`), seed를 담는다.
+world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/worlds/example-nextme.json`이다. world는 노드(집, 직장, 취미), 노드와 bank 소스의 연결(`node_binding`), 식사 습관, 다이얼(`length_days`, `routine_strength`, `exception_rate`), seed를 담는다. 직장 노드의 `setting`은 기본값이 `venue_indoor`이고, 지붕 시공·트럭 운전처럼 실외나 차 안에서 일하면 `{"kind": "workplace", "job": "roofer", "setting": "outdoor"}`처럼 직접 준다.
 
 규칙 설정은 `config/timeline/`에 있다.
 

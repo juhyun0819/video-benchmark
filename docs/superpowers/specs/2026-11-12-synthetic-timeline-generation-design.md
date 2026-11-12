@@ -36,7 +36,7 @@
 | 고정 노드 | 집, 직장, 취미(1~3개), 단골 장소(소스가 있을 때만). 부엌은 기본값이 집 |
 | 변동 | 밥 성향, 취미 등장 여부와 순서, 기상·취침 시각 |
 | 예외 | 슬롯 예외와 하루 예외를 v1에서 구현. 여러 날 예외는 스키마에만 정의 |
-| 소스 | 같은 크리에이터가 올린 YouTube 집 영상과 직업 영상. 사람이 검수하고, 편집 없이 이어지는 1인칭 영상이며 서로 다른 날로 볼 수 있는 것만 사용 |
+| 소스 | YouTube 집 영상과 직업 영상. 집 크리에이터와 직업 크리에이터는 서로 다르며, world에서 노드마다 `person_source`로 따로 바인딩한다. 사람이 검수하고, 편집 없이 이어지는 1인칭 영상이며 서로 다른 날로 볼 수 있는 것만 사용 |
 | 소스 자격 | 머리 착용 시점. 렌즈와 화각 차이는 렌더링에서 보정 |
 | 일관성 수준 | 장소 일관성은 필수. 사람 수준의 차이는 verifier가 심한 경우만 거름 |
 | 일정 생성 | 프로그램이 결정적으로 샘플링(템플릿 + 다이얼 + seed). LLM은 클립 선택만 담당 |
@@ -137,7 +137,7 @@ catalog 클립은 여기에 다음을 더 가진다.
   "nodes": {
     "home":      {"kind": "home"},
     "kitchen":   {"kind": "kitchen", "default": "home"},
-    "workplace": {"kind": "workplace", "job": "carpenter"},
+    "workplace": {"kind": "workplace", "job": "carpenter", "setting": "venue_indoor"}, // setting 기본값 venue_indoor. 실외 직업은 outdoor
     "hobby_1":   {"kind": "hobby", "activity": "러닝", "setting": "outdoor", "weekly_freq": 2},
     "frequent_1": {"kind": "frequent_place", "optional": true}
   },
@@ -362,7 +362,7 @@ catalog 클립은 여기에 다음을 더 가진다.
 ## 6. 매칭 (④)
 
 ### 6.1 노드 바인딩
-world의 추상 노드를 bank의 실제 소스에 연결하는 설정이다. 예: `p01.home → youtube:creator_X / 집 영상`, `p01.workplace → youtube:creator_X / 직업 영상`. schedule은 바인딩을 모른다.
+world의 추상 노드를 bank의 실제 소스에 연결하는 설정이다. 예: `p01.home → youtube:creator_X / 집 영상`, `p01.workplace → youtube:creator_Y / 직업 영상`. schedule은 바인딩을 모른다.
 
 ### 6.2 하드 필터 (날짜 순서대로, 슬롯 순서대로)
 다음을 모두 만족하는 클립만 후보가 된다.

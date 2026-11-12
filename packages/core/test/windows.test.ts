@@ -100,6 +100,16 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     expect(slots.map((s) => s.required)).toEqual([true, true, false, true, true, false]);
   });
 
+  it("uses the workplace node's own setting when the world gives one", () => {
+    const w = world();
+    w.nodes.workplace = { kind: "workplace", job: "roofer", setting: "outdoor" };
+    const t = templates();
+    const { slots } = resolveDayWindows(t.day_types.workday, ANCHORS, workday(), w, gap20, t.reduce_order?.workday);
+    const work = slots.filter((s) => s.spec.node === "workplace");
+    expect(work.map((s) => s.spec.setting)).toEqual(["outdoor", "outdoor", "outdoor"]);
+    expect(resolveWorkday().slots[1]!.spec.setting).toBe("venue_indoor");
+  });
+
   it("records one transition per place change", () => {
     const { transitions } = resolveWorkday();
     expect(transitions).toEqual([

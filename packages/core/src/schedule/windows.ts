@@ -25,7 +25,7 @@ function settingOf(def: NodeDef): Setting {
     case "kitchen":
       return "home_indoor";
     case "workplace":
-      return "venue_indoor";
+      return def.setting ?? "venue_indoor";
     case "hobby":
     case "frequent_place":
       return def.setting;
