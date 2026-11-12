@@ -185,7 +185,7 @@ world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/wo
 
 `meal_style`은 `workday`(lunch, dinner)와 `rest_day`(breakfast, lunch, dinner)를 가진다. 이전 이름 `weekend`는 `rest_day`로 바뀌었다. `rest_day`는 주말뿐 아니라 연차·병가 같은 하루 예외에도 쓴다. 예시는 `config/worlds/example-nextme.json`이다.
 
-world 검증은 생성 전에 다음을 확인하고, 어기면 `WORLD_INVALID: <path>: <message>` 형식 오류를 낸다. 문제가 여러 개면 `; `로 이어 붙인다.
+world 검증은 생성 전에 다음을 확인하고, 어기면 `WORLD_INVALID: <path>: <message>` 형식 오류를 낸다. 이 문구는 MCP 도구 오류 텍스트이고, generate CLI는 stderr에 `{"error":{"code","message","details"}}`를 출력한다. 문제가 여러 개면 `; `로 이어 붙인다.
 
 - 끼니별 장소 확률의 합은 1 ± 0.01이어야 한다. 합이 0이어도 오류다. 예: `WORLD_INVALID: meal_style.workday.dinner: meal weights must sum to 1 +/- 0.01, got 0.5`
 - `rest_day`의 끼니에는 `workplace`가 있으면 안 된다(`meal_style.rest_day.lunch.workplace: rest_day meals cannot take place at the workplace`).
@@ -199,7 +199,7 @@ world 검증은 생성 전에 다음을 확인하고, 어기면 `WORLD_INVALID: 
 - **donor 다시 뽑기**: donor(ATUS 응답자)의 시각이 범위를 벗어나면 잘라내지 않고 같은 backoff 단계에서 다시 뽑는다(최대 5회). 범위는 기상 04:00 이후, 취침 27:59 이전, 아침 ≥ 기상+10분, 저녁 ≤ 취침−60분, 평일은 퇴근 ≥ 출근+240분과 점심이 근무 안에 들어가는 것, 평일 필수 슬롯이 들어갈 시간이 있는 것, 주말은 운동 ≤ 취침−180분이다. 5회 모두 실패했을 때만 값을 범위 안으로 당기고 `{item, from, to}`로 기록한다. 기록 위치는 schedule의 `donors.<weekday|weekend>.adjustments`와 manifest의 `donor_adjustments`다. 평일 donor가 그래도 필수 슬롯 검사를 못 넘으면 `work_end`를 필수 슬롯이 들어가는 가장 늦은 분으로 당기고 같은 곳에 기록한다.
 - **날 단위 jitter**: 날마다 앵커(기상, 취침, 출근, 퇴근, 끼니, 운동)에 jitter를 더한다. 그 날의 템플릿이 쓰는 앵커만 범위를 검사하고, 어긴 항목만 항목별로 다시 뽑는다(최대 5회). 그래도 안 되면 당기고 ScheduleDay의 `anchor_adjustments`에 기록한다. 총 다시 뽑은 횟수는 `jitter_redraws`다.
 - **운동 시각 채우기**: donor에게 운동 기록이 없으면 같은 backoff 단계에서 운동 기록이 있는 응답자(30명 이상)의 값으로 채운다(`sport_fill: "level"`). 30명 미만이면 주말 pool 전체에서 채운다(`"pool"`). 둘 다 `filled`에 `sport_time`으로 남는다.
-- **슬롯 예외**: 선택 슬롯을 정리한 뒤에 추첨한다. 후보는 남은 슬롯 중 예외 카탈로그의 `replaces_role`에 해당하고 장소를 쓸 수 있는 끼니이다. 예외가 슬롯 정리 때문에 지워지는 경로는 없다. 추첨된 예외의 약 16%는 루틴과 같은 장소라 실제로는 아무것도 바꾸지 않는다(`slot_exception_noop_share`).
+- **슬롯 예외**: 선택 슬롯을 정리한 뒤에 추첨한다. 후보는 남은 슬롯 중 예외 카탈로그의 `replaces_role`에 해당하고 장소를 쓸 수 있는 끼니이다. 예외가 슬롯 정리 때문에 지워지는 경로는 없다. 추첨된 예외의 9.4%(이 world 기준, [비교 리포트](docs/superpowers/reports/2026-11-12-rev3-comparison.md) 참고. 이전에 적었던 약 16%는 다른 테스트 설정에서 잰 값이다)는 루틴과 같은 장소라 실제로는 아무것도 바꾸지 않는다(`slot_exception_noop_share`).
 
 ### 한 번에 만들기 (CLI)
 
@@ -278,8 +278,8 @@ manifest의 구조와 필드는 스펙 8절을 따른다. 검증을 통과하지
 - `order_similarity`: 역할 순서의 평균 `1 − 편집거리 ÷ 최대 길이`
 - `start_diff_minutes`: 같은 역할 슬롯 시작 시각 차이의 평균(분)
 - `pairs`: 그 템플릿을 쓴 날의 모든 쌍 수
-- 위 세 값은 모든 쌍(all-pairs)에 대한 평균이다. 평일 쌍의 Jaccard와 순서 일치도는 `routine_strength`를 바꿔도 거의 움직이지 않는다(0.81/0.81/0.81). 루틴 기준이 요일마다 따로 있어서 다른 요일끼리는 원래 다르기 때문이다.
-- `same_reference`: 같은 세 값을 루틴 기준을 공유하는 쌍(평일은 같은 요일, 나머지는 같은 날 유형)에만 적용한 것이다. 쌍이 없으면 `null`. 다이얼 효과는 이 값에서 읽는다(0.81 → 0.85 → 1.00). all-pairs 값은 사용자가 승인한 정의이고 `same_reference`는 거기에 더한 것이라, 다른 정의를 원하면 바꿀 수 있다.
+- 위 세 값은 모든 쌍(all-pairs)에 대한 평균이다. 평일 쌍의 Jaccard와 순서 일치도는 `routine_strength`를 바꿔도 거의 움직이지 않는다(비교 리포트 8절의 예시 world 기준 0.861/0.870/0.886). 루틴 기준이 요일마다 따로 있어서 다른 요일끼리는 원래 다르기 때문이다.
+- `same_reference`: 같은 세 값을 루틴 기준을 공유하는 쌍(평일은 같은 요일, 나머지는 같은 날 유형)에만 적용한 것이다. 쌍이 없으면 `null`. 다이얼 효과는 이 값에서 읽는다(같은 리포트 기준 0.859 → 0.888 → 0.965). 값은 world와 seed에 따라 달라진다. all-pairs 값은 사용자가 승인한 정의이고 `same_reference`는 거기에 더한 것이라, 다른 정의를 원하면 바꿀 수 있다.
 
 ### 통계 보기
 

@@ -108,7 +108,7 @@
 - R12 (끼니 확률 합 0이면 "skip") → CR7: world 검증이 `WORLD_INVALID`로 거부한다. 합 0도 오류다.
 - R13 (운동 시각은 채우지 않고 defaults 사용) → CR8: 같은 backoff 단계의 운동 기록 응답자로 채운다(30명 미만이면 pool 전체).
 - R14 (donor 시각을 잘라냄) → CR5: 먼저 다시 뽑고, 5회 실패 시에만 당기고 `adjustments`에 기록한다. 정수 분 반올림은 유지.
-- R15 (평일 저녁 `home_evening` 확률 0.5) → CR3: `weekday_evening_home.slot_probability` 0.91, 설정에서 읽는다.
+- R17 (평일 저녁 `home_evening` 확률 0.5, 근거 없는 설계값) → CR3: `weekday_evening_home.slot_probability` 0.91, 설정에서 읽는다.
 - R16 (쉬는 날 직장 식사를 분포에서 제거) → CR4: 사전값을 `rest_day`로 바꿔 직장이 없고, 직장이 들어오면 world 검증 오류.
 - R21 (못 들어가는 선택 슬롯 제거) → CR2: 평일 저녁이 필수이고 줄이는 순서가 `reduce_order`로 템플릿 설정이 됐다.
 - R22 (점심 상한 work_end − 60 − 45 보정) → CR5: donor와 날 단위 모두 다시 뽑기 우선, 마지막에만 당김.
@@ -157,5 +157,5 @@
 - G17: manifest는 최종 날들로 `realized`를 다시 계산한다(`schedule.realized`는 매칭 전 값). 비용: 빌더 인자 하나 추가.
 - G18: stats는 `realized`를 점 경로로 펼치고 null은 건너뛰며 n을 함께 낸다. 비용: 없음.
 - G19: 비교는 old와 new에 같은 world 값을 주고 분포로만 비교한다(날별 비교는 의미 없음). 비용: 없음.
-- 참고(R17 유지): 슬롯 예외의 약 16%는 루틴과 같은 장소라 무변화다. `slot_exception_noop_share`로 기록한다.
+- 참고(R17 유지): 슬롯 예외의 9.4%(예시 world, [비교 리포트](../reports/2026-11-12-rev3-comparison.md))는 루틴과 같은 장소라 무변화다. 이전에 적은 약 16%는 다른 테스트 설정에서 잰 값이다. `slot_exception_noop_share`로 기록한다.
 - 사용자 결정 대기: 쉬는 날(hobby_day) 저녁이 CR8 뒤 12%의 날에서 빠진다. 원인은 비교 리포트에 있다. 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄 수 있다. seed 149의 평일 donor는 G9 뒤에도 필수 슬롯 검사를 못 넘지만 일정은 생성된다.
