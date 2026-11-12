@@ -24,13 +24,14 @@ import { bump, newReport, readJsonl, type IngestReport } from "./jsonl.js";
 import { buildNextmeDay, parseRecordingsCsv } from "./nextme/adapter.js";
 import { loadLabelRules, nextmeDraftRows, type DraftRow, type LabelRules } from "./nextme/draft.js";
 import { makeHfFetcher } from "./nextme/hf.js";
-import { loadL3Rules, nextmeL3Rows, type L3Rules } from "./nextme/l3.js";
+import { loadL3Rules, loadOverrides, nextmeL3Rows, type L3Override, type L3Rules } from "./nextme/l3.js";
 import { parseHkt } from "./time.js";
 import { CatalogWriter, rebuildIndex } from "./writer.js";
 
 const USAGE = `Usage:
   npm run ingest -- nextme --days 2026-04-15[,2026-04-16...] [--out data/raw/bank/nextme800.draft.jsonl] [--rules config/nextme_label_rules.json] [--overwrite]
-                       [--clip-level L4|L3] [--source-dir <dir with raw/ and captions/>]   (L3 default rules: config/nextme_label_rules.l3.json)
+                       [--clip-level L4|L3] [--source-dir <dir with raw/ and captions/>]
+                       [--overrides <json>]   (L3 only: [{day_group,from,to,node,setting,category}] relabels unlabeled clips; kept out of git)   (L3 default rules: config/nextme_label_rules.l3.json)
   npm run ingest -- ego4d --metadata <ego4d.json> --narrations <narration.json> [--categories config/categories.json] [--data <dir>]
   npm run ingest -- ego4d --metadata <ego4d.json> --list-scenarios
   npm run ingest -- bank --input <clips.jsonl> --dataset <nextme800|ego4d|egoexo4d|youtube> [--data <dir>]
@@ -80,6 +81,8 @@ export interface IngestNextmeOptions {
   clipLevel?: "L3" | "L4";
   /** Rules used when `clipLevel` is L3. */
   l3Rules?: L3Rules;
+  /** Per-person relabels of still-unlabeled L3 clips; none apply when omitted. */
+  overrides?: L3Override[];
   /** Downloads a text file from the HF dataset repo by repo-relative path. */
   fetchText: (path: string) => Promise<string>;
   /** Replace an existing `outPath`; without it an existing draft (possibly reviewed by hand) is refused. */
@@ -135,7 +138,7 @@ export async function ingestNextme(opts: IngestNextmeOptions): Promise<IngestRep
   for (const day of [...new Set(opts.days)].sort()) {
     const built = buildNextmeDay(day, recordings, files, report);
     const dayRows =
-      clipLevel === "L3" ? nextmeL3Rows(day, built, opts.l3Rules as L3Rules) : nextmeDraftRows(day, built, opts.rules);
+      clipLevel === "L3" ? nextmeL3Rows(day, built, opts.l3Rules as L3Rules, opts.overrides ?? []) : nextmeDraftRows(day, built, opts.rules);
     rows.push(...dayRows.sort((a, b) => rowStartEpoch(a) - rowStartEpoch(b)));
   }
 
@@ -252,6 +255,7 @@ export async function main(
       overwrite: { type: "boolean" },
       "clip-level": { type: "string" },
       "source-dir": { type: "string" },
+      overrides: { type: "string" },
       data: { type: "string" },
       annotations: { type: "string" },
       narrations: { type: "string" },
@@ -287,6 +291,10 @@ export async function main(
       console.error(`nextme: --clip-level must be L4 or L3, got "${clipLevel}"`);
       return 1;
     }
+    if (values.overrides !== undefined && clipLevel !== "L3") {
+      console.error("nextme: --overrides is only valid with --clip-level L3");
+      return 1;
+    }
     const sourceDir = values["source-dir"];
     const token = sourceDir ? undefined : resolveHfToken(env);
     if (!sourceDir && !token) {
@@ -305,7 +313,10 @@ export async function main(
           : loadLabelRules(values.rules ?? resolve("config", "nextme_label_rules.json")),
       clipLevel,
       ...(clipLevel === "L3"
-        ? { l3Rules: loadL3Rules(values.rules ?? resolve("config", "nextme_label_rules.l3.json")) }
+        ? {
+            l3Rules: loadL3Rules(values.rules ?? resolve("config", "nextme_label_rules.l3.json")),
+            ...(values.overrides !== undefined ? { overrides: loadOverrides(values.overrides) } : {}),
+          }
         : {}),
       fetchText: sourceDir ? makeLocalFetcher(sourceDir) : makeHfFetcher(token as string),
       overwrite: values.overwrite ?? false,

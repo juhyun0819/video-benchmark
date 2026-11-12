@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,11 +6,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ClipContractRowSchema, type ClipContractRow } from "@vb/core";
 import { main, makeLocalFetcher, ingestNextme } from "../src/cli.js";
 import { loadLabelRules } from "../src/nextme/draft.js";
-import { loadL3Rules } from "../src/nextme/l3.js";
+import { loadL3Rules, loadOverrides } from "../src/nextme/l3.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
 const SRC = join(HERE, "fixtures", "nextme-l3");
+const OVERRIDES = join(HERE, "fixtures", "nextme", "l3-overrides.json");
 const L3_RULES = join(ROOT, "config", "nextme_label_rules.l3.json");
 
 let dir: string;
@@ -27,7 +28,7 @@ type Row = Omit<ClipContractRow, "category" | "setting" | "node"> & {
   node: string | null;
 };
 
-async function run(days: string[]): Promise<Row[]> {
+async function run(days: string[], withOverrides = false): Promise<Row[]> {
   const out = join(dir, "l3.jsonl");
   await ingestNextme({
     days,
@@ -35,6 +36,7 @@ async function run(days: string[]): Promise<Row[]> {
     rules: loadLabelRules(join(ROOT, "config", "nextme_label_rules.json")),
     l3Rules: loadL3Rules(L3_RULES),
     clipLevel: "L3",
+    ...(withOverrides ? { overrides: loadOverrides(OVERRIDES) } : {}),
     fetchText: makeLocalFetcher(SRC),
   });
   return readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l));
@@ -93,10 +95,30 @@ describe("L3 labeler", () => {
   });
 
   it("an override relabels unlabeled clips in range and leaves labeled ones alone", async () => {
-    const rows = await run(["2026-06-21"]);
+    const rows = await run(["2026-06-21"], true);
     expect(byActivity(rows, "I scroll through my phone.")).toMatchObject({ node: null }); // 11:00, before 11:12
     expect(byActivity(rows, "I read the home screen.")).toMatchObject({ node: "home", setting: "home_indoor", category: "home" });
     expect(byActivity(rows, "I sit in the library.")).toMatchObject({ node: "workplace", category: "work" });
+  });
+
+  it("without overrides the same clip stays unlabeled", async () => {
+    const rows = await run(["2026-06-21"]);
+    expect(byActivity(rows, "I read the home screen.")).toMatchObject({ node: null, category: null });
+    expect(byActivity(rows, "I sit in the library.")).toMatchObject({ node: "workplace" });
+  });
+
+  it("--overrides is passed through the CLI, and is rejected with L4", async () => {
+    const out = join(dir, "ov.jsonl");
+    expect(await main(["nextme", "--days", "2026-06-21", "--clip-level", "L3", "--source-dir", SRC, "--out", out, "--rules", L3_RULES, "--overrides", OVERRIDES])).toBe(0);
+    const rows: Row[] = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(byActivity(rows, "I read the home screen.")).toMatchObject({ node: "home" });
+    expect(await main(["nextme", "--days", "2026-06-21", "--source-dir", SRC, "--overrides", OVERRIDES])).toBe(1);
+  });
+
+  it("validates the overrides file", () => {
+    const bad = join(dir, "bad.json");
+    writeFileSync(bad, JSON.stringify([{ day_group: "2026-06-21", from: "12:00", to: "11:00", node: "home", setting: "home_indoor", category: "home" }]));
+    expect(() => loadOverrides(bad)).toThrow(/from must not be after to/);
   });
 
   it("never-home phrases do not count as home and the clip stays unlabeled", async () => {

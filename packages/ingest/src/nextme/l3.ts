@@ -25,18 +25,36 @@ export const L3RulesSchema = z.object({
   never_home_phrases: z.array(z.string()),
   trip_dates: z.array(z.string()),
   trip: z.object({ lodging_words: z.array(z.string()), outing_words: z.array(z.string()) }),
-  overrides: z.array(
-    z.object({
-      day_group: z.string(),
-      from: HHMM,
-      to: HHMM,
-      node: z.string(),
-      setting: SettingSchema,
-      category: ClipCategorySchema,
-    }),
-  ),
 });
 export type L3Rules = z.infer<typeof L3RulesSchema>;
+
+/** Per-person relabel of still-unlabeled clips starting in [from, to] (HKT, inclusive minutes) on `day_group`. Kept out of git. */
+export const OverrideSchema = z
+  .object({
+    day_group: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD"),
+    from: HHMM,
+    to: HHMM,
+    node: z.string(),
+    setting: SettingSchema,
+    category: ClipCategorySchema,
+  })
+  .refine((o) => o.from <= o.to, { message: "from must not be after to" });
+export type L3Override = z.infer<typeof OverrideSchema>;
+
+export function loadOverrides(path: string): L3Override[] {
+  let json: unknown;
+  try {
+    json = JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    throw new Error(`${path}: cannot read overrides: ${(e as Error).message}`);
+  }
+  const parsed = z.array(OverrideSchema).safeParse(json);
+  if (!parsed.success) {
+    const issue = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`).join("; ");
+    throw new Error(`${path}: ${issue}`);
+  }
+  return parsed.data;
+}
 
 export function loadL3Rules(path: string): L3Rules {
   let json: unknown;
@@ -94,7 +112,7 @@ function labelText(text: string, rules: L3Rules, trip: boolean): Label | undefin
  * text, then the enclosing L4, then the enclosing L5 (first match wins). Rows without a label keep
  * null labels, then date/time overrides relabel the ones that are still unlabeled.
  */
-export function nextmeL3Rows(day: string, built: ReturnType<typeof buildNextmeDay>, rules: L3Rules): DraftRow[] {
+export function nextmeL3Rows(day: string, built: ReturnType<typeof buildNextmeDay>, rules: L3Rules, overrides: L3Override[] = []): DraftRow[] {
   const trip = rules.trip_dates.includes(day);
   const rows: DraftRow[] = [];
   for (const [recId, anns] of built.annotations) {
@@ -148,7 +166,7 @@ export function nextmeL3Rows(day: string, built: ReturnType<typeof buildNextmeDa
     const wallclock = row.source.media.kind === "frames" ? row.source.media.start_wallclock : undefined;
     if (!wallclock) continue;
     const m = hktMinuteOfDay(wallclock, row.source_start_s);
-    const o = rules.overrides.find((x) => x.day_group === row.day_group && minutes(x.from) <= m && m <= minutes(x.to));
+    const o = overrides.find((x) => x.day_group === row.day_group && minutes(x.from) <= m && m <= minutes(x.to));
     if (o) {
       row.node = o.node;
       row.setting = o.setting;
