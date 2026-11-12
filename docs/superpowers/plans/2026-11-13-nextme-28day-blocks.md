@@ -311,3 +311,24 @@ Tests:
 - with fit_roles hobby, 3 parts (133/106/171 min) give hobby slots of exactly those lengths with untrimmed placements;
 - the written world carries the overrides;
 - block verify passes.
+
+## Addendum 6 (2026-11-13): content filters from the L3 text (audit)
+
+- **B18. Content filters.** Clip category comes from L4/L5 text or place defaults, so it can contradict the scene. compose-blocks re-checks the clip's own L3 sentence (`activity`) with whole-word, case-insensitive matching:
+  - **EATING words:** eat, eats, eating, ate, meal, meals, breakfast, lunch, dinner, supper, snack, snacks, cook, cooks, cooking, cooked, restaurant, canteen, cafeteria, diner, eatery, noodle, noodles, dumpling, dumplings, rice, bun, buns, fry, fries, frying, pancake, pancakes.
+  - **Meal slots** (breakfast, lunch, dinner, including trip meals) take only clips whose L3 text has an EATING word. This applies to primary plans, the meal phase run, and fills.
+  - **Non-meal slots** (work_am, work_pm, home_*, chores, exercise, lodging_*, outing*, hobby*) never take a clip whose L3 text has an EATING word, whatever its category.
+  - **COMMUTE words:** commute, commuting, travel, travels, traveling, depart, departs, leave, leaves, return, returns, MTR, bus, train, taxi, scooter, station.
+  - **Home slots** (home_*, chores) never take a clip whose L3 text has a COMMUTE word.
+  - **Scope:** filters apply in planDay phases, B6/B6b home fills and B13 top-ups. Commute transitions are unchanged.
+  - **Score:** B12 scoring uses the filtered plans automatically.
+
+### Task 12: Content filters (B18)
+Files: `packages/mcp/src/composeBlocks.ts`, tests.
+
+Tests:
+- a cooking clip labeled home is excluded from home_evening;
+- a "walk through the mall" clip labeled frequent_1/meal is excluded from dinner;
+- an "eat lunch at the canteen" clip labeled workplace/meal is used in lunch and never in work_pm;
+- a commute sentence labeled home is excluded from home_morning;
+- block verify passes.
