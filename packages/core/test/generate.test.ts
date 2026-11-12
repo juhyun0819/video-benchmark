@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -81,7 +82,7 @@ function rows(weekend: Partial<DonorRow> = {}, weekdayOver: Partial<DonorRow> = 
   return [...weekday, ...we];
 }
 
-type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number; seed?: number; length?: number };
+type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number; seed?: number; length?: number; late?: number };
 
 function makeWorld(o: Over = {}): World {
   return WorldSchema.parse({
@@ -120,6 +121,7 @@ function makeWorld(o: Over = {}): World {
       routine_strength: o.routine ?? 0.6,
       exception_rate: { slot: o.slot ?? 0.15, day: o.day ?? 0.1 },
       wake_sleep: "default_v1",
+      ...(o.late !== undefined ? { late_workdays_per_week: o.late } : {}),
     },
     seed: o.seed ?? 20261112,
   });
@@ -674,7 +676,8 @@ describe("realized (CR1, E1, E2)", () => {
     expect(leave).toBeGreaterThan(0);
     expect(realized.day_exception_rate).toBe(leave / days.filter((d) => base(d) === "workday").length);
 
-    const templateOf = (d: (typeof days)[number]) => (d.day_type === "leave_day" ? "home_day" : d.day_type);
+    const templateOf = (d: (typeof days)[number]) =>
+      d.day_type === "leave_day" ? "home_day" : d.day_type === "workday_late" ? "workday" : d.day_type;
     const presence: Record<string, [number, number]> = {};
     for (const d of days) {
       for (const slot of inp.templates.day_types[templateOf(d)].filter((s) => !s.required)) {
@@ -744,5 +747,96 @@ describe("realized (CR1, E1, E2)", () => {
     expect(r1.order_similarity).toBeGreaterThanOrEqual(r5.order_similarity);
     expect(r5.start_diff_minutes).toBeLessThanOrEqual(r0.start_diff_minutes);
     expect(r1.start_diff_minutes).toBeLessThanOrEqual(r5.start_diff_minutes);
+  });
+});
+
+describe("late workdays (N1)", () => {
+  const lateRows = (workStart = 720): DonorRow[] =>
+    Array.from({ length: 40 }, () =>
+      row({ work_start: workStart, work_end: 1230, wake: 450, bed: 1400, breakfast_time: 480, lunch_time: 800, dinner_time: 1290 }),
+    );
+  const lateInput = (o: Over = {}, workStart = 720): ScheduleInput => {
+    const base = input(o);
+    return { ...base, source: atus2025Source([...rows(), ...lateRows(workStart)]) };
+  };
+  const lateDays = (s: ReturnType<typeof generateSchedule>) => s.days.filter((d) => d.day_type === "workday_late");
+
+  it("dial 0 leaves an existing world's schedule bytes unchanged (golden hash recorded at HEAD)", () => {
+    const schedule = generateSchedule(input());
+    expect(createHash("sha256").update(json(schedule)).digest("hex")).toBe(
+      "19554b6f3ac0f28657559eb78e34953e257989a125e88dbd82d460601adc87ec",
+    );
+    expect(schedule.donors).not.toHaveProperty("weekday_late");
+    expect(schedule.realized).not.toHaveProperty("late_workday_count");
+  });
+
+  it("dial 0 draws no late donor, so a pool without late rows still works", () => {
+    expect(generateSchedule(input({ late: 0 })).donors.weekday_late).toBeUndefined();
+  });
+
+  it("dial 2 in a 28-day world gives exactly 8 workday_late days on two fixed weekdays", () => {
+    const schedule = generateSchedule(lateInput({ late: 2, day: 0 }));
+    const late = lateDays(schedule);
+    expect(late).toHaveLength(8);
+    const weekdays = new Set(late.map((d) => d.weekday));
+    expect(weekdays.size).toBe(2);
+    for (const wd of weekdays) expect(["Mon", "Tue", "Wed", "Thu", "Fri"]).toContain(wd);
+    // Every week has both late days.
+    for (let w = 0; w < 4; w++) expect(late.filter((d) => Math.floor((d.day_index - 1) / 7) === w)).toHaveLength(2);
+    expect(schedule.realized.late_workday_count).toBe(8);
+    expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
+  });
+
+  it("is deterministic, and the late weekdays depend on the seed", () => {
+    const a = json(generateSchedule(lateInput({ late: 2, day: 0 })));
+    expect(json(generateSchedule(lateInput({ late: 2, day: 0 })))).toBe(a);
+    const sets = new Set(
+      [1, 2, 3, 4, 5, 6, 7, 8].map((seed) =>
+        lateDays(generateSchedule(lateInput({ late: 2, day: 0, seed })))
+          .map((d) => d.weekday)
+          .filter((wd, i, all) => all.indexOf(wd) === i)
+          .sort()
+          .join(),
+      ),
+    );
+    expect(sets.size).toBeGreaterThan(1);
+  });
+
+  it("the late donor's work_start lies in [690, 900] and the weekday donor is untouched", () => {
+    const schedule = generateSchedule(lateInput({ late: 1, day: 0 }));
+    const late = schedule.donors.weekday_late!;
+    expect(late.profile.work_start).toBeGreaterThanOrEqual(690);
+    expect(late.profile.work_start).toBeLessThanOrEqual(900);
+    expect(schedule.donors.weekday.profile.work_start).toBeLessThan(690);
+    expect(lateDays(schedule)).toHaveLength(4);
+  });
+
+  it("a late-day home_morning window ends after 11:00 for a donor starting work at 12:00", () => {
+    // Daily jitter (sigma 20 min at routine 1) moves single days, so the check is on the mean end.
+    const schedule = generateSchedule(lateInput({ late: 2, day: 0, routine: 1 }, 720));
+    const late = lateDays(schedule);
+    expect(late.length).toBe(8);
+    const morningEnd = (d: (typeof late)[number]) => parseClock(d.slots.find((s) => s.role === "home_morning")!.window[1]);
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(mean(late.map(morningEnd))).toBeGreaterThan(parseClock("11:00"));
+    const regular = schedule.days.filter((d) => d.day_type === "workday");
+    expect(Math.max(...regular.map(morningEnd))).toBeLessThan(parseClock("11:00"));
+  });
+
+  it("a day exception overrides a late workday like any workday", () => {
+    const schedule = generateSchedule(lateInput({ late: 2, day: 1 }));
+    expect(lateDays(schedule)).toHaveLength(0);
+    expect(schedule.realized.late_workday_count).toBe(0);
+    expect(schedule.days.filter((d) => d.day_type === "leave_day")).toHaveLength(20);
+  });
+
+  it("realized.late_workday_count is recounted from days by realizedOf", () => {
+    const o = lateInput({ late: 2, day: 0 });
+    const schedule = generateSchedule(o);
+    expect(realizedOf(schedule.days, o.world, o.templates).late_workday_count).toBe(8);
+  });
+
+  it("an empty late pool fails with DONOR_POOL_EMPTY", () => {
+    expect(() => generateSchedule(input({ late: 1 }))).toThrow(TimelineError);
   });
 });

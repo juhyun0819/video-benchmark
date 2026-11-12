@@ -106,10 +106,29 @@ function hobbyPlan(world: World): HobbyPlan {
   return { weekendDays, workdayCount, byWeekday, weights };
 }
 
-function baseDayType(weekday: Weekday, plan: HobbyPlan): DayType {
+/**
+ * N1: the weekdays that start late, picked once per person by a seeded shuffle
+ * of Mon-Fri and repeated every week (a weekly pattern, not a routine draw).
+ */
+export function lateWeekdays(world: World): ReadonlySet<Weekday> {
+  const count = world.dials.late_workdays_per_week;
+  if (count === 0) return new Set();
+  const rng = rngFor(world.seed, "late_workdays");
+  const pool = [...WORKDAYS];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = rng.int(0, i + 1);
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return new Set(pool.slice(0, count));
+}
+
+/** Day exceptions and slot exceptions written for workdays also apply to late workdays. */
+export const catalogDayType = (dayType: DayType): DayType => (dayType === "workday_late" ? "workday" : dayType);
+
+function baseDayType(weekday: Weekday, plan: HobbyPlan, late: ReadonlySet<Weekday>): DayType {
   if (weekday === "Sat") return plan.weekendDays >= 1 ? "hobby_day" : "home_day";
   if (weekday === "Sun") return plan.weekendDays >= 2 ? "hobby_day" : "home_day";
-  return "workday";
+  return late.has(weekday) ? "workday_late" : "workday";
 }
 
 function mealDraw(dist: MealDistribution): (rng: Rng) => MealPlace | "skip" {
@@ -134,11 +153,11 @@ export function decideDay(
   const plan = hobbyPlan(world);
   const dayRng = (name: string) => rngFor(seed, "day", dayIndex, attempt, name);
 
-  let dayType = baseDayType(weekday, plan);
-  let template = dayType as TemplateName;
+  let dayType = baseDayType(weekday, plan, lateWeekdays(world));
+  let template = catalogDayType(dayType) as TemplateName;
   const exceptions: Exception[] = [];
 
-  const dayEntries = catalog.day.filter((e) => e.from_day_type === dayType);
+  const dayEntries = catalog.day.filter((e) => e.from_day_type === catalogDayType(dayType));
   if (dayEntries.length > 0) {
     const rng = dayRng("day_exception");
     if (rng.bernoulli(dials.exception_rate.day)) {

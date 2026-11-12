@@ -145,7 +145,11 @@ export const TimelineManifestSchema = z.object({
     matching_dropped_slots: z.number().int().min(0),
     matching_dropped_by_role: z.record(z.string(), z.number().int().min(1)),
   }),
-  donor_adjustments: z.object({ weekday: DonorAdjustmentSchema, weekend: DonorAdjustmentSchema }),
+  donor_adjustments: z.object({
+    weekday: DonorAdjustmentSchema,
+    weekday_late: DonorAdjustmentSchema.optional(),
+    weekend: DonorAdjustmentSchema,
+  }),
   days: z.array(ManifestDaySchema),
   captions: z.array(ManifestCaptionSchema),
   verifier_summary: z.object({
@@ -350,7 +354,11 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       matching_dropped_slots: Object.values(matchingDropped).reduce((a, b) => a + b, 0),
       matching_dropped_by_role: matchingDropped,
     },
-    donor_adjustments: { weekday: pickOf(s.donors.weekday), weekend: pickOf(s.donors.weekend) },
+    donor_adjustments: {
+      weekday: pickOf(s.donors.weekday),
+      ...(s.donors.weekday_late !== undefined ? { weekday_late: pickOf(s.donors.weekday_late) } : {}),
+      weekend: pickOf(s.donors.weekend),
+    },
     days,
     captions,
     verifier_summary: {

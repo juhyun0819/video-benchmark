@@ -14,7 +14,7 @@ import { TimelineError } from "../errors.js";
 import { gapQuantile, sampleGap, type GapTable } from "../gaps.js";
 import { rngFor } from "../rng.js";
 import type { World } from "../world.js";
-import { decideDay, decideDays, effectiveMealStyle, mealPlaceUsable } from "./decisions.js";
+import { catalogDayType, decideDay, decideDays, effectiveMealStyle, mealPlaceUsable } from "./decisions.js";
 import { realizedOf } from "./realized.js";
 import type {
   AnchorName,
@@ -290,7 +290,7 @@ function placeSlotException(
   const feasible: { entry: ExceptionCatalog["slot"][number]; layout: DayLayout }[] = [];
   for (const entry of input.exceptions.slot) {
     const role = entry.replaces_role;
-    if (!entry.day_types.includes(decisions.day_type) || !kept.has(role)) continue;
+    if (!entry.day_types.includes(catalogDayType(decisions.day_type)) || !kept.has(role)) continue;
     if (!mealPlaceUsable(world, entry.meal_place, boundNodes)) continue;
     const meal_place = { ...decisions.meal_place, [role]: entry.meal_place };
     let layout: DayLayout;
@@ -324,7 +324,12 @@ function placeSlotException(
 
 function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
   const d = decisions.day_index;
-  const profile = decisions.template === "workday" ? donors.weekday.profile : donors.weekend.profile;
+  const profile =
+    decisions.day_type === "workday_late" && donors.weekday_late !== undefined
+      ? donors.weekday_late.profile
+      : decisions.template === "workday"
+        ? donors.weekday.profile
+        : donors.weekend.profile;
   const { anchors, adjustments, redraws } = dayAnchors(input, profile, decisions, attempt);
   const base = layoutDay(input, anchors, decisions, attempt);
   const { layout, exceptions, eligible, candidates } = placeSlotException(input, anchors, decisions, attempt, base);
@@ -367,10 +372,12 @@ export function generateSchedule(input: ScheduleInput): Schedule {
     seed: world.seed,
     allowCountryFallback: world.allow_country_fallback,
     ...boundMinutes(templates),
+    lateWorkdays: world.dials.late_workdays_per_week > 0,
     accept: (kind, profile) => (kind === "weekday" && !requiredWorkdaySlotsFit(input, profile) ? requiredSlots : []),
   });
   const donors: Donors = {
     weekday: repairWorkEnd(input, picked.weekday),
+    ...(picked.weekday_late !== undefined ? { weekday_late: repairWorkEnd(input, picked.weekday_late) } : {}),
     weekend: withDefaultSport(input, picked.weekend),
     country_fallback: picked.country_fallback,
     weekend_redraws: picked.weekend_redraws,

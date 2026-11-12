@@ -30,6 +30,7 @@ export type VerifierReport = {
 
 const REQUIRED_ROLES: Record<string, string[]> = {
   workday: ["work_am", "work_pm"],
+  workday_late: ["work_am", "work_pm"],
   hobby_day: ["hobby"],
   home_day: ["chores"],
   leave_day: ["chores"],
@@ -67,7 +68,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
     for (const role of REQUIRED_ROLES[day.day_type] ?? []) {
       if (!roles.has(role)) add("day_type", { day_index: d, detail: `${day.day_type} has no ${role} slot` });
     }
-    if (day.day_type !== "workday") {
+    if (day.day_type !== "workday" && day.day_type !== "workday_late") {
       for (const s of day.slots) {
         if (s.role.startsWith("work_")) add("day_type", { day_index: d, slot_id: s.slot_id, detail: `${day.day_type} has work slot ${s.role}` });
       }

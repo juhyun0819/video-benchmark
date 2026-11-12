@@ -25,13 +25,17 @@ export type RealizedDay = Pick<
 const DAY_EXCEPTION_FROM: ExceptionCatalog["day"][number]["from_day_type"] = "workday";
 
 /** leave_day uses the home_day template. */
-const templateOf = (dayType: DayType): TemplateName => (dayType === "leave_day" ? "home_day" : dayType);
+const templateOf = (dayType: DayType): TemplateName =>
+  dayType === "leave_day" ? "home_day" : dayType === "workday_late" ? "workday" : dayType;
+
+/** Workday templates keep one routine reference per weekday. */
+const isWorkType = (dayType: DayType): boolean => dayType === "workday" || dayType === "workday_late";
 
 const ratio = (n: number, d: number): number | null => (d === 0 ? null : n / d);
 
 /** Days that copy the same routine reference (D14): the same weekday on workdays, the same day type otherwise (G15). */
 const sameReference = (a: RealizedDay, b: RealizedDay): boolean =>
-  a.day_type === b.day_type && (a.day_type !== "workday" || a.weekday === b.weekday);
+  a.day_type === b.day_type && (!isWorkType(a.day_type) || a.weekday === b.weekday);
 
 function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   const union = new Set([...a, ...b]).size;
@@ -110,7 +114,7 @@ export function realizedOf(days: readonly RealizedDay[], world: World, templates
 
   const dayException = (d: RealizedDay) => d.exceptions.find((e) => e.scope === "day");
   const baseType = (d: RealizedDay) => dayException(d)?.replaces ?? d.day_type;
-  const dayExceptionBase = days.filter((d) => baseType(d) === DAY_EXCEPTION_FROM);
+  const dayExceptionBase = days.filter((d) => [DAY_EXCEPTION_FROM, "workday_late"].includes(baseType(d)));
 
   // Roles in template order; [kept, days whose template has the role as optional].
   const presence = new Map<string, [number, number]>();
@@ -159,6 +163,9 @@ export function realizedOf(days: readonly RealizedDay[], world: World, templates
     ),
     shrunk,
     composition_consistency: composition,
+    ...(world.dials.late_workdays_per_week > 0
+      ? { late_workday_count: days.filter((d) => d.day_type === "workday_late").length }
+      : {}),
     dials: {
       routine_strength: world.dials.routine_strength,
       exception_rate: { slot: world.dials.exception_rate.slot, day: world.dials.exception_rate.day },

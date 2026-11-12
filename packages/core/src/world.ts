@@ -70,6 +70,8 @@ export const WorldSchema = z
       exception_rate: z.object({ slot: Prob, day: Prob }),
       wake_sleep: z.string(),
       start_weekday: WeekdaySchema.default("Mon"),
+      /** Workdays per week that start late (workday_late); the weekdays are fixed per person. */
+      late_workdays_per_week: z.number().int().min(0).max(5).default(0),
     }),
     seed: z.number().int().min(0),
   })

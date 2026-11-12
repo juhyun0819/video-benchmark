@@ -114,7 +114,8 @@
           "day": 0
         },
         "wake_sleep": "default_v1",
-        "start_weekday": "Mon"
+        "start_weekday": "Mon",
+        "late_workdays_per_week": 0
       },
       "seed": 4242
     },
@@ -126,7 +127,8 @@
         "day": 0
       },
       "wake_sleep": "default_v1",
-      "start_weekday": "Mon"
+      "start_weekday": "Mon",
+      "late_workdays_per_week": 0
     },
     "seed": 4242,
     "node_binding": {

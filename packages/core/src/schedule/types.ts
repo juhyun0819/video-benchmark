@@ -6,10 +6,10 @@ import { MealPlaceSchema, WeekdaySchema, type MealPlace, type Weekday } from "..
 export const MealSchema = z.enum(["breakfast", "lunch", "dinner"]);
 export type Meal = z.infer<typeof MealSchema>;
 
-export const DayTypeSchema = z.enum(["workday", "hobby_day", "home_day", "leave_day"]);
+export const DayTypeSchema = z.enum(["workday", "workday_late", "hobby_day", "home_day", "leave_day"]);
 export type DayType = z.infer<typeof DayTypeSchema>;
 
-/** Day types that have their own template; leave_day uses home_day. */
+/** Day types that have their own template; leave_day uses home_day and workday_late uses workday. */
 export const TemplateNameSchema = z.enum(["workday", "hobby_day", "home_day"]);
 export type TemplateName = z.infer<typeof TemplateNameSchema>;
 
@@ -259,6 +259,8 @@ export const RealizedSchema = z.object({
   shrunk: z.record(z.string(), z.number().int().min(0)),
   /** Templates used on fewer than 2 days are omitted. */
   composition_consistency: z.record(TemplateNameSchema, CompositionConsistencySchema),
+  /** Days of type workday_late; present only when late_workdays_per_week > 0. */
+  late_workday_count: z.number().int().min(0).optional(),
   dials: z.object({ routine_strength: Prob01, exception_rate: z.object({ slot: Prob01, day: Prob01 }) }),
 });
 export type Realized = z.infer<typeof RealizedSchema>;
@@ -273,6 +275,8 @@ export const ScheduleSchema = z.object({
   distribution_source: z.string(),
   donors: z.object({
     weekday: DonorPickSchema,
+    /** Donor for workday_late days; present only when late_workdays_per_week > 0. */
+    weekday_late: DonorPickSchema.optional(),
     weekend: DonorPickSchema,
     country_fallback: z.boolean(),
     weekend_redraws: z.number().int().min(0),

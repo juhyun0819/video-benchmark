@@ -29,6 +29,8 @@ export type DonorRow = {
 };
 
 export type DayKind = "weekday" | "weekend";
+/** A donor draw: the late-workday donor (N1) is a weekday donor with its own rng stream. */
+type Stream = DayKind | "weekday_late";
 type Meal = "breakfast" | "lunch" | "dinner";
 
 export type DayProfile = {
@@ -83,6 +85,8 @@ export const OCCUPATION_CODES: Record<string, number> = {
 const MIN_CELL = 30;
 const EARLY_WEEKEND_MARGIN = 120;
 const DAY_SHIFT_START: readonly [number, number] = [300, 660];
+/** N1: workplace start 11:30-15:00 (minutes), the pool of the late-workday donor. */
+const LATE_WORK_START: readonly [number, number] = [690, 900];
 const LOC_MAP: Record<number, MealPlace> = { 1: "home", 2: "workplace", 3: "others_home", 4: "eat_out" };
 
 const REQUIRED_COLUMNS = [
@@ -190,7 +194,7 @@ function levelPool(
 
 const LEVELS: BackoffLevel[] = ["occupation_sex_age", "occupation_sex", "occupation", "sex_age", "all"];
 
-function pickLevel(kind: DayKind, pool: DonorRow[], attrs: Attrs): { level: BackoffLevel; rows: DonorRow[] } {
+function pickLevel(kind: Stream, pool: DonorRow[], attrs: Attrs): { level: BackoffLevel; rows: DonorRow[] } {
   if (pool.length === 0) throw new TimelineError("DONOR_POOL_EMPTY", `No donor rows for ${kind}`, { kind });
   const occCode = OCCUPATION_CODES[attrs.occupation_group];
   for (const level of LEVELS) {
@@ -204,22 +208,23 @@ function pickLevel(kind: DayKind, pool: DonorRow[], attrs: Attrs): { level: Back
 type FillField = "work_start" | "work_end" | "breakfast_time" | "lunch_time" | "dinner_time";
 
 function buildPick(
-  kind: DayKind,
+  stream: Stream,
   donor: DonorRow,
   level: BackoffLevel,
   rows: DonorRow[],
   pool: DonorRow[],
   seed: number,
 ): DonorPick {
+  const kind: DayKind = stream === "weekend" ? "weekend" : "weekday";
   const filled: string[] = [];
   const value = (field: FillField): number => {
     const own = donor[field];
     if (own !== null) return own;
     const cands = rows.filter((r) => r[field] !== null && r.w > 0);
     if (cands.length === 0) {
-      throw new TimelineError("DONOR_POOL_EMPTY", `No rows carry ${field}`, { kind, field });
+      throw new TimelineError("DONOR_POOL_EMPTY", `No rows carry ${field}`, { kind: stream, field });
     }
-    const v = rngFor(seed, "donor", kind, "fill", field).pickWeighted(
+    const v = rngFor(seed, "donor", stream, "fill", field).pickWeighted(
       cands.map((r) => ({ value: r[field] as number, weight: r.w })),
     );
     filled.push(field);
@@ -249,7 +254,7 @@ function buildPick(
     const levelRows = withSport(rows);
     const from = levelRows.length >= MIN_CELL ? levelRows : withSport(pool);
     if (from.length > 0) {
-      profile.sport = rngFor(seed, "donor", kind, "fill", "sport_time").pickWeighted(
+      profile.sport = rngFor(seed, "donor", stream, "fill", "sport_time").pickWeighted(
         from.map((r) => ({ value: r.sport_time as number, weight: r.w })),
       );
       sportFill = levelRows.length >= MIN_CELL ? "level" : "pool";
@@ -267,10 +272,12 @@ function buildPick(
   return pick;
 }
 
-function drawDonor(kind: DayKind, rows: DonorRow[], seed: number, ...key: (string | number)[]): DonorRow {
+function drawDonor(stream: Stream, rows: DonorRow[], seed: number, ...key: (string | number)[]): DonorRow {
   const cands = rows.filter((r) => r.w > 0);
-  if (cands.length === 0) throw new TimelineError("DONOR_POOL_EMPTY", `No weighted donor rows for ${kind}`, { kind });
-  return rngFor(seed, "donor", kind, ...key).pickWeighted(cands.map((r) => ({ value: r, weight: r.w })));
+  if (cands.length === 0) {
+    throw new TimelineError("DONOR_POOL_EMPTY", `No weighted donor rows for ${stream}`, { kind: stream });
+  }
+  return rngFor(seed, "donor", stream, ...key).pickWeighted(cands.map((r) => ({ value: r, weight: r.w })));
 }
 
 const WAKE_MIN = 240;
@@ -344,9 +351,17 @@ export function selectDonors(
     allowCountryFallback: boolean;
     lunchMinutes?: number;
     hobbyMinutes?: number;
+    /** N1: also draw the late-workday donor (`weekday_late`) from weekday workers starting 11:30-15:00. */
+    lateWorkdays?: boolean;
     accept?: (kind: DayKind, profile: DayProfile) => DonorViolation[];
   },
-): { weekday: DonorPick; weekend: DonorPick; country_fallback: boolean; weekend_redraws: number } {
+): {
+  weekday: DonorPick;
+  weekday_late?: DonorPick;
+  weekend: DonorPick;
+  country_fallback: boolean;
+  weekend_redraws: number;
+} {
   const mismatch = attrs.country !== src.country;
   if (mismatch && !opts.allowCountryFallback) {
     throw new TimelineError(
@@ -378,20 +393,21 @@ export function selectDonors(
       : []),
   ];
   const accepted = (
-    kind: DayKind,
+    stream: Stream,
     first: DonorRow,
     level: BackoffLevel,
     rows: DonorRow[],
     pool: DonorRow[],
     wakeFloor?: number,
   ): DonorPick => {
+    const kind: DayKind = stream === "weekend" ? "weekend" : "weekday";
     let donor = first;
-    let pick = buildPick(kind, donor, level, rows, pool, opts.seed);
+    let pick = buildPick(stream, donor, level, rows, pool, opts.seed);
     let k = 0;
     while (violationsOf(kind, pick.profile, wakeFloor).length > 0 && k < MAX_ACCEPT_REDRAWS) {
       k += 1;
-      donor = drawDonor(kind, rows, opts.seed, "accept", k);
-      pick = buildPick(kind, donor, level, rows, pool, opts.seed);
+      donor = drawDonor(stream, rows, opts.seed, "accept", k);
+      pick = buildPick(stream, donor, level, rows, pool, opts.seed);
     }
     pick.redraws = k;
     if (donorBoundViolations(kind, pick.profile, lunchMinutes, hobbyMinutes).length > 0) {
@@ -406,8 +422,19 @@ export function selectDonors(
   const weekendFirst = drawDonor("weekend", we.rows, opts.seed, 0);
   const weekend = accepted("weekend", weekendFirst, we.level, we.rows, weekendPool, wakeFloor);
 
+  let weekday_late: DonorPick | undefined;
+  if (opts.lateWorkdays) {
+    // Same pool, backoff, weighting, acceptance and redraws as the weekday donor, on its own rng stream.
+    const latePool = src
+      .pool("weekday")
+      .filter((r) => r.work_start !== null && r.work_start >= LATE_WORK_START[0] && r.work_start <= LATE_WORK_START[1]);
+    const late = pickLevel("weekday_late", latePool, attrs);
+    weekday_late = accepted("weekday_late", drawDonor("weekday_late", late.rows, opts.seed, 0), late.level, late.rows, latePool);
+  }
+
   return {
     weekday,
+    ...(weekday_late !== undefined ? { weekday_late } : {}),
     weekend,
     country_fallback: mismatch,
     weekend_redraws: weekend.redraws,
