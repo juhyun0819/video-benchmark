@@ -555,7 +555,7 @@ describe("home fill from spare dates", () => {
     return { ...r, slots: r.fills.map((f) => `${f.slot_id}<-${f.from_date}`) };
   }
 
-  it("fills an empty home_morning from a spare date within 90 minutes, filling until the block end", () => {
+  it("fills an empty home_morning from a spare date within 180 minutes, filling until the block end", () => {
     const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:30", 30), home("08:05", 30), home("08:45", 30)])];
     const r = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], clips);
     expect(r.fills).toEqual([{ day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 30, seconds: 3600 }]);
@@ -563,10 +563,10 @@ describe("home fill from spare dates", () => {
     expect(r.entries.every((e) => e.slot_id === "d1-s1")).toBe(true);
   });
 
-  it("does not use a candidate more than 90 minutes from the block start", () => {
-    const edge = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("08:30", 30)])]);
-    expect(edge.fills.map((f) => f.delta_min)).toEqual([90]);
-    const out = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("08:31", 30)])]);
+  it("does not use a candidate more than 180 minutes from the block start", () => {
+    const edge = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("10:00", 30)])]);
+    expect(edge.fills.map((f) => f.delta_min)).toEqual([180]);
+    const out = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("10:01", 30)])]);
     expect(out.fills).toEqual([]);
     expect(out.entries).toEqual([]);
   });
@@ -682,7 +682,7 @@ describe("composeBlocks on a generated schedule", () => {
       expect(TRIP).not.toContain(f.from_date);
       expect(dayOf.get(f.from_date) ?? f.day_index).toBe(f.day_index);
       dayOf.set(f.from_date, f.day_index);
-      expect(f.delta_min).toBeLessThanOrEqual(90);
+      expect(f.delta_min).toBeLessThanOrEqual(180);
       expect(result.placements.some((p) => p.slot_id === f.slot_id)).toBe(true);
       expect(t.schedule.days[f.day_index - 1]!.trip).toBeUndefined();
     }

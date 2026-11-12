@@ -28,7 +28,7 @@ const LATE_FIRST_WORK_S = H(11);
 /** Consecutive clips of a meal (or outing) run are at most this far apart. */
 const RUN_GAP_S = 15 * 60;
 /** B6: a home block takes spare-date footage whose real start is at most this far from the block start. */
-const FILL_WINDOW_S = 90 * 60;
+const FILL_WINDOW_S = 180 * 60;
 const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
 /** A catalog clip with its real start and end, in seconds since its date's 00:00. */
@@ -382,7 +382,7 @@ export type HomeFill = { day_index: number; slot_id: string; role: string; from_
  * a spare date: not assigned to a day, not a trip date, and serving one day only (it may fill several
  * home blocks of that day, and is preferred for the day's later ones). Days go in index order, slots in
  * window order. Candidates are the date's unused home clips (home meal clips for meal slots) starting
- * within ±90 min of the window start; the smallest |Δt| wins, then the longer run, then the earlier
+ * within ±180 min of the window start; the smallest |Δt| wins, then the longer run, then the earlier
  * date. The block takes that clip and the following run of candidates (gap ≤ 15 min) until it is full.
  */
 export function homeFill(

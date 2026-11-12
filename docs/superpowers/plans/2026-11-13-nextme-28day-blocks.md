@@ -137,7 +137,7 @@ Steps (TDD):
 
 - **B6. Home fill.** After the primary plan, every slot whose `spec.node` is `home` and that received no footage gets filled from a spare date. This covers home_morning, home_afternoon, home_evening, chores, and meals at home.
   - **Spare dates:** dates not assigned to any synthetic day and not trip dates. Each spare date serves at most one synthetic day. It may fill several home blocks of that day.
-  - **Candidates:** home-bound clips of a spare date whose real start is within ±90 min of the block's synthetic start (window start). Meal slots take only home meal clips. Other home slots take any home clip.
+  - **Candidates:** home-bound clips of a spare date whose real start is within ±180 min (widened from ±90 by the user, 2026-11-13) of the block's synthetic start (window start). Meal slots take only home meal clips. Other home slots take any home clip.
   - **Selection:**
     - Visit days in index order and their empty home slots in time order.
     - Pick the candidate clip with the smallest |Δt|. Break ties by more footage in the run, then by earlier date.
