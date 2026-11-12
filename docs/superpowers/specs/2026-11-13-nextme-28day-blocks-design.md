@@ -94,6 +94,18 @@
 - 근무, 집, 운동, 숙소, 관광 블록에는 먹거나 요리하는 장면을 넣지 않는다.
 - 집 블록에는 출퇴근 이동 장면을 넣지 않는다. commute, travel, depart, leave, return to, MTR, bus, train, taxi, scooter 같은 단어가 있는 장면이다.
 
+### 이야기가 되게 다듬기 (2026-11-13, 하루별 검수 결과)
+- 집 블록에는 집 안 장면만 넣는다. 다음 장면은 넣지 않는다.
+  - 밖에서 움직이는 장면: walk, street, market, campus, university, library, mall, store, shopping, supermarket, plaza, navigate, outdoor, tram, elevator
+  - 도착·출발 장면: arrive, arrival, journey, departure
+- 근무 블록에는 이동, 쇼핑, 퇴근 장면을 넣지 않는다.
+  - 출퇴근 단어, tram, exit, departure
+  - supermarket, mall, store, shopping, food
+- 식사 블록에는 실제로 먹거나 요리하는 장면이 있어야 한다(eat, ate, dine, dining, consume, cook, buffet).
+  - 그 앞뒤로는 한 장면씩만 붙인다. 예를 들어 "식당으로 걸어간다", "음식을 산다"이다.
+  - 운전 장면은 넣지 않는다.
+- 여행일 아침 식사는 숙소 아침 바로 뒤에 온다. 아침 식사 앵커를 없애서, 오전 관광 뒤 정오에 아침을 먹는 일을 막는다.
+
 ## 4. 범위 밖
 
 - 다른 데이터셋을 섞는 일(Ego4D 등)

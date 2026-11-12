@@ -332,3 +332,32 @@ Tests:
 - an "eat lunch at the canteen" clip labeled workplace/meal is used in lunch and never in work_pm;
 - a commute sentence labeled home is excluded from home_morning;
 - block verify passes.
+
+## Addendum 7 (2026-11-13): narrative coherence (per-day audit)
+
+- **B19. Stricter slot content.** All matching is whole-word and case-insensitive on the clip's L3 `activity`. It extends B18.
+  - **HOME_REJECT (home_*, chores):** B18 COMMUTE plus walk, walks, walking, street, streets, market, campus, university, library, mall, store, shop, shopping, supermarket, plaza, plazas, navigate, navigates, outdoor, outdoors, tram, elevator, arrive, arrives, arrival, journey, departure.
+  - **WORK_REJECT (work_am, work_pm):** B18 COMMUTE plus tram, exit, exits, departure, supermarket, mall, store, shopping, food.
+  - **EATING:** add food (so "wait for my food order" is a meal scene).
+  - **Meal slots:**
+    - The planned run must contain at least one EAT_ACT clip: eat, eats, eating, ate, dine, dines, dining, consume, consumes, consuming, cook, cooks, cooking, cooked, buffet.
+    - Keep only the clips from one clip before the first EAT_ACT clip to one clip after the last.
+    - Drop clips with drive, drives, driving, car.
+    - If no EAT_ACT clip exists, the meal block is empty.
+  - **Scope:** primary plans, fills and top-ups alike.
+- **B20. Trip breakfast order.** In `config/timeline/templates.v3.json` trip_day, remove `"anchor": "breakfast"` from the breakfast slot, so breakfast follows lodging_morning directly. No other template changes. Only worlds with trips change.
+
+### Task 13: B19 + B20
+Files:
+- `packages/mcp/src/composeBlocks.ts`
+- `config/timeline/templates.v3.json`
+- tests
+
+Tests:
+- a "walk from the market to my apartment" home clip is rejected from home_afternoon;
+- a "ride my scooter to McDonald's" workplace clip is rejected from work_am;
+- a meal run "drive to restaurant / abandon / drive" gives an empty dinner;
+- "walk to cafeteria, eat, return tray" is kept;
+- the trip_day breakfast slot starts right after lodging_morning;
+- worlds without trips are byte-identical;
+- block verify passes.
