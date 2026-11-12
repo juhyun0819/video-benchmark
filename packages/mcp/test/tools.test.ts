@@ -99,7 +99,7 @@ describe("timeline tools", () => {
     expect(exported.coverage_mean).toBeGreaterThan(0);
 
     // G24: realized recounts from the manifest alone (days, world, templates).
-    const templates = TemplatesSchema.parse(JSON.parse(readFileSync(join(CONFIG_DIR, "timeline", "templates.v2.json"), "utf8")));
+    const templates = TemplatesSchema.parse(JSON.parse(readFileSync(join(CONFIG_DIR, "timeline", "templates.v3.json"), "utf8")));
     const { matching_dropped_slots: _n, matching_dropped_by_role: _r, ...realized } = manifest.realized;
     expect(realizedOf(manifest.days, manifest.inputs.world, templates)).toEqual(realized);
   });

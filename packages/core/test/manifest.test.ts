@@ -17,7 +17,7 @@ import {
 import { clip, genId, makeSchedule, makeWorld, type SlotDef } from "./fixtures.js";
 
 const TEMPLATES = TemplatesSchema.parse(
-  JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v2.json", import.meta.url), "utf8")),
+  JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v3.json", import.meta.url), "utf8")),
 );
 const HOUR = 3600;
 const DEFS: SlotDef[] = [

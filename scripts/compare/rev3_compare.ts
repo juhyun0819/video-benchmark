@@ -13,7 +13,7 @@
 // The clip bank is synthetic (built from the MCP test helpers' clip set); nothing is read from
 // data/ except the ATUS per-respondent pool.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -43,14 +43,10 @@ type TreeConfig = { templates: any; gaps: any; exceptions: any; defaults: any; s
 
 function loadTreeConfig(core: Core, root: string, dataDir: string): TreeConfig {
   const timeline = join(root, "config", "timeline");
-  let templateFile = "templates.v2.json";
-  let templatesRaw: unknown;
-  try {
-    templatesRaw = readJson(join(timeline, templateFile));
-  } catch {
-    templateFile = "templates.v1.json";
-    templatesRaw = readJson(join(timeline, templateFile));
-  }
+  // Newest first: each tree has exactly one of these.
+  const templateFile = ["templates.v3.json", "templates.v2.json", "templates.v1.json"].find((f) => existsSync(join(timeline, f)));
+  if (templateFile === undefined) throw new Error(`no templates file in ${timeline}`);
+  const templatesRaw: unknown = readJson(join(timeline, templateFile));
   const rows = core.parseAtusPool(readFileSync(join(dataDir, POOL_REL), "utf8"));
   return {
     templateFile,

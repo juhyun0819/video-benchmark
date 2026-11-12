@@ -1,6 +1,14 @@
 import { TimelineError } from "../errors.js";
 import { rngFor, type Rng } from "../rng.js";
-import { MealPlaceSchema, WeekdaySchema, type MealPlace, type MealWeights, type Weekday, type World } from "../world.js";
+import {
+  MealPlaceSchema,
+  WeekdaySchema,
+  weekdayOfDate,
+  type MealPlace,
+  type MealWeights,
+  type Weekday,
+  type World,
+} from "../world.js";
 import type { DayDecisions, DayType, Exception, ExceptionCatalog, Meal, ScheduleDefaults, TemplateName } from "./types.js";
 
 /** Renormalized meal place probabilities; {} when no usable place has mass (R12). */
@@ -131,6 +139,51 @@ function baseDayType(weekday: Weekday, plan: HobbyPlan, late: ReadonlySet<Weekda
   return late.has(weekday) ? "workday_late" : "workday";
 }
 
+/** Weekday of a 1-based synthetic day. */
+function weekdayAt(world: World, dayIndex: number): Weekday {
+  return WEEKDAYS[(WEEKDAYS.indexOf(world.dials.start_weekday) + dayIndex - 1) % 7]!;
+}
+
+/** One placed trip: 1-based start day, length and the base day type of each covered day. */
+export type TripPlacement = { node: string; start: number; length: number; replaces: DayType[] };
+
+/**
+ * N3: where each trip of dials.trips goes, decided before any day exception.
+ * Candidate starts are the days whose weekday equals the weekday of the trip's
+ * first day_group_sequence date and from which the whole trip fits in the world
+ * without overlapping an earlier trip; one is drawn with rngFor(seed, "trip", node).
+ * It depends on the world alone, so a regenerated day keeps its trip.
+ */
+export function placeTrips(world: World): TripPlacement[] {
+  const plan = hobbyPlan(world);
+  const late = lateWeekdays(world);
+  const placed: TripPlacement[] = [];
+  for (const { node, length_days: length } of world.dials.trips) {
+    const weekday = weekdayOfDate(world.node_binding[node]!.day_group_sequence![0]!);
+    const candidates: number[] = [];
+    for (let s = 1; s + length - 1 <= world.dials.length_days; s++) {
+      if (weekdayAt(world, s) !== weekday) continue;
+      if (placed.some((p) => s <= p.start + p.length - 1 && p.start <= s + length - 1)) continue;
+      candidates.push(s);
+    }
+    if (candidates.length === 0) {
+      throw new TimelineError("WORLD_INVALID", `dials.trips: trip ${node} has no ${weekday} start where ${length} days fit`, {
+        issues: [{ path: "dials.trips", message: `no ${weekday} start for trip ${node}` }],
+      });
+    }
+    const start = candidates[rngFor(world.seed, "trip", node).int(0, candidates.length)]!;
+    const replaces = Array.from({ length }, (_, k) => baseDayType(weekdayAt(world, start + k), plan, late));
+    placed.push({ node, start, length, replaces });
+  }
+  return placed;
+}
+
+/** The trip covering the day, if any. */
+function tripOn(world: World, dayIndex: number): TripPlacement | undefined {
+  if (world.dials.trips.length === 0) return undefined;
+  return placeTrips(world).find((p) => dayIndex >= p.start && dayIndex < p.start + p.length);
+}
+
 function mealDraw(dist: MealDistribution): (rng: Rng) => MealPlace | "skip" {
   const items = Object.entries(dist).map(([place, weight]) => ({ value: place as MealPlace, weight }));
   return (rng) => (items.length === 0 ? "skip" : rng.pickWeighted(items));
@@ -149,7 +202,30 @@ export function decideDay(
   attempt: number,
 ): DayDecisions {
   const { seed, dials } = world;
-  const weekday = WEEKDAYS[(WEEKDAYS.indexOf(dials.start_weekday) + dayIndex - 1) % 7]!;
+  const weekday = weekdayAt(world, dayIndex);
+
+  // N3: a trip day takes the trip_day template and no other exception or routine decision.
+  const trip = tripOn(world, dayIndex);
+  if (trip !== undefined) {
+    const exception: Exception = {
+      scope: "multi_day",
+      type: "trip",
+      replaces: [...trip.replaces],
+      day_range: [trip.start, trip.start + trip.length - 1],
+      node: trip.node,
+    };
+    return {
+      day_index: dayIndex,
+      weekday,
+      day_type: "trip_day",
+      template: "trip_day",
+      meal_place: {},
+      optional: {},
+      trip: { node: trip.node, index: dayIndex - trip.start },
+      exceptions: [exception],
+    };
+  }
+
   const plan = hobbyPlan(world);
   const dayRng = (name: string) => rngFor(seed, "day", dayIndex, attempt, name);
 

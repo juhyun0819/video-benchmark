@@ -113,7 +113,11 @@ export function realizedOf(days: readonly RealizedDay[], world: World, templates
   const candidates = days.reduce((s, d) => s + d.slot_exception_candidates, 0);
 
   const dayException = (d: RealizedDay) => d.exceptions.find((e) => e.scope === "day");
-  const baseType = (d: RealizedDay) => dayException(d)?.replaces ?? d.day_type;
+  // A day exception replaces one day type; trip days (multi_day) are no base for day exceptions.
+  const baseType = (d: RealizedDay): string => {
+    const replaced = dayException(d)?.replaces;
+    return typeof replaced === "string" ? replaced : d.day_type;
+  };
   const dayExceptionBase = days.filter((d) => [DAY_EXCEPTION_FROM, "workday_late"].includes(baseType(d)));
 
   // Roles in template order; [kept, days whose template has the role as optional].

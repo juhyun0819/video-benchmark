@@ -137,7 +137,7 @@ function input(
   const world = makeWorld(o);
   return {
     world,
-    templates: TemplatesSchema.parse(readConfig("timeline/templates.v2.json")),
+    templates: TemplatesSchema.parse(readConfig("timeline/templates.v3.json")),
     gaps: GapTableSchema.parse(readConfig("timeline/gaps.v1.json")) as GapTable,
     exceptions: ExceptionCatalogSchema.parse(readConfig("timeline/exceptions.v1.json")),
     source: atus2025Source(pool ?? rows(weekend, weekday)),
@@ -169,7 +169,7 @@ describe("generateSchedule", () => {
     const schedule = generateSchedule(input());
     expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
     expect(schedule.generator_version).toBe("schedule.v2");
-    expect(schedule.template_version).toBe("templates.v2");
+    expect(schedule.template_version).toBe("templates.v3");
     expect(schedule.gap_table_version).toBe("gaps.v1");
     expect(schedule.exception_catalog_version).toBe("exceptions.v1");
     expect(schedule.days.map((d) => d.day_index)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
@@ -763,7 +763,10 @@ describe("late workdays (N1)", () => {
 
   it("dial 0 leaves an existing world's schedule bytes unchanged (golden hash recorded at HEAD)", () => {
     const schedule = generateSchedule(input());
-    expect(createHash("sha256").update(json(schedule)).digest("hex")).toBe(
+    // Recorded with templates.v2; the v3 rename (trip_day) changes only template_version.
+    expect(schedule.template_version).toBe("templates.v3");
+    const asV2 = { ...schedule, template_version: "templates.v2" };
+    expect(createHash("sha256").update(json(asV2)).digest("hex")).toBe(
       "19554b6f3ac0f28657559eb78e34953e257989a125e88dbd82d460601adc87ec",
     );
     expect(schedule.donors).not.toHaveProperty("weekday_late");

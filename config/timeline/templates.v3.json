@@ -1,5 +1,5 @@
 {
-  "version": "templates.v2",
+  "version": "templates.v3",
   "day_types": {
     "workday": [
       { "role": "home_morning", "category": "home", "node": "home", "activity": "getting ready", "tags": [], "required": true, "anchor": "wake", "min_minutes": 10 },
@@ -27,6 +27,15 @@
       { "role": "home_afternoon", "category": "home", "node": "home", "activity": "resting at home", "tags": [], "required": false, "min_minutes": 10 },
       { "role": "dinner", "category": "meal", "node": "$meal", "meal": "dinner", "activity": "eating dinner", "tags": [], "required": false, "anchor": "dinner", "duration_minutes": 60, "min_minutes": 10 },
       { "role": "home_evening", "category": "home", "node": "home", "activity": "relaxing at home", "tags": [], "required": false, "min_minutes": 10 }
+    ],
+    "trip_day": [
+      { "role": "lodging_morning", "category": "home", "node": "$trip:lodging", "activity": "getting ready", "tags": [], "required": true, "anchor": "wake", "min_minutes": 10 },
+      { "role": "breakfast", "category": "meal", "node": "$trip:meal", "meal": "breakfast", "activity": "eating breakfast", "tags": [], "required": false, "anchor": "breakfast", "duration_minutes": 20, "min_minutes": 10 },
+      { "role": "outing", "category": "hobby", "node": "$trip:outing", "activity": "sightseeing", "tags": [], "required": true, "anchor": "sport", "duration_minutes": 120, "min_minutes": 10 },
+      { "role": "lunch", "category": "meal", "node": "$trip:meal", "meal": "lunch", "activity": "eating lunch", "tags": [], "required": false, "anchor": "lunch", "duration_minutes": 45, "min_minutes": 10 },
+      { "role": "outing_pm", "category": "hobby", "node": "$trip:outing", "activity": "sightseeing", "tags": [], "required": false, "min_minutes": 10 },
+      { "role": "dinner", "category": "meal", "node": "$trip:meal", "meal": "dinner", "activity": "eating dinner", "tags": [], "required": false, "anchor": "dinner", "duration_minutes": 60, "min_minutes": 10 },
+      { "role": "lodging_evening", "category": "home", "node": "$trip:lodging", "activity": "relaxing at the lodging", "tags": [], "required": false, "min_minutes": 10 }
     ]
   },
   "reduce_order": {

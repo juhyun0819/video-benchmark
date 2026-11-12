@@ -1,15 +1,22 @@
 import { z } from "zod";
 import { TimelineError } from "./errors.js";
 import type { Rng } from "./rng.js";
-import type { NodeDef } from "./world.js";
+import type { NodeDef, TripPlace } from "./world.js";
 
 export type PlaceKind = "home" | "workplace" | "hobby" | "frequent_place";
 export type Transition = `${PlaceKind}->${PlaceKind}`;
 
-/** Place kind of a world node; a kitchen counts as home. */
-export function placeKindOf(kind: NodeDef["kind"]): PlaceKind {
+/** Place kind of a world node; a kitchen counts as home. A trip node is used only through its places. */
+export function placeKindOf(kind: Exclude<NodeDef["kind"], "trip">): PlaceKind {
   return kind === "kitchen" ? "home" : kind;
 }
+
+/** N2: the gap-table place kind of a trip place. */
+export const TRIP_PLACE_KIND: Record<TripPlace, PlaceKind> = {
+  lodging: "home",
+  outing: "hobby",
+  meal: "frequent_place",
+};
 
 const GapQuantilesSchema = z
   .object({

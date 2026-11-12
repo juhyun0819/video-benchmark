@@ -8,6 +8,7 @@ import { remapAnnotations } from "./remap.js";
 import { realizedOf } from "./schedule/realized.js";
 import {
   ScheduleSchema,
+  DayTripSchema,
   DayTypeSchema,
   ExceptionSchema,
   RealizedSchema,
@@ -84,10 +85,13 @@ export const ManifestDaySchema = z.object({
   day_index: z.number().int().min(1),
   weekday: WeekdaySchema,
   day_type: DayTypeSchema,
+  /** Trip days only (N3): the trip node and the day's index into its day_group_sequence. */
+  trip: DayTripSchema.optional(),
   attempt: z.number().int().min(0),
   wake: z.string(),
   sleep: z.string(),
   coverage_ratio: z.number(),
+  /** Includes a trip's multi_day record, repeated on each of its days (N3). */
   exceptions: z.array(ExceptionSchema),
   /** As in schedule.json (E1); with `slots` they let realized be recounted from the manifest (G24). */
   slot_exception_eligible: z.boolean(),
@@ -288,6 +292,7 @@ export function buildTimelineManifest(t: Timeline, catalog: ClipCatalog, now: Da
       day_index: day.day_index,
       weekday: day.weekday,
       day_type: day.day_type,
+      ...(day.trip !== undefined ? { trip: day.trip } : {}),
       attempt: day.attempt,
       wake: day.wake,
       sleep: day.sleep,

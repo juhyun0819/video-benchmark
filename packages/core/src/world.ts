@@ -21,14 +21,60 @@ export const NodeDefSchema = z.discriminatedUnion("kind", [
     tags: z.array(z.string()).default([]),
   }),
   z.object({ kind: z.literal("frequent_place"), setting: SettingSchema, optional: z.literal(true) }),
+  /** N2: one trip destination, used through its virtual places `<trip>:lodging|outing|meal`. */
+  z.object({
+    kind: z.literal("trip"),
+    lodging_setting: SettingSchema,
+    outing_setting: SettingSchema,
+    meal_setting: SettingSchema,
+  }),
 ]);
 export type NodeDef = z.infer<typeof NodeDefSchema>;
+export type TripNodeDef = Extract<NodeDef, { kind: "trip" }>;
+
+/** The virtual places of a trip node (N2). */
+export const TRIP_PLACES = ["lodging", "outing", "meal"] as const;
+export type TripPlace = (typeof TRIP_PLACES)[number];
+
+/** Fixed node label of a trip place on catalog clips (N2): `trip:lodging`, `trip:outing`, `trip:meal`. */
+export const tripClipNode = (place: TripPlace): string => `trip:${place}`;
+
+/** `<trip>:<place>` resolved against the world's trip nodes; undefined for any other name. */
+export function tripPlaceOf(
+  world: Pick<World, "nodes">,
+  name: string,
+): { trip: string; place: TripPlace; def: TripNodeDef } | undefined {
+  const at = name.lastIndexOf(":");
+  if (at < 0) return undefined;
+  const trip = name.slice(0, at);
+  const place = name.slice(at + 1) as TripPlace;
+  const def = world.nodes[trip];
+  if (def?.kind !== "trip" || !TRIP_PLACES.includes(place)) return undefined;
+  return { trip, place, def };
+}
+
+/** Weekday of a YYYY-MM-DD date by pure date arithmetic (no time zone). */
+export function weekdayOfDate(date: string): Weekday {
+  const [y, m, d] = date.split("-").map(Number);
+  return WeekdaySchema.options[(new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay() + 6) % 7]!;
+}
+
+const IsoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "expected a YYYY-MM-DD date")
+  .refine((s) => {
+    const [y, m, d] = s.split("-").map(Number);
+    const t = new Date(Date.UTC(y!, m! - 1, d!));
+    return t.getUTCFullYear() === y && t.getUTCMonth() === m! - 1 && t.getUTCDate() === d;
+  }, "not a calendar date");
 
 export const NodeBindingSchema = z.object({
   dataset: z.array(DatasetSchema).optional(),
   person_source: z.string().optional(),
   node: z.string().optional(),
   tags_any: z.array(z.string()).optional(),
+  /** Trip bindings only (N2): the source day_group used on each day of the trip, in order. */
+  day_group_sequence: z.array(IsoDateSchema).min(1).optional(),
 });
 export type NodeBinding = z.infer<typeof NodeBindingSchema>;
 
@@ -72,6 +118,8 @@ export const WorldSchema = z
       start_weekday: WeekdaySchema.default("Mon"),
       /** Workdays per week that start late (workday_late); the weekdays are fixed per person. */
       late_workdays_per_week: z.number().int().min(0).max(5).default(0),
+      /** Multi-day trip exceptions (N3); each length equals its binding's day_group_sequence length. */
+      trips: z.array(z.object({ node: z.string(), length_days: z.number().int().min(1) })).default([]),
     }),
     seed: z.number().int().min(0),
   })
@@ -120,6 +168,46 @@ export const WorldSchema = z
         ctx.addIssue({ code: "custom", path: ["node_binding", name], message: `node "${name}" has no binding` });
       }
     }
+    for (const [name, b] of Object.entries(w.node_binding)) {
+      const trip = w.nodes[name]?.kind === "trip";
+      if (b.day_group_sequence !== undefined && !trip) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["node_binding", name, "day_group_sequence"],
+          message: `only trip nodes take a day_group_sequence`,
+        });
+      }
+      if (trip && b.node !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["node_binding", name, "node"],
+          message: `trip bindings take no node: trip clips carry the labels trip:lodging, trip:outing and trip:meal`,
+        });
+      }
+    }
+    const seen = new Set<string>();
+    w.dials.trips.forEach((t, i) => {
+      const path = ["dials", "trips", i];
+      if (w.nodes[t.node]?.kind !== "trip") {
+        ctx.addIssue({ code: "custom", path: [...path, "node"], message: `"${t.node}" is not a trip node` });
+        return;
+      }
+      if (seen.has(t.node)) {
+        ctx.addIssue({ code: "custom", path: [...path, "node"], message: `trip "${t.node}" is listed twice` });
+      }
+      seen.add(t.node);
+      const sequence = w.node_binding[t.node]?.day_group_sequence;
+      if (sequence === undefined || sequence.length !== t.length_days) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...path, "length_days"],
+          message: `length_days ${t.length_days} must equal the length of node_binding.${t.node}.day_group_sequence (${sequence?.length ?? "missing"})`,
+        });
+      }
+      if (t.length_days > w.dials.length_days) {
+        ctx.addIssue({ code: "custom", path: [...path, "length_days"], message: `trip is longer than the world` });
+      }
+    });
   });
 export type World = z.infer<typeof WorldSchema>;
 

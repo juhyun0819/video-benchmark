@@ -14,7 +14,7 @@ import {
 } from "../src/index.js";
 
 function templates(): Templates {
-  const url = new URL("../../../config/timeline/templates.v2.json", import.meta.url);
+  const url = new URL("../../../config/timeline/templates.v3.json", import.meta.url);
   return TemplatesSchema.parse(JSON.parse(readFileSync(url, "utf8")));
 }
 
@@ -234,8 +234,8 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     expect((err as TimelineError).details).toMatchObject({ day: 1, role: "dinner" });
   });
 
-  it("templates.v2 rejects a reduce_order step for a role missing from the day type", () => {
-    const raw = JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v2.json", import.meta.url), "utf8"));
+  it("templates.v3 rejects a reduce_order step for a role missing from the day type", () => {
+    const raw = JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v3.json", import.meta.url), "utf8"));
     raw.reduce_order.workday.push({ role: "nap", action: "drop" });
     expect(TemplatesSchema.safeParse(raw).success).toBe(false);
   });

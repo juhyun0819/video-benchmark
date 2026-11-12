@@ -1,8 +1,10 @@
 import type { Clip, ClipCatalog } from "./clip.js";
 import { parseClock } from "./clock.js";
-import { hardFilterFailures, slotWindow, type HardFilter } from "./match/filters.js";
+import { bindingAccepts, hardFilterFailures, slotWindow, tripDayGroup, type HardFilter } from "./match/filters.js";
 import { layoutTimeline } from "./layout.js";
+import type { Exception, ScheduleDay } from "./schedule/types.js";
 import { unassignClip, type Timeline } from "./timeline.js";
+import { tripClipNode, tripPlaceOf } from "./world.js";
 
 export const RULE_IDS = [
   "day_type",
@@ -15,6 +17,7 @@ export const RULE_IDS = [
   "day_group_single_day",
   "time_of_day",
   "exceptions",
+  "trip",
 ] as const;
 export type RuleId = (typeof RULE_IDS)[number];
 
@@ -34,6 +37,7 @@ const REQUIRED_ROLES: Record<string, string[]> = {
   hobby_day: ["hobby"],
   home_day: ["chores"],
   leave_day: ["chores"],
+  trip_day: ["lodging_morning", "outing"],
 };
 
 /** Hard-filter failures that map onto a rule; `tags` has no rule of its own. */
@@ -43,6 +47,7 @@ const FILTER_RULE: Partial<Record<HardFilter, RuleId>> = {
   day_group_other_day: "day_group_single_day",
   time_of_day: "time_of_day",
   does_not_fit: "slot_window",
+  // trip_sequence is reported by the trip rule itself, with the expected date.
 };
 
 /** Rule-based checks of a filled timeline (§7.1, §7.3). Never throws on missing clips. */
@@ -57,7 +62,16 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
     }
   }
   const missing_clips = [...missing].sort();
-  const needClips: RuleId[] = ["slot_window", "no_overlap", "monotonic", "node_binding", "clip_unique", "day_group_single_day", "time_of_day"];
+  const needClips: RuleId[] = [
+    "slot_window",
+    "no_overlap",
+    "monotonic",
+    "node_binding",
+    "clip_unique",
+    "day_group_single_day",
+    "time_of_day",
+    "trip",
+  ];
   if (missing_clips.length > 0) {
     for (const rule of needClips) add(rule, { detail: `clips missing from the catalog: ${missing_clips.join(", ")}` });
   }
@@ -67,6 +81,9 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
     const roles = new Set(day.slots.map((s) => s.role));
     for (const role of REQUIRED_ROLES[day.day_type] ?? []) {
       if (!roles.has(role)) add("day_type", { day_index: d, detail: `${day.day_type} has no ${role} slot` });
+    }
+    if ((day.day_type === "trip_day") !== (day.trip !== undefined)) {
+      add("day_type", { day_index: d, detail: `${day.day_type} ${day.trip === undefined ? "has no" : "must not have a"} trip` });
     }
     if (day.day_type !== "workday" && day.day_type !== "workday_late") {
       for (const s of day.slots) {
@@ -87,6 +104,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
     }
 
     checkExceptions(t, day, add);
+    if (missing_clips.length === 0) checkTrip(t, catalog, day, add);
   }
 
   if (missing_clips.length === 0) {
@@ -145,13 +163,64 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog): VerifierRepor
   return { pass: RULE_IDS.every((r) => rules[r].pass), rules, flags, seams, missing_clips };
 }
 
-function checkExceptions(
-  t: Timeline,
-  day: Timeline["schedule"]["days"][number],
-  add: (rule: RuleId, v: Violation) => void,
-): void {
+type Add = (rule: RuleId, v: Violation) => void;
+
+const sameException = (a: Exception, b: Exception): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * N5: on a trip day every slot is a place of the day's trip, and every clip carries
+ * that place's trip label, comes from the sequence date at the day's index and is
+ * no home or workplace clip.
+ */
+function checkTrip(t: Timeline, catalog: ClipCatalog, day: ScheduleDay, add: Add): void {
+  if (day.trip === undefined) return;
+  const d = day.day_index;
+  const { node: trip, index } = day.trip;
+  const want = tripDayGroup(t.world, day.trip);
+  const fixed = Object.entries(t.world.nodes)
+    .filter(([, def]) => def.kind === "home" || def.kind === "kitchen" || def.kind === "workplace")
+    .map(([name, def]) => [name, def.kind === "workplace" ? "workplace" : "home"] as const);
+  for (const slot of day.slots) {
+    const v = (detail: string) => add("trip", { day_index: d, slot_id: slot.slot_id, detail });
+    const place = tripPlaceOf(t.world, slot.spec.node);
+    if (place?.trip !== trip) {
+      const kind = fixed.find(([name]) => name === slot.spec.node)?.[1];
+      v(`slot ${slot.role} uses ${kind !== undefined ? `${kind} ` : ""}node ${slot.spec.node}, not a place of trip ${trip}`);
+    }
+    for (const id of t.slots[slot.slot_id]?.clip_ids ?? []) {
+      const clip = catalog.getClip(id) as Clip;
+      const kinds = [...new Set(fixed.filter(([name]) => bindingAccepts(t.world, name, clip)).map(([, kind]) => kind))];
+      if (kinds.length > 0) v(`clip ${id} is a ${kinds.join(" and ")} clip on a trip day`);
+      else if (place !== undefined && clip.node !== tripClipNode(place.place)) {
+        v(`clip ${id} has node ${clip.node}, expected ${tripClipNode(place.place)}`);
+      }
+      if (clip.day_group !== want) {
+        v(`clip ${id} comes from ${clip.day_group}; trip day ${index + 1} of ${trip} uses ${want ?? "(no sequence date)"}`);
+      }
+    }
+  }
+}
+
+function checkExceptions(t: Timeline, day: ScheduleDay, add: Add): void {
   const d = day.day_index;
   if (day.exceptions.length > 1) add("exceptions", { day_index: d, detail: `day has ${day.exceptions.length} exceptions` });
+  const multi = day.exceptions.filter((e) => e.scope === "multi_day");
+  if (day.trip !== undefined && multi.length === 0) add("exceptions", { day_index: d, detail: `trip day has no multi_day record` });
+  for (const ex of multi) {
+    const [s, e] = ex.day_range;
+    const bad = (detail: string) => add("exceptions", { day_index: d, detail: `multi_day ${ex.type}: ${detail}` });
+    if (ex.type !== "trip" || day.trip === undefined || ex.node !== day.trip.node) {
+      bad(`record node ${ex.node ?? "(none)"} does not match the day's trip ${day.trip?.node ?? "(none)"}`);
+      continue;
+    }
+    if (d < s || d > e || d - s !== day.trip.index) bad(`day_range ${s}-${e} does not put day ${d} at trip index ${day.trip.index}`);
+    if (!Array.isArray(ex.replaces) || ex.replaces.length !== e - s + 1) bad(`replaces must list one day type per day of ${s}-${e}`);
+    for (let k = s; k <= e; k++) {
+      if (k === d) continue;
+      const other = t.schedule.days.find((x) => x.day_index === k);
+      if (!other?.exceptions.some((x) => sameException(x, ex))) bad(`day ${k} does not carry the same record`);
+    }
+  }
   for (const ex of day.exceptions) {
     if (ex.scope === "day" && (ex.day_range[0] !== d || ex.day_range[1] !== d)) {
       add("exceptions", { day_index: d, detail: `day exception ${ex.type} has day_range ${ex.day_range.join("-")}` });

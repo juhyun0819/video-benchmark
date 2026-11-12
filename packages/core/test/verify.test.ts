@@ -311,7 +311,7 @@ describe("verifyTimeline on a generated schedule", () => {
     const world = WorldSchema.parse({ ...fixture, dials: { ...fixture.dials, exception_rate: { slot: 0.5, day: 0.1 } } });
     const schedule = generateSchedule({
       world,
-      templates: TemplatesSchema.parse(readConfig("timeline/templates.v2.json")),
+      templates: TemplatesSchema.parse(readConfig("timeline/templates.v3.json")),
       gaps: GapTableSchema.parse(readConfig("timeline/gaps.v1.json")) as GapTable,
       exceptions: ExceptionCatalogSchema.parse(readConfig("timeline/exceptions.v1.json")),
       source: atus2025Source(donorPool()),

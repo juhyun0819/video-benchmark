@@ -36,7 +36,7 @@ function parseFile<T>(path: string, parse: (raw: unknown) => T): T {
 /** Generator inputs other than the world: timeline configs, schedule defaults and the ATUS donor pool. */
 export function loadConfig(configDir: string, dataDir: string): GeneratorConfig {
   const timeline = join(configDir, "timeline");
-  const templates = parseFile(join(timeline, "templates.v2.json"), (r) => TemplatesSchema.parse(r));
+  const templates = parseFile(join(timeline, "templates.v3.json"), (r) => TemplatesSchema.parse(r));
   // GapTableSchema's inferred type is wider than GapTable (known mismatch).
   const gaps = parseFile(join(timeline, "gaps.v1.json"), (r) => GapTableSchema.parse(r) as GapTable);
   const exceptions = parseFile(join(timeline, "exceptions.v1.json"), (r) => ExceptionCatalogSchema.parse(r));

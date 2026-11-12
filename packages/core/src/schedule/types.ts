@@ -1,25 +1,30 @@
 import { z } from "zod";
 import { ClipCategorySchema, ClipSpecSchema } from "../clip.js";
 import type { DonorPick } from "../donor.js";
-import { MealPlaceSchema, WeekdaySchema, type MealPlace, type Weekday } from "../world.js";
+import { MealPlaceSchema, TRIP_PLACES, WeekdaySchema, type MealPlace, type Weekday } from "../world.js";
 
 export const MealSchema = z.enum(["breakfast", "lunch", "dinner"]);
 export type Meal = z.infer<typeof MealSchema>;
 
-export const DayTypeSchema = z.enum(["workday", "workday_late", "hobby_day", "home_day", "leave_day"]);
+export const DayTypeSchema = z.enum(["workday", "workday_late", "hobby_day", "home_day", "leave_day", "trip_day"]);
 export type DayType = z.infer<typeof DayTypeSchema>;
 
 /** Day types that have their own template; leave_day uses home_day and workday_late uses workday. */
-export const TemplateNameSchema = z.enum(["workday", "hobby_day", "home_day"]);
+export const TemplateNameSchema = z.enum(["workday", "hobby_day", "home_day", "trip_day"]);
 export type TemplateName = z.infer<typeof TemplateNameSchema>;
 
 export const ExceptionSchema = z.object({
   scope: z.enum(["slot", "day", "multi_day"]),
   type: z.string(),
-  /** Slot role for slot exceptions, replaced day type for day exceptions. */
-  replaces: z.string(),
+  /**
+   * Slot role for slot exceptions, replaced day type for day exceptions; for a
+   * multi_day trip, the base day type of each covered day in order (N3).
+   */
+  replaces: z.union([z.string(), z.array(DayTypeSchema)]),
   /** 1-based inclusive day indexes. */
   day_range: z.tuple([z.number().int().min(1), z.number().int().min(1)]),
+  /** Trip node of a multi_day trip (N3). */
+  node: z.string().optional(),
   /** Where the replaced meal happens; set for slot exceptions (R39). */
   meal_place: MealPlaceSchema.optional(),
   /** Slot exceptions: the day's routine place for the replaced meal before the exception (equal to meal_place for a no-op). */
@@ -51,6 +56,10 @@ export const ExceptionCatalogSchema = z.object({
 });
 export type ExceptionCatalog = z.infer<typeof ExceptionCatalogSchema>;
 
+/** A trip day's trip node and 0-based position in the trip (N3); `index` picks the day_group_sequence entry. */
+export const DayTripSchema = z.object({ node: z.string(), index: z.number().int().min(0) });
+export type DayTrip = z.infer<typeof DayTripSchema>;
+
 export type DayDecisions = {
   day_index: number;
   weekday: Weekday;
@@ -60,6 +69,8 @@ export type DayDecisions = {
   /** Template optional keys ("hobby", "home_evening"); workdays only. */
   optional: Record<string, boolean>;
   hobby_node?: string;
+  /** Trip days only (N3). */
+  trip?: DayTrip;
   exceptions: Exception[];
 };
 
@@ -96,7 +107,7 @@ export const TemplateSlotSchema = z
   .object({
     role: z.string(),
     category: ClipCategorySchema,
-    /** World node name, or "$meal" / "$hobby" resolved per day. */
+    /** World node name, or "$meal" / "$hobby" / "$trip:<place>" resolved per day. */
     node: z.string(),
     activity: z.string(),
     tags: z.array(z.string()).default([]),
@@ -108,7 +119,11 @@ export const TemplateSlotSchema = z
     meal: MealSchema.optional(),
     optional_key: z.string().optional(),
   })
-  .refine((s) => s.node !== "$meal" || s.meal !== undefined, { message: "$meal slots need `meal`", path: ["meal"] });
+  .refine((s) => s.node !== "$meal" || s.meal !== undefined, { message: "$meal slots need `meal`", path: ["meal"] })
+  .refine((s) => !s.node.startsWith("$trip:") || (TRIP_PLACES as readonly string[]).includes(s.node.slice("$trip:".length)), {
+    message: "$trip slots name one of $trip:lodging, $trip:outing, $trip:meal",
+    path: ["node"],
+  });
 export type TemplateSlot = z.infer<typeof TemplateSlotSchema>;
 
 /** One step of a day type's reduce order (E4): shrink sets the slot to its min_minutes, drop removes it. */
@@ -122,6 +137,7 @@ export const TemplatesSchema = z
       workday: z.array(TemplateSlotSchema).min(1),
       hobby_day: z.array(TemplateSlotSchema).min(1),
       home_day: z.array(TemplateSlotSchema).min(1),
+      trip_day: z.array(TemplateSlotSchema).min(1),
     }),
     /** Per day type; a day type without one keeps R24's drop rule. */
     reduce_order: z.record(TemplateNameSchema, z.array(ReduceStepSchema)).optional(),
@@ -170,6 +186,8 @@ export const ScheduleDaySchema = z.object({
   day_index: z.number().int().min(1),
   weekday: WeekdaySchema,
   day_type: DayTypeSchema,
+  /** Trip days only (N3). */
+  trip: DayTripSchema.optional(),
   attempt: z.number().int().min(0),
   wake: ClockSchema,
   sleep: ClockSchema,

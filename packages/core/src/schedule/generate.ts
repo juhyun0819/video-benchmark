@@ -80,6 +80,7 @@ const CHECKED: Record<TemplateName, ReadonlySet<JitterItem>> = {
   workday: new Set(["wake", "sleep", "work_start", "work_end", "lunch", "dinner"]),
   hobby_day: new Set(["wake", "sleep", "breakfast", "lunch", "dinner", "sport"]),
   home_day: new Set(["wake", "sleep", "breakfast", "lunch", "dinner"]),
+  trip_day: new Set(["wake", "sleep", "breakfast", "lunch", "dinner", "sport"]),
 };
 
 function anchorsOf(p: DayProfile): DayAnchors {
@@ -324,6 +325,7 @@ function placeSlotException(
 
 function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
   const d = decisions.day_index;
+  // Trip days use the weekend donor like every non-workday template (N3).
   const profile =
     decisions.day_type === "workday_late" && donors.weekday_late !== undefined
       ? donors.weekday_late.profile
@@ -337,6 +339,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
     day_index: d,
     weekday: decisions.weekday,
     day_type: decisions.day_type,
+    ...(decisions.trip !== undefined ? { trip: decisions.trip } : {}),
     attempt,
     wake: formatClock(anchors.wake),
     sleep: formatClock(anchors.sleep),

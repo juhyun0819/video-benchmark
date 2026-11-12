@@ -3,7 +3,7 @@ import { bucketOverlaps, parseClock } from "../clock.js";
 import { TimelineError } from "../errors.js";
 import type { ScheduleDay, Slot } from "../schedule/types.js";
 import type { Relaxation, Timeline } from "../timeline.js";
-import type { World } from "../world.js";
+import { tripClipNode, tripPlaceOf, type World } from "../world.js";
 
 export type HardFilter =
   | "category_setting_node"
@@ -11,7 +11,8 @@ export type HardFilter =
   | "already_used"
   | "day_group_other_day"
   | "does_not_fit"
-  | "tags";
+  | "tags"
+  | "trip_sequence";
 
 export type LocatedSlot = { day: ScheduleDay; slot: Slot };
 
@@ -26,15 +27,22 @@ export function findSlot(t: Timeline, slotId: string): LocatedSlot {
 export const slotWindow = (slot: Slot): [number, number] => [parseClock(slot.window[0]), parseClock(slot.window[1])];
 export const clipSeconds = (c: Clip): number => c.source_end_s - c.source_start_s;
 
-/** True when every binding field present for the node matches; `kitchen` uses its default node's binding. */
+/**
+ * True when every binding field present for the node matches; `kitchen` uses its default node's binding.
+ * A trip place `<trip>:<place>` uses its trip's binding and takes only clips labeled `trip:<place>`
+ * whose day_group is in the trip's day_group_sequence (N2).
+ */
 export function bindingAccepts(world: World, nodeName: string, clip: Clip): boolean {
+  const trip = tripPlaceOf(world, nodeName);
   const def = world.nodes[nodeName];
-  const name = def?.kind === "kitchen" ? def.default : nodeName;
+  const name = trip !== undefined ? trip.trip : def?.kind === "kitchen" ? def.default : nodeName;
   const b = world.node_binding[name];
   if (!b) return false;
   if (b.dataset && !b.dataset.includes(clip.source.dataset)) return false;
   if (b.person_source !== undefined && b.person_source !== clip.person_source) return false;
+  if (trip !== undefined && clip.node !== tripClipNode(trip.place)) return false;
   if (b.node !== undefined && b.node !== clip.node) return false;
+  if (b.day_group_sequence && !b.day_group_sequence.includes(clip.day_group)) return false;
   if (b.tags_any && !b.tags_any.some((tag) => clip.tags.includes(tag))) return false;
   return true;
 }
@@ -89,7 +97,13 @@ export function failuresWith(world: World, at: LocatedSlot, clip: Clip, relax: r
   if (!relax.includes("ignore_tags") && slot.spec.tags.length > 0 && !slot.spec.tags.some((tag) => clip.tags.includes(tag))) {
     failed.push("tags");
   }
+  if (day.trip !== undefined && clip.day_group !== tripDayGroup(world, day.trip)) failed.push("trip_sequence");
   return failed;
+}
+
+/** N5: the source day_group a trip day must use, from its binding's day_group_sequence; never relaxed. */
+export function tripDayGroup(world: World, trip: NonNullable<ScheduleDay["trip"]>): string | undefined {
+  return world.node_binding[trip.node]?.day_group_sequence?.[trip.index];
 }
 
 export function hardFilterFailures(

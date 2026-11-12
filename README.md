@@ -167,13 +167,15 @@ world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/wo
 
 | 파일 | 내용 |
 |---|---|
-| `templates.v2.json` | 요일 유형별 하루 템플릿과 줄이는 순서(`reduce_order`) |
+| `templates.v3.json` | 요일 유형별 하루 템플릿과 줄이는 순서(`reduce_order`) |
 | `exceptions.v1.json` | 날 단위·슬롯 단위 예외 |
 | `gaps.v1.json` | 전환 사이 공백 시간 표. `reviewed: false`이므로 통근 외 전환은 사람이 검토해야 한다(스펙 13절 열린 항목 1) |
 
-### templates.v2
+### templates.v3
 
-`templates.v2.json`은 `day_types`(workday, hobby_day, home_day)와 `reduce_order`를 가진다. leave_day는 home_day 템플릿을 쓴다.
+`templates.v3.json`은 `day_types`(workday, hobby_day, home_day, trip_day)와 `reduce_order`를 가진다. leave_day는 home_day 템플릿을, workday_late는 workday 템플릿을 쓴다. v2와 다른 점은 여행일 템플릿 `trip_day`뿐이다. 여행이 없는 world의 schedule은 `template_version` 값만 달라진다.
+
+- 여행(`dials.trips`, `multi_day` 예외)이 있는 날은 `trip_day`다. 슬롯 노드는 `$trip:lodging`, `$trip:outing`, `$trip:meal`이고, 그날 여행 노드의 가상 장소(`trip_1:lodging` 등)로 풀린다. 클립 쪽 노드 라벨은 `trip:lodging`, `trip:outing`, `trip:meal`로 고정이다. 여행 k일째에는 바인딩의 `day_group_sequence` k번째 날짜의 클립만 쓴다. 자세한 규칙은 `docs/superpowers/specs/2026-11-12-nextme-28day-design.md` 3절에 있다.
 
 - 평일 저녁 식사(`dinner`)는 필수 슬롯이다. 필수 슬롯은 줄이거나 빼지 않는다.
 - 평일에 시간이 모자라면 `reduce_order.workday` 순서로 줄인다: 취미 길이 줄이기(90분 → 최소 30분), 취미 빼기, `home_evening` 빼기. `home_evening`은 취침까지 채우는 슬롯이고 최소 길이가 30분(ATUS의 30분 이상 정의)이라 "길이 줄이기"는 저절로 일어난다.

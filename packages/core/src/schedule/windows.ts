@@ -1,8 +1,8 @@
 import type { ClipSpec, Setting } from "../clip.js";
 import { formatClock, timeOfDayAt } from "../clock.js";
 import { TimelineError } from "../errors.js";
-import { placeKindOf, type PlaceKind } from "../gaps.js";
-import type { NodeDef, World } from "../world.js";
+import { TRIP_PLACE_KIND, placeKindOf, type PlaceKind } from "../gaps.js";
+import { tripPlaceOf, type NodeDef, type World } from "../world.js";
 import type {
   AnchorName,
   DayAnchors,
@@ -17,24 +17,42 @@ import type {
 /** Transition gap in minutes between two place kinds; `index` is the kept-slot index of the later slot. */
 export type GapFn = (from: PlaceKind, to: PlaceKind, index: number) => number;
 
-type Kept = { slot: TemplateSlot; node: string; def: NodeDef };
+/** What a slot needs from its node: setting, gap place kind and, for a hobby node, its definition. */
+type Place = { setting: Setting; kind: PlaceKind; hobby?: Extract<NodeDef, { kind: "hobby" }> };
+type Kept = { slot: TemplateSlot; node: string; place: Place };
 
-function settingOf(def: NodeDef): Setting {
-  switch (def.kind) {
+/** A world node or a trip's virtual place (N2); undefined for an unknown name or a bare trip node. */
+function placeOf(world: World, node: string): Place | undefined {
+  const trip = tripPlaceOf(world, node);
+  if (trip !== undefined) {
+    return { setting: trip.def[`${trip.place}_setting`], kind: TRIP_PLACE_KIND[trip.place] };
+  }
+  const def = world.nodes[node];
+  switch (def?.kind) {
+    case undefined:
+    case "trip":
+      return undefined;
     case "home":
     case "kitchen":
-      return "home_indoor";
+      return { setting: "home_indoor", kind: placeKindOf(def.kind) };
     case "workplace":
-      return "venue_indoor";
+      return { setting: "venue_indoor", kind: placeKindOf(def.kind) };
     case "hobby":
+      return { setting: def.setting, kind: placeKindOf(def.kind), hobby: def };
     case "frequent_place":
-      return def.setting;
+      return { setting: def.setting, kind: placeKindOf(def.kind) };
   }
 }
+
+const TRIP_NODE_PREFIX = "$trip:";
 
 /** World node a template slot points at today; null for a skipped meal, undefined when it resolves to nothing. */
 function resolveNode(slot: TemplateSlot, decisions: DayDecisions, world: World): string | null | undefined {
   if (slot.node === "$hobby") return decisions.hobby_node;
+  if (slot.node.startsWith(TRIP_NODE_PREFIX)) {
+    const trip = decisions.trip;
+    return trip === undefined ? undefined : `${trip.node}:${slot.node.slice(TRIP_NODE_PREFIX.length)}`;
+  }
   if (slot.node !== "$meal") return slot.node;
   const place = slot.meal === undefined ? undefined : decisions.meal_place[slot.meal];
   if (place === "skip") return null;
@@ -58,7 +76,7 @@ function layout(kept: Kept[], anchors: DayAnchors, gap: GapFn): Layout | Failure
   const gaps: number[] = kept.map((k, i) => {
     if (i === 0) return 0;
     const prev = kept[i - 1]!;
-    return prev.node === k.node ? 0 : gap(placeKindOf(prev.def.kind), placeKindOf(k.def.kind), i);
+    return prev.node === k.node ? 0 : gap(prev.place.kind, k.place.kind, i);
   });
 
   const start: number[] = [];
@@ -197,15 +215,15 @@ export function resolveDayWindows(
     if (slot.optional_key !== undefined && decisions.optional[slot.optional_key] === false) continue;
     const node = resolveNode(slot, decisions, world);
     if (node === null) continue;
-    const def = node === undefined ? undefined : world.nodes[node];
-    if (node === undefined || def === undefined) {
+    const place = node === undefined ? undefined : placeOf(world, node);
+    if (node === undefined || place === undefined) {
       if (slot.required) throw infeasible(slot.role, `node ${slot.node} resolves to nothing`);
       continue;
     }
     for (const name of [slot.anchor, slot.end_anchor]) {
       if (name !== undefined && anchors[name] === undefined) throw infeasible(slot.role, `anchor ${name} is missing`);
     }
-    kept.push({ slot, node, def });
+    kept.push({ slot, node, place });
   }
   if (kept.length === 0) throw infeasible("-", "no slots");
 
@@ -223,11 +241,11 @@ export function resolveDayWindows(
   }
   const { start, end, gaps } = result;
 
-  const slots: Slot[] = kept.map(({ slot, node, def }, i) => {
-    const hobby = def.kind === "hobby" ? def : undefined;
+  const slots: Slot[] = kept.map(({ slot, node, place }, i) => {
+    const hobby = place.hobby;
     const spec: ClipSpec = {
       category: slot.category,
-      setting: settingOf(def),
+      setting: place.setting,
       node,
       activity: hobby ? hobby.activity : slot.activity,
       time_of_day: timeOfDayAt(start[i]!),
