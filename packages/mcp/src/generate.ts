@@ -51,7 +51,7 @@ function generate(worldPath: string, { dataDir, configDir }: Dirs, now: Date): G
     const violations = Object.fromEntries(failed_rules.map((r) => [r, report.rules[r].violations]));
     throw new TimelineError("VERIFY_FAILED", `timeline fails rules: ${failed_rules.join(", ")}`, { failed_rules, violations });
   }
-  const manifest = buildTimelineManifest(filled, catalog, now);
+  const manifest = buildTimelineManifest(filled, catalog, now, config.templates);
 
   if (existing === undefined) writeFileAtomic(worldFile, worldText);
   const store = new TimelineStore(dataDir);

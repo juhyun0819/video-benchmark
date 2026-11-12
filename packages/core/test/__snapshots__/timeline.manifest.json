@@ -196,6 +196,55 @@
       "weekend_redraws": 0
     }
   },
+  "realized": {
+    "slot_exception_rate": null,
+    "slot_exception_share": null,
+    "slot_exception_noop_share": null,
+    "slot_exception_eligible_days": 0,
+    "day_exception_rate": 0,
+    "optional_presence": {
+      "lunch": 1,
+      "hobby": 0,
+      "home_evening": 0
+    },
+    "shrunk": {
+      "hobby": 0
+    },
+    "composition_consistency": {
+      "workday": {
+        "optional_jaccard": 1,
+        "order_similarity": 1,
+        "start_diff_minutes": 0,
+        "pairs": 1,
+        "same_reference": null
+      }
+    },
+    "dials": {
+      "routine_strength": 0.5,
+      "exception_rate": {
+        "slot": 0,
+        "day": 0
+      }
+    },
+    "matching_dropped_slots": 0,
+    "matching_dropped_by_role": {}
+  },
+  "donor_adjustments": {
+    "weekday": {
+      "case_id": "synthetic",
+      "backoff_level": "all",
+      "redraws": 0,
+      "adjustments": [],
+      "filled": []
+    },
+    "weekend": {
+      "case_id": "synthetic",
+      "backoff_level": "all",
+      "redraws": 0,
+      "adjustments": [],
+      "filled": []
+    }
+  },
   "days": [
     {
       "day_index": 1,
@@ -208,6 +257,9 @@
       "exceptions": [],
       "dropped_slots": [],
       "dropped_optional": [],
+      "anchor_adjustments": [],
+      "jitter_redraws": 0,
+      "shrunk": [],
       "clips": [
         {
           "source": {
@@ -341,6 +393,38 @@
             "extractor_version": "fixture.v1"
           }
         }
+      ],
+      "no_video_spans": [
+        {
+          "start": 28800,
+          "end": 32400,
+          "kind": "unscheduled"
+        },
+        {
+          "start": 32400,
+          "end": 35699.145,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 39299.145,
+          "end": 43200,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 46800,
+          "end": 47401.613,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 51001.613,
+          "end": 61200,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 61200,
+          "end": 82800,
+          "kind": "unscheduled"
+        }
       ]
     },
     {
@@ -354,6 +438,9 @@
       "exceptions": [],
       "dropped_slots": [],
       "dropped_optional": [],
+      "anchor_adjustments": [],
+      "jitter_redraws": 0,
+      "shrunk": [],
       "clips": [
         {
           "source": {
@@ -486,6 +573,38 @@
             },
             "extractor_version": "fixture.v1"
           }
+        }
+      ],
+      "no_video_spans": [
+        {
+          "start": 115200,
+          "end": 118800,
+          "kind": "unscheduled"
+        },
+        {
+          "start": 118800,
+          "end": 121421.872,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 125021.872,
+          "end": 129600,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 133200,
+          "end": 141087.924,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 144687.924,
+          "end": 147600,
+          "kind": "unrecorded"
+        },
+        {
+          "start": 147600,
+          "end": 169200,
+          "kind": "unscheduled"
         }
       ]
     }

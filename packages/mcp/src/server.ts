@@ -366,7 +366,7 @@ function registerTools(server: McpServer, ctx: ToolContext): void {
     },
     guard(({ timeline_id }: { timeline_id: string }) => {
       const t = ctx.timelines.load(timeline_id);
-      const manifest = buildTimelineManifest(t, ctx.catalog(), ctx.now());
+      const manifest = buildTimelineManifest(t, ctx.catalog(), ctx.now(), ctx.config().templates);
       const path = ctx.timelines.writeExport(manifest);
       const s = manifestSummary(manifest);
       const text = `wrote ${path}: ${s.days} days, ${s.clips} clips, ${s.captions} captions, coverage mean ${s.coverage_mean}`;
