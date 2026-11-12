@@ -62,8 +62,9 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 결정 대기 (타임라인 rev3)
 
-- 쉬는 날(hobby_day)의 저녁이 CR8(운동 시각 채우기) 뒤 hobby day의 12%에서 빠진다(이전 4.5%). 원인은 비교 리포트(`docs/superpowers/reports/2026-11-12-rev3-comparison.md`)에서 분리했다. 선택지는 쉬는 날 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 주는 것이다. 사용자가 정한다.
-- seed 149에서 평일 donor가 G9(`work_end` 당김) 뒤에도 필수 슬롯 검사를 못 넘는다. 일정은 그래도 생성된다. core에서 따로 볼지는 미정이다.
+- 쉬는 날(hobby_day) 저녁 drop은 G20(hobby 슬롯을 운동 앵커 순서에 맞춰 끼니 사이에 둠) 뒤 hobby day의 1.3%다(rev3 전 4.5%, G20 전 12.0%). 남은 drop은 16시 이후 시작하는 hobby에 몰려 있다(그 시각대의 5.0%). 이 정도면 그대로 둘지, 쉬는 날 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄지 사용자가 정한다. G20의 대가로 hobby_day 슬롯 순서가 그날 운동 시각에 따라 달라진다(order_similarity가 조금 낮아짐). 수치는 비교 리포트(`docs/superpowers/reports/2026-11-12-rev3-comparison.md`) 4절과 8절에 있다.
+- G22(donor 경계는 템플릿이 쓰는 앵커만)는 사용자가 승인한 E5의 문구를 바꾼다. 평일 donor는 아침을 검사하지 않는다. 승인이 필요하다.
+- seed 149 건은 해결됐다. 첫 donor가 아침 위반 하나로 거절되고 다시 뽑은 donor가 모두 필수 슬롯 검사를 못 넘던 경우였다. G22 뒤에는 첫 donor가 그대로 수락된다(redraw 0, 위반 없음). seed 0–999 × rs {0, 0.5, 0.7, 1} sweep의 생성 실패도 G21 뒤 0/4000이다(이전 7/4000, seed 242와 747).
 
 ## 서버 환경
 

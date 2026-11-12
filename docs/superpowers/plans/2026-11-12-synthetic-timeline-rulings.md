@@ -101,7 +101,7 @@
 
 ## rev3 반영 (2026-11-12)
 
-변경 요청(CR1~CR9)과 그 구현 결정(E1~E11, G1~G19)을 반영했다. 전후 비교는 [rev3 비교 리포트](../reports/2026-11-12-rev3-comparison.md)에 있다.
+변경 요청(CR1~CR9)과 그 구현 결정(E1~E11, G1~G26)을 반영했다. 전후 비교는 [rev3 비교 리포트](../reports/2026-11-12-rev3-comparison.md)에 있다.
 
 ### 대체된 이전 판단
 
@@ -158,4 +158,14 @@
 - G18: stats는 `realized`를 점 경로로 펼치고 null은 건너뛰며 n을 함께 낸다. 비용: 없음.
 - G19: 비교는 old와 new에 같은 world 값을 주고 분포로만 비교한다(날별 비교는 의미 없음). 비용: 없음.
 - 참고(R17 유지): 슬롯 예외의 9.4%(예시 world, [비교 리포트](../reports/2026-11-12-rev3-comparison.md))는 루틴과 같은 장소라 무변화다. 이전에 적은 약 16%는 다른 테스트 설정에서 잰 값이다. `slot_exception_noop_share`로 기록한다.
-- 사용자 결정 대기: 쉬는 날(hobby_day) 저녁이 CR8 뒤 12%의 날에서 빠진다. 원인은 비교 리포트에 있다. 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄 수 있다. seed 149의 평일 donor는 G9 뒤에도 필수 슬롯 검사를 못 넘지만 일정은 생성된다.
+- 사용자 결정 대기: 쉬는 날(hobby_day) 저녁 drop은 G20 뒤 1.3%다(G20 전 12%, rev3 전 4.5%). 그대로 둘지, 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄지 정한다. seed 149 건은 G22로 해결됐다(아래 G22).
+
+### 최종 리뷰 판정 G20~G26
+
+- G20: hobby_day의 hobby 슬롯을 sport 앵커 순서에 맞춰 끼니 사이에 둔다. sport 앵커보다 늦은 첫 끼니(아침, 점심, 저녁) 바로 앞이고, 없으면 마지막 끼니 뒤다. `home_afternoon` 같은 채움 슬롯은 끼니에 대한 템플릿 위치를 지킨다. 늦은 실제 운동 시각이 점심을 21시로 미는 일이 없어지고 CR8의 실제 운동 시각은 유지된다. 사용자에게 알린다. 비용: hobby_day 슬롯 순서가 donor 운동 시각에 따라 달라진다(order_similarity에 반영). 결과: hobby_day 저녁 drop 12.0% → 1.3%, 16시 이후 점심 28.2% → 0.4%(예시 world, rs 0.5).
+- G21: 날 단위 평일 재추출이 그날의 gap 표본으로 필수 슬롯이 들어가는지도 본다(퇴근, 저녁 항목). 5회 뒤에도 안 되면 퇴근을 들어가는 가장 늦은 분으로 당겨 `anchor_adjustments`에 기록하고 throw하지 않는다. seed 242가 rs 0/0.5/0.7에서 생성에 실패했다. 비용: 일부 날의 퇴근이 당겨진다(기록됨). 결과: seed 0–999 × 4 rs sweep 실패 7/4000 → 0/4000.
+- G22: donor 단계 경계도 템플릿이 쓰지 않는 앵커는 건너뛴다(평일 donor: 아침·운동 검사 없음, 주말: 근무 검사 없음). G12와 같다. 평일 거절의 73%가 평일이 쓰지 않는 아침 하나 때문이었다. 사용자가 승인한 E5를 바꾸므로 사용자에게 알린다. 비용: E5 문구가 바뀌고 평일 donor 재추출이 줄어든다(39% → 15%).
+- G23: manifest는 슬롯 사이에서 `unscheduled`를 먼저, `transition`을 다음 슬롯 바로 앞에 둔다. 미배정 시간은 직전 슬롯 장소에 있다(CR6.3). 비용: 구간 순서가 바뀌고 golden을 다시 만들었다.
+- G24: manifest 날에 `slot_exception_eligible`, `slot_exception_candidates`, `slots: [{slot_id, role, required, window}]`를 더한다. optional_presence와 일관성은 매칭에서 비워지기 전 기준으로 센다고 문서화한다. manifest만으로 realized를 다시 세는 테스트를 둔다. 비용: manifest가 커진다.
+- G25: 저장된 타임라인을 읽지 못하면 `TIMELINE_INVALID`("saved before rev3 — regenerate")를 낸다. `meal_style.weekend`가 있는 world 오류에는 안내를 붙인다. WorldStore/TimelineStore의 list()는 나쁜 파일을 건너뛰고 알린다. schedule `generator_version`은 `schedule.v2`, manifest `schema_version`은 2. README에 마이그레이션 안내. 비용: 없음.
+- G26: 남은 사소한 항목을 합쳤다. stats는 타임라인이 아닌 manifest를 stderr 경고와 함께 건너뛴다(M1). 운동 시각 기본값 사용을 채움으로 기록한다(`sport_fill: "default"`, `filled`에 `sport_time`)(M7). README의 "집에 있는 unscheduled" 문구를 마지막 슬롯이 집 밖인 날에 맞게 고친다(M5). M2, M3, M4, M6은 미룬다. 비용: 없음.
