@@ -228,66 +228,25 @@ describe("exceptions", () => {
     }
   });
 
-  it("exception_rate.slot=1 with no eat_out node → only lunch_at_friend, on weekend days", () => {
-    const days = run({ slot: 1, bindFrequent: true, placeNodes: { others_home: "friend_home" } });
-    for (const d of days) {
-      if (d.template === "workday") {
-        expect(d.exceptions).toEqual([]);
-      } else {
-        expect(d.exceptions).toEqual([
-          { scope: "slot", type: "lunch_at_friend", replaces: "lunch", day_range: [d.day_index, d.day_index], meal_place: "others_home" },
-        ]);
-      }
-    }
-  });
-
-  it("exception_rate.slot=1 with others_home unbound → no exceptions", () => {
-    for (const placeNodes of [{}, { others_home: "friend_home" }] as Record<string, string>[]) {
-      const days = run({ slot: 1, bindFrequent: false, placeNodes });
-      for (const d of days) expect(d.exceptions).toEqual([]);
-    }
-  });
-
-  it("a slot exception writes its place into meal_place of the replaced role (R19)", () => {
+  it("decideDay draws no slot exceptions, even at exception_rate.slot=1 (E3: placed after windows)", () => {
     for (const seed of [1, 2, 3]) {
-      const w = makeWorld({ seed, routine: 0, slot: 1, bindFrequent: true, placeNodes: { eat_out: "diner" } });
-      const days = decideDays(w, catalog(), { boundNodes: bound(w), defaults: defaults() });
-      for (const d of days) {
-        expect(d.exceptions).toHaveLength(1);
-        const e = d.exceptions[0]!;
-        expect(["dinner_out", "lunch_out"]).toContain(e.type);
-        expect(d.meal_place[e.replaces as "lunch" | "dinner"]).toBe("eat_out");
-      }
+      const placeNodes = { eat_out: "diner", others_home: "friend_home" };
+      const days = run({ seed, routine: 0, slot: 1, day: 0.3, bindFrequent: true, placeNodes });
+      for (const d of days) expect(d.exceptions.every((e) => e.scope === "day")).toBe(true);
+      expect(days.some((d) => d.exceptions.length > 0)).toBe(true);
     }
+  });
+
+  it("day exceptions do not depend on exception_rate.slot", () => {
+    const placeNodes = { eat_out: "diner", others_home: "friend_home" };
+    const o = { seed: 5, routine: 0.4, day: 0.3, bindFrequent: true, placeNodes };
+    expect(run({ ...o, slot: 1 })).toEqual(run({ ...o, slot: 0 }));
   });
 
   it("a catalog with duplicate slot types fails to parse", () => {
     const raw = JSON.parse(JSON.stringify(catalog()));
     raw.slot.push({ ...raw.slot[0] });
     expect(ExceptionCatalogSchema.safeParse(raw).success).toBe(false);
-  });
-
-  it("no day has both a day and a slot exception", () => {
-    let dayExc = 0;
-    let slotExc = 0;
-    for (let seed = 0; seed < 20; seed++) {
-      const days = run({
-        seed,
-        day: 0.5,
-        slot: 1,
-        bindFrequent: true,
-        placeNodes: { eat_out: "diner", others_home: "friend_home" },
-      });
-      for (const d of days) {
-        expect(d.exceptions.length).toBeLessThanOrEqual(1);
-        if (d.day_type === "leave_day") expect(d.exceptions[0]!.scope).toBe("day");
-        else expect(d.exceptions[0]!.scope).toBe("slot");
-        dayExc += d.exceptions.filter((e) => e.scope === "day").length;
-        slotExc += d.exceptions.filter((e) => e.scope === "slot").length;
-      }
-    }
-    expect(dayExc).toBeGreaterThan(0);
-    expect(slotExc).toBeGreaterThan(0);
   });
 });
 

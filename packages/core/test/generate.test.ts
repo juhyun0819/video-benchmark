@@ -17,6 +17,7 @@ import {
   generateSchedule,
   hardFilterFailures,
   parseClock,
+  realizedOf,
   rngFor,
   selectDonors,
   verifyTimeline,
@@ -27,6 +28,7 @@ import {
   type ScheduleInput,
   type World,
 } from "../src/index.js";
+import { makeDay } from "./fixtures.js";
 
 const readConfig = (rel: string): unknown =>
   JSON.parse(readFileSync(new URL(`../../../config/${rel}`, import.meta.url), "utf8"));
@@ -487,26 +489,6 @@ describe("generateSchedule", () => {
     expect(ScheduleDaySchema.safeParse({ ...day, slots: [{ ...slot, window: [slot.window[0], "28:10"] }] }).success).toBe(false);
   });
 
-  it("a slot exception whose slot is dropped for time is removed from the day (R45)", () => {
-    // Work spans 4 h with lunch pinned to its end: an eat-out lunch adds transitions and leaves work_pm < 60 min.
-    const inp = input({ day: 0, slot: 1, routine: 1 }, {}, { work_start: 540, work_end: 640, lunch_time: 900 });
-    const schedule = generateSchedule(inp);
-    const lunchDropped = schedule.days.filter((d) => d.dropped_slots.some((x) => x.role === "lunch"));
-    expect(lunchDropped.length).toBeGreaterThan(0);
-    let slotExceptions = 0;
-    for (const day of schedule.days) {
-      for (const ex of day.exceptions.filter((e) => e.scope === "slot")) {
-        slotExceptions += 1;
-        expect(day.slots.map((s) => s.role), `day ${day.day_index} ${ex.type}`).toContain(ex.replaces);
-      }
-    }
-    expect(slotExceptions).toBeGreaterThan(0);
-    for (const day of lunchDropped) expect(day.exceptions.some((e) => e.replaces === "lunch")).toBe(false);
-    const empty: ClipCatalog = { clips: () => [], getClip: () => undefined, getAnnotations: () => [] };
-    const report = verifyTimeline(createTimeline(inp.world, schedule, () => "tl-exc"), empty);
-    expect(report.rules.exceptions).toEqual({ pass: true, violations: [] });
-  });
-
   it("rethrows SCHEDULE_INFEASIBLE naming the day after the 5th retry", () => {
     let err: unknown;
     try {
@@ -518,5 +500,190 @@ describe("generateSchedule", () => {
     expect((err as TimelineError).code).toBe("SCHEDULE_INFEASIBLE");
     expect((err as TimelineError).details).toMatchObject({ day: 6, attempts: 6 });
     expect((err as TimelineError).message).toContain("day 6");
+  });
+});
+
+const emptyClips: ClipCatalog = { clips: () => [], getClip: () => undefined, getAnnotations: () => [] };
+
+/** Node a meal place resolves to, as the scheduler does. */
+const placeNode = (world: World, place: string): string | undefined =>
+  place === "home" || place === "workplace" ? place : world.meal_style.place_nodes[place as "eat_out" | "others_home"];
+
+describe("slot exceptions after windows (CR1, E1, E3)", () => {
+  it("exception_rate.slot 0.5 over 40 seeds: the mean realized slot_exception_rate is within 0.05 of 0.5", () => {
+    const rates: number[] = [];
+    for (let seed = 1; seed <= 40; seed++) {
+      const { realized } = generateSchedule(input({ seed, slot: 0.5 }));
+      expect(realized.slot_exception_eligible_days).toBeGreaterThan(0);
+      rates.push(realized.slot_exception_rate!);
+    }
+    const mean = rates.reduce((s, r) => s + r, 0) / rates.length;
+    expect(Math.abs(mean - 0.5)).toBeLessThanOrEqual(0.05);
+  });
+
+  it("every slot exception replaces a kept slot whose node is the place node, and verify passes", () => {
+    let count = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const inp = input({ seed, slot: 0.5 });
+      const schedule = generateSchedule(inp);
+      for (const day of schedule.days) {
+        for (const ex of day.exceptions.filter((e) => e.scope === "slot")) {
+          count += 1;
+          expect(day.exceptions).toHaveLength(1);
+          expect(day.slot_exception_eligible).toBe(true);
+          expect(ex.day_range).toEqual([day.day_index, day.day_index]);
+          const slot = day.slots.find((s) => s.role === ex.replaces);
+          expect(slot, `day ${day.day_index} ${ex.type}`).toBeDefined();
+          expect(slot!.spec.node).toBe(placeNode(inp.world, ex.meal_place!));
+        }
+      }
+      const report = verifyTimeline(createTimeline(inp.world, schedule, () => `tl-exc-${seed}`), emptyClips);
+      expect(report.rules.exceptions).toEqual({ pass: true, violations: [] });
+    }
+    expect(count).toBeGreaterThan(0);
+  });
+
+  it("exception_rate.slot 1 places one on every eligible day, never on a slot that does not fit (R45 removed)", () => {
+    // Work spans 100 min with lunch pinned late: an eat-out lunch adds transitions and squeezes work_pm,
+    // so lunch_out is infeasible on some workdays while dinner_out still fits.
+    const inp = input({ day: 0, slot: 1, routine: 1 }, {}, { work_start: 540, work_end: 640, lunch_time: 900 });
+    const schedule = generateSchedule(inp);
+    expect(schedule.realized.slot_exception_rate).toBe(1);
+    for (const day of schedule.days) {
+      const slotExc = day.exceptions.filter((e) => e.scope === "slot");
+      expect(slotExc).toHaveLength(day.slot_exception_eligible ? 1 : 0);
+      for (const ex of slotExc) expect(day.slots.map((s) => s.role)).toContain(ex.replaces);
+    }
+    const workdays = schedule.days.filter((d) => d.day_type === "workday");
+    expect(workdays.some((d) => d.slot_exception_candidates === 1)).toBe(true);
+    expect(workdays.every((d) => d.slots.some((s) => s.role === "dinner"))).toBe(true);
+  });
+
+  it("no day has both a day and a slot exception; leave days are not eligible", () => {
+    let leave = 0;
+    for (let seed = 0; seed < 10; seed++) {
+      const schedule = generateSchedule(input({ seed, day: 0.5, slot: 1 }));
+      for (const day of schedule.days) {
+        expect(day.exceptions.length).toBeLessThanOrEqual(1);
+        if (day.day_type === "leave_day") {
+          leave += 1;
+          expect(day.exceptions[0]!.scope).toBe("day");
+          expect(day.slot_exception_eligible).toBe(false);
+          expect(day.slot_exception_candidates).toBe(0);
+        }
+      }
+    }
+    expect(leave).toBeGreaterThan(0);
+  });
+
+  it("without an eat_out node only rest-day lunch_at_friend remains; without any place node nothing is eligible", () => {
+    const friendOnly = generateSchedule(input({ day: 0, slot: 1, placeNodes: { others_home: "friend_home" } }));
+    for (const day of friendOnly.days) {
+      const slotExc = day.exceptions.filter((e) => e.scope === "slot");
+      if (day.day_type === "workday") expect(slotExc).toEqual([]);
+      for (const ex of slotExc) expect(ex).toMatchObject({ type: "lunch_at_friend", replaces: "lunch", meal_place: "others_home" });
+    }
+    expect(friendOnly.days.some((d) => d.exceptions.length > 0)).toBe(true);
+
+    const none = generateSchedule(input({ day: 0, slot: 1, placeNodes: {} }));
+    expect(none.days.every((d) => d.exceptions.length === 0 && !d.slot_exception_eligible)).toBe(true);
+    expect(none.realized.slot_exception_eligible_days).toBe(0);
+    expect(none.realized.slot_exception_rate).toBeNull();
+  });
+
+  it("day exceptions do not depend on exception_rate.slot", () => {
+    const a = generateSchedule(input({ slot: 0 }));
+    const b = generateSchedule(input({ slot: 0.5 }));
+    const dayExc = (s: typeof a) => s.days.map((d) => [d.day_type, d.exceptions.filter((e) => e.scope === "day")]);
+    expect(dayExc(b)).toEqual(dayExc(a));
+    expect(b.realized.day_exception_rate).toBe(a.realized.day_exception_rate);
+    expect(a.days.some((d) => d.day_type === "leave_day")).toBe(true);
+    expect(b.days.some((d) => d.exceptions.some((e) => e.scope === "slot"))).toBe(true);
+  });
+});
+
+describe("realized (CR1, E1, E2)", () => {
+  it("rates, presence and shrink counts equal counts recomputed from days; dials are echoed", () => {
+    const inp = input({ seed: 7, slot: 0.3, day: 0.2, length: 56 }, {}, { bed: 1290 });
+    const schedule = generateSchedule(inp);
+    const { days, realized } = schedule;
+    const slotDays = days.filter((d) => d.exceptions.some((e) => e.scope === "slot")).length;
+    const eligible = days.filter((d) => d.slot_exception_eligible).length;
+    const slotExc = days.flatMap((d) => d.exceptions.filter((e) => e.scope === "slot")).length;
+    const candidates = days.reduce((s, d) => s + d.slot_exception_candidates, 0);
+    expect(eligible).toBeGreaterThan(0);
+    expect(realized.slot_exception_eligible_days).toBe(eligible);
+    expect(realized.slot_exception_rate).toBe(slotDays / eligible);
+    expect(realized.slot_exception_share).toBe(slotExc / candidates);
+
+    const base = (d: (typeof days)[number]) => d.exceptions.find((e) => e.scope === "day")?.replaces ?? d.day_type;
+    const leave = days.filter((d) => d.day_type === "leave_day").length;
+    expect(leave).toBeGreaterThan(0);
+    expect(realized.day_exception_rate).toBe(leave / days.filter((d) => base(d) === "workday").length);
+
+    const templateOf = (d: (typeof days)[number]) => (d.day_type === "leave_day" ? "home_day" : d.day_type);
+    const presence: Record<string, [number, number]> = {};
+    for (const d of days) {
+      for (const slot of inp.templates.day_types[templateOf(d)].filter((s) => !s.required)) {
+        const c = (presence[slot.role] ??= [0, 0]);
+        c[1] += 1;
+        if (d.slots.some((s) => s.role === slot.role)) c[0] += 1;
+      }
+    }
+    expect(Object.keys(realized.optional_presence).sort()).toEqual(Object.keys(presence).sort());
+    for (const [role, [kept, total]] of Object.entries(presence)) expect(realized.optional_presence[role]).toBe(kept / total);
+    expect(realized.optional_presence.home_evening).toBeLessThan(1);
+
+    const shrunk = days.filter(
+      (d) => d.dropped_slots.some((x) => x.role === "hobby" && x.reason === "shrunk") && d.slots.some((s) => s.role === "hobby"),
+    ).length;
+    expect(shrunk).toBeGreaterThan(0);
+    expect(realized.shrunk).toEqual({ hobby: shrunk });
+
+    expect(realized.dials).toEqual({ routine_strength: 0.6, exception_rate: { slot: 0.3, day: 0.2 } });
+    expect(Object.keys(realized.composition_consistency)).toEqual(["workday", "hobby_day", "home_day"]);
+  });
+
+  it("composition_consistency on hand-built days: Jaccard, order similarity, start differences (E2)", () => {
+    const inp = input();
+    const a = makeDay(1);
+    const b = makeDay(2);
+    // Day 2 has no lunch and starts work_pm 10 min later.
+    const noLunch = { ...b, slots: b.slots.filter((s) => s.role !== "lunch") };
+    noLunch.slots = noLunch.slots.map((s) => (s.role === "work_pm" ? { ...s, window: ["13:10", "17:00"] as [string, string] } : s));
+    const r = realizedOf([a, noLunch, makeDay(6)], inp.world, inp.templates);
+    // Fixture workdays: optional lunch, dinner, home_evening; 6 roles vs 5.
+    const cc = r.composition_consistency.workday!;
+    expect(cc.pairs).toBe(1);
+    expect(cc.optional_jaccard).toBeCloseTo(2 / 3, 12);
+    expect(cc.order_similarity).toBeCloseTo(1 - 1 / 6, 12);
+    expect(cc.start_diff_minutes).toBeCloseTo(10 / 5, 12);
+    // A template used on fewer than 2 days is omitted.
+    expect(r.composition_consistency).not.toHaveProperty("hobby_day");
+    // Lunch is optional in both templates: kept on day 1 only of the two workdays and the hobby day.
+    expect(r.optional_presence.lunch).toBe(1 / 3);
+    // Dinner is required on workdays, so only the hobby day counts.
+    expect(r.optional_presence.dinner).toBe(1);
+  });
+
+  it("composition_consistency rises with routine_strength on workdays (E2 monotonicity)", () => {
+    const seeds = [1, 2, 3, 4, 5, 6, 7, 8];
+    const avg = (routine: number) => {
+      const sum = { optional_jaccard: 0, order_similarity: 0, start_diff_minutes: 0 };
+      for (const seed of seeds) {
+        const cc = generateSchedule(input({ seed, routine })).realized.composition_consistency.workday!;
+        sum.optional_jaccard += cc.optional_jaccard / seeds.length;
+        sum.order_similarity += cc.order_similarity / seeds.length;
+        sum.start_diff_minutes += cc.start_diff_minutes! / seeds.length;
+      }
+      return sum;
+    };
+    const [r0, r5, r1] = [0, 0.5, 1].map(avg) as [ReturnType<typeof avg>, ReturnType<typeof avg>, ReturnType<typeof avg>];
+    expect(r5.optional_jaccard).toBeGreaterThanOrEqual(r0.optional_jaccard);
+    expect(r1.optional_jaccard).toBeGreaterThanOrEqual(r5.optional_jaccard);
+    expect(r5.order_similarity).toBeGreaterThanOrEqual(r0.order_similarity);
+    expect(r1.order_similarity).toBeGreaterThanOrEqual(r5.order_similarity);
+    expect(r5.start_diff_minutes).toBeLessThanOrEqual(r0.start_diff_minutes);
+    expect(r1.start_diff_minutes).toBeLessThanOrEqual(r5.start_diff_minutes);
   });
 });

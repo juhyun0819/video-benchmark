@@ -172,6 +172,10 @@ export const ScheduleDaySchema = z.object({
   wake: ClockSchema,
   sleep: ClockSchema,
   exceptions: z.array(ExceptionSchema),
+  /** No day exception and at least one feasible slot-exception candidate (E1). */
+  slot_exception_eligible: z.boolean(),
+  /** Catalog slot exceptions that could replace a kept slot today and still lay out (E3); 0 on day-exception days. */
+  slot_exception_candidates: z.number().int().min(0),
   slots: z.array(SlotSchema),
   dropped_slots: z.array(DroppedSlotSchema),
   transitions: z.array(SlotTransitionSchema),
@@ -215,6 +219,37 @@ void _donorPickMatches;
 
 const MealDistributionSchema = z.record(MealPlaceSchema, z.number());
 
+/** Routine consistency over all pairs of days that use one template (E2). */
+export const CompositionConsistencySchema = z.object({
+  /** Mean Jaccard of the sets of kept optional roles. */
+  optional_jaccard: Prob01,
+  /** Mean of 1 − edit distance ÷ max length of the kept role sequences. */
+  order_similarity: Prob01,
+  /** Mean |start difference| in minutes over roles kept on both days; null when no pair shares a role. */
+  start_diff_minutes: z.number().min(0).nullable(),
+  pairs: z.number().int().min(1),
+});
+export type CompositionConsistency = z.infer<typeof CompositionConsistencySchema>;
+
+/** What the dials produced (CR1). A ratio is null when its denominator is 0. */
+export const RealizedSchema = z.object({
+  /** Days with a slot exception ÷ eligible days (E1); the number that should match exception_rate.slot. */
+  slot_exception_rate: Prob01.nullable(),
+  /** Slot exceptions ÷ feasible candidate slots, summed over days (E1). */
+  slot_exception_share: Prob01.nullable(),
+  slot_exception_eligible_days: z.number().int().min(0),
+  /** Day exceptions ÷ days whose base day type has a catalog day exception (workdays). */
+  day_exception_rate: Prob01.nullable(),
+  /** Per role: days the role is kept ÷ days whose template has it as an optional slot. */
+  optional_presence: z.record(z.string(), Prob01),
+  /** Per role with a shrink step: days it was shrunk and still kept (G14). */
+  shrunk: z.record(z.string(), z.number().int().min(0)),
+  /** Templates used on fewer than 2 days are omitted. */
+  composition_consistency: z.record(TemplateNameSchema, CompositionConsistencySchema),
+  dials: z.object({ routine_strength: Prob01, exception_rate: z.object({ slot: Prob01, day: Prob01 }) }),
+});
+export type Realized = z.infer<typeof RealizedSchema>;
+
 export const ScheduleSchema = z.object({
   person_id: z.string(),
   generator_version: z.literal("schedule.v1"),
@@ -237,6 +272,7 @@ export const ScheduleSchema = z.object({
       dinner: MealDistributionSchema,
     }),
   }),
+  realized: RealizedSchema,
   days: z.array(ScheduleDaySchema),
 });
 export type Schedule = z.infer<typeof ScheduleSchema>;

@@ -23,7 +23,7 @@ const WORKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri"];
  * D4: eat_out / others_home are usable only when their place node exists and is bound.
  * Workplace on rest days is forbidden by world validation (E8), so it needs no filtering here.
  */
-function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>): boolean {
+export function mealPlaceUsable(world: World, place: MealPlace, boundNodes: Set<string>): boolean {
   if (place === "home" || place === "workplace") return true;
   const node = world.meal_style.place_nodes[place];
   return node !== undefined && boundNodes.has(node);
@@ -118,8 +118,9 @@ function mealDraw(dist: MealDistribution): (rng: Rng) => MealPlace | "skip" {
 }
 
 /**
- * Decisions for one day (§5.2 steps 1-3, 6, 7). Each decision copies the
+ * Decisions for one day (§5.2 steps 1-3, 6). Each decision copies the
  * reference with probability routine_strength and is redrawn otherwise (D14).
+ * Slot exceptions are placed after windows by the generator (E3).
  */
 export function decideDay(
   world: World,
@@ -183,25 +184,6 @@ export function decideDay(
   const hobby_node = hobbyPresent
     ? decide("hobby_node", (rng) => rng.pickWeighted(plan.weights), plan.byWeekday.get(weekday))
     : undefined;
-
-  if (exceptions.length === 0) {
-    const eligible = catalog.slot.filter(
-      (e) => e.day_types.includes(dayType) && mealPlaceUsable(world, e.meal_place, opts.boundNodes),
-    );
-    if (eligible.length > 0) {
-      const rng = dayRng("slot_exception");
-      if (rng.bernoulli(dials.exception_rate.slot)) {
-        const entry = eligible[rng.int(0, eligible.length)]!;
-        exceptions.push({
-          scope: "slot",
-          type: entry.type, replaces: entry.replaces_role,
-          day_range: [dayIndex, dayIndex],
-          meal_place: entry.meal_place,
-        });
-        meal_place[entry.replaces_role] = entry.meal_place; // R19: overrides the routine draw or "skip"
-      }
-    }
-  }
 
   return {
     day_index: dayIndex,

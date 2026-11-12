@@ -1,9 +1,20 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  ExceptionCatalogSchema,
+  GapTableSchema,
+  OCCUPATION_CODES,
   RULE_IDS,
+  ScheduleDefaultsSchema,
+  TemplatesSchema,
+  WorldSchema,
+  atus2025Source,
+  generateSchedule,
   verifyTimeline,
   createTimeline,
   type Clip,
+  type DonorRow,
+  type GapTable,
   type RuleId,
   type ScheduleDay,
   type Timeline,
@@ -260,5 +271,56 @@ describe("verifyTimeline", () => {
     expect(lunchStart).toBeGreaterThanOrEqual(12 * 3600);
     expect(lunchStart).toBeLessThanOrEqual(12 * 3600 + 25 * 60);
     expect(r.seams[1]!.at_s).toBeGreaterThanOrEqual(13 * 3600);
+  });
+});
+
+const readConfig = (rel: string): unknown =>
+  JSON.parse(readFileSync(new URL(`../../../config/${rel}`, import.meta.url), "utf8"));
+
+/** Synthetic donor rows: 30 weekday and 30 weekend respondents with fixed times. */
+function donorPool(): DonorRow[] {
+  const row = (i: number, weekend: boolean): DonorRow => ({
+    id: `${weekend ? "we" : "wd"}${i}`,
+    daytype: weekend ? "weekend" : "weekday",
+    occ: OCCUPATION_CODES["professional"]!,
+    w: 1 + (i % 3),
+    wake: weekend ? 480 : 400 + (i % 5) * 5,
+    bed: 1380,
+    work_start: weekend ? null : 510,
+    work_end: weekend ? null : 1010,
+    work_min: weekend ? 0 : 480,
+    worked: !weekend,
+    breakfast_time: weekend ? 510 : 430,
+    breakfast_loc: 1,
+    lunch_time: 750,
+    lunch_loc: 2,
+    dinner_time: 1110,
+    dinner_loc: 1,
+    sport_has: false,
+    sport_time: null,
+    sport_outdoor: null,
+    house_min: 30,
+    social_out: false,
+  });
+  return Array.from({ length: 30 }, (_, i) => [row(i, false), row(i, true)]).flat();
+}
+
+describe("verifyTimeline on a generated schedule", () => {
+  it("slot exceptions placed after windows pass the exceptions rule", () => {
+    const fixture = makeWorld({ seed: 11 });
+    const world = WorldSchema.parse({ ...fixture, dials: { ...fixture.dials, exception_rate: { slot: 0.5, day: 0.1 } } });
+    const schedule = generateSchedule({
+      world,
+      templates: TemplatesSchema.parse(readConfig("timeline/templates.v2.json")),
+      gaps: GapTableSchema.parse(readConfig("timeline/gaps.v1.json")) as GapTable,
+      exceptions: ExceptionCatalogSchema.parse(readConfig("timeline/exceptions.v1.json")),
+      source: atus2025Source(donorPool()),
+      boundNodes: new Set(Object.keys(world.node_binding)),
+      defaults: ScheduleDefaultsSchema.parse(readConfig("schedule_defaults_atus2025.json")),
+    });
+    const slotExceptions = schedule.days.flatMap((d) => d.exceptions.filter((e) => e.scope === "slot"));
+    expect(slotExceptions.length).toBeGreaterThan(0);
+    const r = verifyTimeline(createTimeline(world, schedule, genId), memoryCatalog([]));
+    expect(r.rules.exceptions).toEqual({ pass: true, violations: [] });
   });
 });

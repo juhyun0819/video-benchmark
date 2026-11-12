@@ -116,6 +116,8 @@ export function makeDay(dayIndex: number, attempt = 0, defs?: SlotDef[]): Schedu
     wake: use[0]!.window[0],
     sleep: "23:00",
     exceptions: [],
+    slot_exception_eligible: false,
+    slot_exception_candidates: 0,
     slots,
     dropped_slots: [],
     transitions: [],
@@ -147,6 +149,16 @@ export function makeSchedule(days = 28, defsFor: (d: number) => SlotDef[] | unde
     meal_style_effective: {
       workday: { lunch: { workplace: 1 }, dinner: { home: 1 } },
       rest_day: { breakfast: { home: 1 }, lunch: { home: 1 }, dinner: { home: 1 } },
+    },
+    realized: {
+      slot_exception_rate: null,
+      slot_exception_share: null,
+      slot_exception_eligible_days: 0,
+      day_exception_rate: 0,
+      optional_presence: {},
+      shrunk: {},
+      composition_consistency: {},
+      dials: { routine_strength: 0.5, exception_rate: { slot: 0, day: 0 } },
     },
     days: Array.from({ length: days }, (_, i) => makeDay(i + 1, 0, defsFor(i + 1))),
   });

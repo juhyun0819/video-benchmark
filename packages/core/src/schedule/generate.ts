@@ -14,11 +14,13 @@ import { TimelineError } from "../errors.js";
 import { gapQuantile, sampleGap, type GapTable } from "../gaps.js";
 import { rngFor } from "../rng.js";
 import type { World } from "../world.js";
-import { decideDay, decideDays, effectiveMealStyle } from "./decisions.js";
+import { decideDay, decideDays, effectiveMealStyle, mealPlaceUsable } from "./decisions.js";
+import { realizedOf } from "./realized.js";
 import type {
   AnchorName,
   DayAnchors,
   DayDecisions,
+  Exception,
   ExceptionCatalog,
   Schedule,
   ScheduleDay,
@@ -195,12 +197,16 @@ function repairWorkEnd(input: ScheduleInput, pick: DonorPick): DonorPick {
   return pick;
 }
 
-function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
+type DayLayout = ReturnType<typeof resolveDayWindows>;
+
+/**
+ * The day's template laid out with its reduce order and the day's gap draws.
+ * The base layout and every slot-exception re-layout go through here (G14).
+ */
+function layoutDay(input: ScheduleInput, anchors: DayAnchors, decisions: DayDecisions, attempt: number): DayLayout {
   const { world, gaps, templates } = input;
   const d = decisions.day_index;
-  const profile = decisions.template === "workday" ? donors.weekday.profile : donors.weekend.profile;
-  const { anchors, adjustments, redraws } = dayAnchors(input, profile, decisions, attempt);
-  const { slots, transitions, dropped } = resolveDayWindows(
+  return resolveDayWindows(
     templates.day_types[decisions.template],
     anchors,
     decisions,
@@ -208,6 +214,69 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
     (from, to, i) => sampleGap(gaps, from, to, rngFor(world.seed, "day", d, attempt, "gap", i)),
     templates.reduce_order?.[decisions.template],
   );
+}
+
+type SlotExceptionPlacement = { layout: DayLayout; exceptions: Exception[]; eligible: boolean; candidates: number };
+
+/**
+ * §5.2 step 8 (E1, E3, G14): after windows and reductions. A candidate is a
+ * catalog slot exception for the day type whose meal slot is still kept and
+ * whose place is usable (D4), and for which the day re-laid out with that
+ * place keeps the replaced slot and every kept required slot. A day without a
+ * day exception and with a candidate is eligible: Bernoulli(exception_rate.slot)
+ * decides, the candidate is picked uniformly, and its re-layout becomes the day.
+ */
+function placeSlotException(
+  input: ScheduleInput,
+  anchors: DayAnchors,
+  decisions: DayDecisions,
+  attempt: number,
+  base: DayLayout,
+): SlotExceptionPlacement {
+  const none: SlotExceptionPlacement = { layout: base, exceptions: decisions.exceptions, eligible: false, candidates: 0 };
+  if (decisions.exceptions.length > 0) return none;
+  const { world, boundNodes } = input;
+  const kept = new Set(base.slots.map((s) => s.role));
+  const required = base.slots.filter((s) => s.required).map((s) => s.role);
+
+  const feasible: { entry: ExceptionCatalog["slot"][number]; layout: DayLayout }[] = [];
+  for (const entry of input.exceptions.slot) {
+    const role = entry.replaces_role;
+    if (!entry.day_types.includes(decisions.day_type) || !kept.has(role)) continue;
+    if (!mealPlaceUsable(world, entry.meal_place, boundNodes)) continue;
+    const meal_place = { ...decisions.meal_place, [role]: entry.meal_place };
+    let layout: DayLayout;
+    try {
+      layout = layoutDay(input, anchors, { ...decisions, meal_place }, attempt);
+    } catch (e) {
+      if (isInfeasible(e)) continue;
+      throw e;
+    }
+    const roles = new Set(layout.slots.map((s) => s.role));
+    if (roles.has(role) && required.every((r) => roles.has(r))) feasible.push({ entry, layout });
+  }
+  if (feasible.length === 0) return none;
+
+  const d = decisions.day_index;
+  const placed: SlotExceptionPlacement = { ...none, eligible: true, candidates: feasible.length };
+  if (!rngFor(world.seed, "day", d, attempt, "slot_exception").bernoulli(world.dials.exception_rate.slot)) return placed;
+  const { entry, layout } = feasible[rngFor(world.seed, "day", d, attempt, "slot_exception_pick").int(0, feasible.length)]!;
+  const exception: Exception = {
+    scope: "slot",
+    type: entry.type,
+    replaces: entry.replaces_role,
+    day_range: [d, d],
+    meal_place: entry.meal_place,
+  };
+  return { ...placed, layout, exceptions: [exception] };
+}
+
+function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
+  const d = decisions.day_index;
+  const profile = decisions.template === "workday" ? donors.weekday.profile : donors.weekend.profile;
+  const { anchors, adjustments, redraws } = dayAnchors(input, profile, decisions, attempt);
+  const base = layoutDay(input, anchors, decisions, attempt);
+  const { layout, exceptions, eligible, candidates } = placeSlotException(input, anchors, decisions, attempt, base);
   return {
     day_index: d,
     weekday: decisions.weekday,
@@ -215,13 +284,12 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
     attempt,
     wake: formatClock(anchors.wake),
     sleep: formatClock(anchors.sleep),
-    // R45: a slot exception whose slot was dropped for time did not happen.
-    exceptions: decisions.exceptions.filter(
-      (ex) => ex.scope !== "slot" || !dropped.some((x) => x.role === ex.replaces && x.reason === "no_time"),
-    ),
-    slots,
-    dropped_slots: dropped,
-    transitions,
+    exceptions,
+    slot_exception_eligible: eligible,
+    slot_exception_candidates: candidates,
+    slots: layout.slots,
+    dropped_slots: layout.dropped,
+    transitions: layout.transitions,
     anchor_adjustments: adjustments,
     jitter_redraws: redraws,
   };
@@ -291,6 +359,7 @@ export function generateSchedule(input: ScheduleInput): Schedule {
     distribution_source: source.id,
     donors,
     meal_style_effective: effectiveMealStyle(world, boundNodes),
+    realized: realizedOf(days, world, templates),
     days,
   };
 }
