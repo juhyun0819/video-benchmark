@@ -130,3 +130,36 @@ Steps (TDD):
   - an exhausted pool gives an unassigned day in the summary;
   - the end-to-end CLI writes a manifest whose block-mode verify passes.
 - [ ] Implement. Run tests. Commit.
+
+---
+
+## Addendum (2026-11-13): home fill from spare dates
+
+- **B6. Home fill.** After the primary plan, every slot whose `spec.node` is `home` and that received no footage gets filled from a spare date. This covers home_morning, home_afternoon, home_evening, chores, and meals at home.
+  - **Spare dates:** dates not assigned to any synthetic day and not trip dates. Each spare date serves at most one synthetic day. It may fill several home blocks of that day.
+  - **Candidates:** home-bound clips of a spare date whose real start is within ±90 min of the block's synthetic start (window start). Meal slots take only home meal clips. Other home slots take any home clip.
+  - **Selection:**
+    - Visit days in index order and their empty home slots in time order.
+    - Pick the candidate clip with the smallest |Δt|. Break ties by more footage in the run, then by earlier date.
+    - From that clip, take the contiguous run of the date's home clips (gap ≤ 15 min, real-time order) and fill until the block end.
+    - A spare date chosen for a day is preferred for that day's later empty home slots.
+  - **Bounds:** deterministic, and trip days are excluded.
+  - **Summary:** add `home_fills: [{ day_index, slot_id, role, from_date, delta_min, seconds }]`.
+
+### Task 4: Home fill from spare dates (B6)
+**Files:**
+- `packages/mcp/src/composeBlocks.ts`
+- `packages/mcp/test/composeBlocks.test.ts`
+
+Steps (TDD):
+- [ ] Write tests:
+  - an empty home_morning is filled from a spare date within ±90 min;
+  - a candidate outside ±90 min is not used;
+  - an assigned date is never used as a spare;
+  - a spare date never serves two synthetic days, but can serve morning and evening of one day;
+  - meal-at-home slots take only home meal clips;
+  - non-home empty slots stay empty (hobby, work);
+  - trip days are untouched;
+  - block-mode verify passes;
+  - the summary lists home_fills.
+- [ ] Implement. Run `npm test && npm run typecheck`. Commit.
