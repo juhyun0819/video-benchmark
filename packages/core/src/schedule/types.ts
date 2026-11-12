@@ -194,7 +194,7 @@ const DonorPickSchema = z.object({
   filled: z.array(z.string()),
   redraws: z.number().int().min(0).max(5),
   adjustments: z.array(AdjustmentSchema),
-  sport_fill: z.enum(["level", "pool"]).optional(),
+  sport_fill: z.enum(["level", "pool", "default"]).optional(),
   profile: z.object({
     wake: z.number(),
     sleep: z.number(),

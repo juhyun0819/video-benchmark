@@ -231,6 +231,20 @@ function repairWorkEnd(input: ScheduleInput, pick: DonorPick): DonorPick {
   return pick;
 }
 
+/**
+ * G26: a weekend pick without a sport time (no sport rows to fill from) gets
+ * the config's sports_start p50, recorded as a fill like the pool fills.
+ */
+function withDefaultSport(input: ScheduleInput, pick: DonorPick): DonorPick {
+  if (pick.profile.sport !== undefined) return pick;
+  return {
+    ...pick,
+    filled: [...pick.filled, "sport_time"],
+    profile: { ...pick.profile, sport: parseClock(input.defaults.weekend.sports_start.p50) },
+    sport_fill: "default",
+  };
+}
+
 type DayLayout = ReturnType<typeof resolveDayWindows>;
 
 /**
@@ -357,7 +371,7 @@ export function generateSchedule(input: ScheduleInput): Schedule {
   });
   const donors: Donors = {
     weekday: repairWorkEnd(input, picked.weekday),
-    weekend: picked.weekend,
+    weekend: withDefaultSport(input, picked.weekend),
     country_fallback: picked.country_fallback,
     weekend_redraws: picked.weekend_redraws,
   };

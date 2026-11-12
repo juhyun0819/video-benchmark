@@ -57,7 +57,8 @@ export type DonorPick = {
   redraws: number;
   /** Clamps applied after the redraws ran out. */
   adjustments: DonorAdjustment[];
-  sport_fill?: "level" | "pool";
+  /** Where a filled sport_time came from: the backoff level, the whole pool, or (G26) the config's sports_start p50. */
+  sport_fill?: "level" | "pool" | "default";
 };
 
 export interface DistributionSource {

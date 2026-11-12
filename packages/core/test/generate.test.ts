@@ -509,6 +509,14 @@ describe("generateSchedule", () => {
     expect(json(generateSchedule(inp))).toBe(json(schedule));
   });
 
+  it("a weekend pool without sport rows records the sports_start default as a fill (G26)", () => {
+    const inp = input({ day: 0, slot: 0, routine: 1 });
+    const { weekend } = generateSchedule(inp).donors;
+    expect(weekend.sport_fill).toBe("default");
+    expect(weekend.filled).toContain("sport_time");
+    expect(weekend.profile.sport).toBe(parseClock(inp.defaults.weekend.sports_start.p50));
+  });
+
   it("a weekday donor whose required slots fit keeps adjustments [] (G9)", () => {
     const { weekday } = generateSchedule(input({ day: 0, slot: 0, routine: 1 })).donors;
     expect(weekday.redraws).toBe(0);
