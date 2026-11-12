@@ -1,7 +1,7 @@
 import { TimelineError } from "../errors.js";
 import { rngFor, type Rng } from "../rng.js";
 import { MealPlaceSchema, WeekdaySchema, type MealPlace, type MealWeights, type Weekday, type World } from "../world.js";
-import type { DayDecisions, DayType, Exception, ExceptionCatalog, Meal, TemplateName } from "./types.js";
+import type { DayDecisions, DayType, Exception, ExceptionCatalog, Meal, ScheduleDefaults, TemplateName } from "./types.js";
 
 /** Renormalized meal place probabilities; {} when no usable place has mass (R12). */
 export type MealDistribution = Partial<Record<MealPlace, number>>;
@@ -10,12 +10,14 @@ export type EffectiveMealStyle = {
   rest_day: { breakfast: MealDistribution; lunch: MealDistribution; dinner: MealDistribution };
 };
 
-export type DecideOptions = { boundNodes: Set<string> };
+export type DecideOptions = {
+  boundNodes: Set<string>;
+  /** `weekday_evening_home.slot_probability` is the workday home_evening presence probability (CR3). */
+  defaults: ScheduleDefaults;
+};
 
 const WEEKDAYS = WeekdaySchema.options;
 const WORKDAYS: readonly Weekday[] = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-/** Presence probability of the optional workday home_evening slot (no source gives one). */
-const HOME_EVENING_PROB = 0.5;
 
 /**
  * D4: eat_out / others_home are usable only when their place node exists and is bound.
@@ -167,7 +169,8 @@ export function decideDay(
       (rng) => rng.bernoulli(plan.workdayCount / WORKDAYS.length),
       plan.byWeekday.has(weekday),
     );
-    optional.home_evening = decide("optional_home_evening", (rng) => rng.bernoulli(HOME_EVENING_PROB));
+    const homeEvening = opts.defaults.weekday_evening_home.slot_probability;
+    optional.home_evening = decide("optional_home_evening", (rng) => rng.bernoulli(homeEvening));
     hobbyPresent = optional.hobby;
   } else {
     const skip = decide("breakfast_skip", (rng) => rng.bernoulli(world.meal_style.breakfast_skip_prob));

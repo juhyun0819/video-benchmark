@@ -3,7 +3,16 @@ import { formatClock, timeOfDayAt } from "../clock.js";
 import { TimelineError } from "../errors.js";
 import { placeKindOf, type PlaceKind } from "../gaps.js";
 import type { NodeDef, World } from "../world.js";
-import type { AnchorName, DayAnchors, DayDecisions, DroppedSlot, Slot, SlotTransition, TemplateSlot } from "./types.js";
+import type {
+  AnchorName,
+  DayAnchors,
+  DayDecisions,
+  DroppedSlot,
+  ReduceStep,
+  Slot,
+  SlotTransition,
+  TemplateSlot,
+} from "./types.js";
 
 /** Transition gap in minutes between two place kinds; `index` is the kept-slot index of the later slot. */
 export type GapFn = (from: PlaceKind, to: PlaceKind, index: number) => number;
@@ -100,10 +109,50 @@ function slotToDrop(kept: Kept[], failing: number): number {
 }
 
 /**
+ * E4: applies the first unused reduce step, in order, whose optional slot is
+ * still kept and can affect the failing slot (a slot's layout depends only on
+ * itself, the slots before it and the next one). A shrink needs a duration
+ * above min_minutes. Returns false when no step applies.
+ */
+function applyReduceStep(
+  kept: Kept[],
+  steps: readonly ReduceStep[],
+  used: boolean[],
+  failing: number,
+  dropped: DroppedSlot[],
+): boolean {
+  for (let si = 0; si < steps.length; si++) {
+    if (used[si]) continue;
+    const step = steps[si]!;
+    const i = kept.findIndex((k) => k.slot.role === step.role && !k.slot.required);
+    if (i < 0) {
+      used[si] = true;
+      continue;
+    }
+    if (i > failing + 1) continue;
+    used[si] = true;
+    const k = kept[i]!;
+    if (step.action === "drop") {
+      kept.splice(i, 1);
+      dropped.push({ role: step.role, reason: "no_time" });
+      return true;
+    }
+    const { duration_minutes: duration, min_minutes: min } = k.slot;
+    if (duration === undefined || duration <= min) continue;
+    kept[i] = { ...k, slot: { ...k.slot, duration_minutes: min } };
+    dropped.push({ role: step.role, reason: "shrunk" });
+    return true;
+  }
+  return false;
+}
+
+/**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
  * "skip" meals, absent optional keys and unresolved optional nodes. While the
- * windows do not fit, an optional slot is dropped and recorded (R21, R24);
- * only when no optional slot is left does it throw.
+ * windows do not fit, the day type's reduce order is applied step by step (E4);
+ * a failure no remaining step can affect drops an optional slot by R24 (R21).
+ * Every change is recorded.
+ * Required slots are never shrunk or dropped; when no optional slot is left it throws.
  */
 export function resolveDayWindows(
   template: TemplateSlot[],
@@ -111,6 +160,7 @@ export function resolveDayWindows(
   decisions: DayDecisions,
   world: World,
   gap: GapFn,
+  reduceOrder: readonly ReduceStep[] = [],
 ): { slots: Slot[]; transitions: SlotTransition[]; dropped: DroppedSlot[] } {
   const day = decisions.day_index;
   const infeasible = (role: string, reason: string): TimelineError =>
@@ -134,12 +184,15 @@ export function resolveDayWindows(
   if (kept.length === 0) throw infeasible("-", "no slots");
 
   const dropped: DroppedSlot[] = [];
+  const used = reduceOrder.map(() => false);
   let result = layout(kept, anchors, gap);
   while ("role" in result) {
-    const victim = slotToDrop(kept, result.index);
-    if (victim < 0) throw infeasible(result.role, result.reason);
-    dropped.push({ role: kept[victim]!.slot.role, reason: "no_time" });
-    kept.splice(victim, 1);
+    if (!applyReduceStep(kept, reduceOrder, used, result.index, dropped)) {
+      const victim = slotToDrop(kept, result.index);
+      if (victim < 0) throw infeasible(result.role, result.reason);
+      dropped.push({ role: kept[victim]!.slot.role, reason: "no_time" });
+      kept.splice(victim, 1);
+    }
     result = layout(kept, anchors, gap);
   }
   const { start, end, gaps } = result;

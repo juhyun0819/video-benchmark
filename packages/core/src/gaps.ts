@@ -67,3 +67,12 @@ export function sampleGap(table: GapTable, from: PlaceKind, to: PlaceKind, rng: 
   }
   return Math.round(q.p90);
 }
+
+/** The table's median gap in minutes (no draw); 0 for the same place kind. */
+export function medianGap(table: GapTable, from: PlaceKind, to: PlaceKind): number {
+  if (from === to) return 0;
+  const transition: Transition = `${from}->${to}`;
+  const q = table.transitions[transition];
+  if (!q) throw new TimelineError("GAP_MISSING", `gap table has no entry for ${transition}`, { transition });
+  return q.p50;
+}

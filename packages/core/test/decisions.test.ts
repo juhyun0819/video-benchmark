@@ -2,14 +2,21 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ExceptionCatalogSchema,
+  ScheduleDefaultsSchema,
   WorldSchema,
   decideDay,
   decideDays,
   effectiveMealStyle,
   type DayDecisions,
   type ExceptionCatalog,
+  type ScheduleDefaults,
   type World,
 } from "../src/index.js";
+
+function defaults(): ScheduleDefaults {
+  const url = new URL("../../../config/schedule_defaults_atus2025.json", import.meta.url);
+  return ScheduleDefaultsSchema.parse(JSON.parse(readFileSync(url, "utf8")));
+}
 
 function catalog(): ExceptionCatalog {
   const url = new URL("../../../config/timeline/exceptions.v1.json", import.meta.url);
@@ -81,7 +88,7 @@ function bound(w: World): Set<string> {
 
 function run(o: Over = {}): DayDecisions[] {
   const w = makeWorld(o);
-  return decideDays(w, catalog(), { boundNodes: bound(w) });
+  return decideDays(w, catalog(), { boundNodes: bound(w), defaults: defaults() });
 }
 
 const WEEKEND = [6, 7, 13, 14, 20, 21, 27, 28];
@@ -244,7 +251,7 @@ describe("exceptions", () => {
   it("a slot exception writes its place into meal_place of the replaced role (R19)", () => {
     for (const seed of [1, 2, 3]) {
       const w = makeWorld({ seed, routine: 0, slot: 1, bindFrequent: true, placeNodes: { eat_out: "diner" } });
-      const days = decideDays(w, catalog(), { boundNodes: bound(w) });
+      const days = decideDays(w, catalog(), { boundNodes: bound(w), defaults: defaults() });
       for (const d of days) {
         expect(d.exceptions).toHaveLength(1);
         const e = d.exceptions[0]!;
@@ -302,7 +309,7 @@ describe("meal places", () => {
     const lunchOnlyOut = makeWorld();
     lunchOnlyOut.meal_style.workday.lunch = { eat_out: 1 };
     expect(effectiveMealStyle(lunchOnlyOut, bound(lunchOnlyOut)).workday.lunch).toEqual({});
-    const days = decideDays(lunchOnlyOut, catalog(), { boundNodes: bound(lunchOnlyOut) });
+    const days = decideDays(lunchOnlyOut, catalog(), { boundNodes: bound(lunchOnlyOut), defaults: defaults() });
     for (const d of days.filter((x) => x.template === "workday")) expect(d.meal_place.lunch).toBe("skip");
   });
 
@@ -327,7 +334,7 @@ describe("meal places", () => {
     for (const dist of Object.values(eff.rest_day)) expect(dist).not.toHaveProperty("workplace");
     expect(eff.workday.lunch).toHaveProperty("workplace");
 
-    const days = decideDays(w, catalog(), { boundNodes: bound(w) });
+    const days = decideDays(w, catalog(), { boundNodes: bound(w), defaults: defaults() });
     expect(days.some((d) => d.day_type === "leave_day")).toBe(true);
     for (const d of days.filter((x) => x.template !== "workday")) {
       expect(Object.values(d.meal_place)).not.toContain("workplace");
@@ -337,12 +344,40 @@ describe("meal places", () => {
 
 });
 
+describe("home_evening presence (CR3)", () => {
+  // G2: presence before layout, i.e. DayDecisions.optional.home_evening.
+  function share(prob?: number): number {
+    const w = makeWorld({ routine: 0, seed: 77 });
+    const d = defaults();
+    if (prob !== undefined) d.weekday_evening_home.slot_probability = prob;
+    const opts = { boundNodes: bound(w), defaults: d };
+    let workdays = 0;
+    let present = 0;
+    for (let day = 1; workdays < 2000; day++) {
+      const dec = decideDay(w, catalog(), opts, day, 0);
+      if (dec.template !== "workday") continue;
+      workdays += 1;
+      if (dec.optional.home_evening) present += 1;
+    }
+    return present / workdays;
+  }
+
+  it("routine_strength 0 → presence over 2000 workdays is within 0.02 of the configured 0.91", () => {
+    expect(defaults().weekday_evening_home.slot_probability).toBe(0.91);
+    expect(Math.abs(share() - 0.91)).toBeLessThanOrEqual(0.02);
+  });
+
+  it("a config probability of 0.5 changes the presence share", () => {
+    expect(Math.abs(share(0.5) - 0.5)).toBeLessThanOrEqual(0.035);
+  });
+});
+
 describe("determinism", () => {
   it("same input → identical output; attempt only changes that day", () => {
     const o = { seed: 9, routine: 0.3, slot: 0.3, day: 0.2, bindFrequent: true, placeNodes: { eat_out: "diner" } };
     expect(JSON.stringify(run(o))).toBe(JSON.stringify(run(o)));
     const w = makeWorld(o);
-    const opts = { boundNodes: bound(w) };
+    const opts = { boundNodes: bound(w), defaults: defaults() };
     expect(decideDay(w, catalog(), opts, 3, 0)).toEqual(run(o)[2]);
     const differs = [1, 2, 3, 4, 5].some(
       (a) => JSON.stringify(decideDay(w, catalog(), opts, 3, a)) !== JSON.stringify(run(o)[2]),

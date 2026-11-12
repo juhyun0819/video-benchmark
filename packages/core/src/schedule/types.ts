@@ -109,15 +109,39 @@ export const TemplateSlotSchema = z
   .refine((s) => s.node !== "$meal" || s.meal !== undefined, { message: "$meal slots need `meal`", path: ["meal"] });
 export type TemplateSlot = z.infer<typeof TemplateSlotSchema>;
 
-export const TemplatesSchema = z.object({
-  version: z.string(),
-  day_types: z.object({
-    workday: z.array(TemplateSlotSchema).min(1),
-    hobby_day: z.array(TemplateSlotSchema).min(1),
-    home_day: z.array(TemplateSlotSchema).min(1),
-  }),
-});
+/** One step of a day type's reduce order (E4): shrink sets the slot to its min_minutes, drop removes it. */
+export const ReduceStepSchema = z.object({ role: z.string(), action: z.enum(["shrink", "drop"]) });
+export type ReduceStep = z.infer<typeof ReduceStepSchema>;
+
+export const TemplatesSchema = z
+  .object({
+    version: z.string(),
+    day_types: z.object({
+      workday: z.array(TemplateSlotSchema).min(1),
+      hobby_day: z.array(TemplateSlotSchema).min(1),
+      home_day: z.array(TemplateSlotSchema).min(1),
+    }),
+    /** Per day type; a day type without one keeps R24's drop rule. */
+    reduce_order: z.record(TemplateNameSchema, z.array(ReduceStepSchema)).optional(),
+  })
+  .superRefine((t, ctx) => {
+    for (const [name, steps] of Object.entries(t.reduce_order ?? {})) {
+      const slots = t.day_types[name as TemplateName];
+      steps.forEach((step, i) => {
+        const slot = slots.find((s) => s.role === step.role);
+        if (slot === undefined || slot.required) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["reduce_order", name, i, "role"],
+            message: `${step.role} is not an optional ${name} slot`,
+          });
+        }
+      });
+    }
+  });
 export type Templates = z.infer<typeof TemplatesSchema>;
+
+const AdjustmentSchema = z.object({ item: z.string(), from: z.number(), to: z.number() });
 
 export const SlotSchema = z.object({
   slot_id: z.string().regex(/^d\d+-s\d+$/),
@@ -136,8 +160,8 @@ export const SlotTransitionSchema = z.object({
 });
 export type SlotTransition = z.infer<typeof SlotTransitionSchema>;
 
-/** An optional slot removed because the day had no time for it (R21). */
-export const DroppedSlotSchema = z.object({ role: z.string(), reason: z.literal("no_time") });
+/** An optional slot removed ("no_time", R21) or cut to its min_minutes ("shrunk", E4) because the day had no time for it. */
+export const DroppedSlotSchema = z.object({ role: z.string(), reason: z.enum(["no_time", "shrunk"]) });
 export type DroppedSlot = z.infer<typeof DroppedSlotSchema>;
 
 export const ScheduleDaySchema = z.object({
@@ -151,6 +175,8 @@ export const ScheduleDaySchema = z.object({
   slots: z.array(SlotSchema),
   dropped_slots: z.array(DroppedSlotSchema),
   transitions: z.array(SlotTransitionSchema),
+  /** Clamps applied after the day's jitter redraws ran out (E6). */
+  anchor_adjustments: z.array(AdjustmentSchema),
 });
 export type ScheduleDay = z.infer<typeof ScheduleDaySchema>;
 
@@ -159,7 +185,7 @@ const DonorPickSchema = z.object({
   backoff_level: z.enum(["occupation_sex_age", "occupation_sex", "occupation", "sex_age", "all"]),
   filled: z.array(z.string()),
   redraws: z.number().int().min(0).max(5),
-  adjustments: z.array(z.object({ item: z.string(), from: z.number(), to: z.number() })),
+  adjustments: z.array(AdjustmentSchema),
   sport_fill: z.enum(["level", "pool"]).optional(),
   profile: z.object({
     wake: z.number(),

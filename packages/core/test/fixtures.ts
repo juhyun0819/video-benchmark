@@ -119,6 +119,7 @@ export function makeDay(dayIndex: number, attempt = 0, defs?: SlotDef[]): Schedu
     slots,
     dropped_slots: [],
     transitions: [],
+    anchor_adjustments: [],
   };
 }
 

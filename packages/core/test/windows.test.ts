@@ -13,7 +13,7 @@ import {
 } from "../src/index.js";
 
 function templates(): Templates {
-  const url = new URL("../../../config/timeline/templates.v1.json", import.meta.url);
+  const url = new URL("../../../config/timeline/templates.v2.json", import.meta.url);
   return TemplatesSchema.parse(JSON.parse(readFileSync(url, "utf8")));
 }
 
@@ -63,7 +63,8 @@ function workday(over: Partial<DayDecisions> = {}): DayDecisions {
 const gap20 = () => 20;
 
 function resolveWorkday(decisions: DayDecisions = workday(), anchors: DayAnchors = ANCHORS) {
-  return resolveDayWindows(templates().day_types.workday, anchors, decisions, world(), gap20);
+  const t = templates();
+  return resolveDayWindows(t.day_types.workday, anchors, decisions, world(), gap20, t.reduce_order?.workday);
 }
 
 const table = (slots: { role: string; window: [string, string]; spec: { node: string } }[]) =>
@@ -95,7 +96,7 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     });
     expect(slots[2]!.spec).toMatchObject({ category: "meal", setting: "venue_indoor", time_of_day: "midday" });
     expect(slots[4]!.spec).toMatchObject({ category: "meal", setting: "home_indoor", time_of_day: "evening" });
-    expect(slots.map((s) => s.required)).toEqual([true, true, false, true, false, false]);
+    expect(slots.map((s) => s.required)).toEqual([true, true, false, true, true, false]);
   });
 
   it("records one transition per place change", () => {
@@ -151,15 +152,68 @@ describe("resolveDayWindows (hand-computed workday)", () => {
     expect((err as TimelineError).details).toMatchObject({ day: 1, role: "work_pm" });
   });
 
-  it("a 90-min workday hobby that cannot end before sleep is the only slot dropped (R24)", () => {
+  it("a 90-min workday hobby that cannot end before sleep is shrunk, then dropped (E4)", () => {
     const decisions = workday({ optional: { hobby: true, home_evening: true }, hobby_node: "hobby_a" });
     const { slots, dropped } = resolveWorkday(decisions, { ...ANCHORS, sleep: 1260 });
-    expect(dropped).toEqual([{ role: "hobby", reason: "no_time" }]);
+    expect(dropped).toEqual([
+      { role: "hobby", reason: "shrunk" },
+      { role: "hobby", reason: "no_time" },
+    ]);
     expect(table(slots).slice(3)).toEqual([
       "work_pm 12:45-17:00 workplace",
       "dinner 18:30-19:30 home",
       "home_evening 19:30-21:00 home",
     ]);
+  });
+
+  it("work_end 18:30 and sleep 21:30 keep dinner, shrink then drop the hobby, keep home_evening >= 30 min (E4)", () => {
+    const decisions = workday({ optional: { hobby: true, home_evening: true }, hobby_node: "hobby_a" });
+    const { slots, dropped } = resolveWorkday(decisions, { ...ANCHORS, work_end: 1110, dinner: 1140, sleep: 1290 });
+    expect(dropped).toEqual([
+      { role: "hobby", reason: "shrunk" },
+      { role: "hobby", reason: "no_time" },
+    ]);
+    expect(table(slots).slice(3)).toEqual([
+      "work_pm 12:45-18:30 workplace",
+      "dinner 19:00-20:00 home",
+      "home_evening 20:00-21:30 home",
+    ]);
+  });
+
+  it("a hobby shrunk to min_minutes that then fits is kept at 30 min (E4)", () => {
+    const decisions = workday({ optional: { hobby: true, home_evening: true }, hobby_node: "hobby_a" });
+    const { slots, dropped } = resolveWorkday(decisions, { ...ANCHORS, work_end: 1110, dinner: 1110, sleep: 1290 });
+    expect(dropped).toEqual([{ role: "hobby", reason: "shrunk" }]);
+    expect(table(slots).slice(4)).toEqual([
+      "dinner 18:50-19:50 home",
+      "hobby 20:10-20:40 hobby_a",
+      "home_evening 21:00-21:30 home",
+    ]);
+  });
+
+  it("reduce steps for roles not kept are skipped: no hobby, home_evening under 30 min is dropped (E4)", () => {
+    const { slots, dropped } = resolveWorkday(workday(), { ...ANCHORS, sleep: 1190 });
+    expect(dropped).toEqual([{ role: "home_evening", reason: "no_time" }]);
+    expect(slots.map((s) => s.role)).toEqual(["home_morning", "work_am", "lunch", "work_pm", "dinner"]);
+  });
+
+  it("a workday whose required dinner cannot fit throws SCHEDULE_INFEASIBLE at dinner", () => {
+    const decisions = workday({ optional: { hobby: true, home_evening: true }, hobby_node: "hobby_a" });
+    let err: unknown;
+    try {
+      resolveWorkday(decisions, { ...ANCHORS, sleep: 1150 });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(TimelineError);
+    expect((err as TimelineError).code).toBe("SCHEDULE_INFEASIBLE");
+    expect((err as TimelineError).details).toMatchObject({ day: 1, role: "dinner" });
+  });
+
+  it("templates.v2 rejects a reduce_order step for a role missing from the day type", () => {
+    const raw = JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v2.json", import.meta.url), "utf8"));
+    raw.reduce_order.workday.push({ role: "nap", action: "drop" });
+    expect(TemplatesSchema.safeParse(raw).success).toBe(false);
   });
 
   it("a hobby that fits before sleep is kept", () => {

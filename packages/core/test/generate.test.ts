@@ -17,6 +17,8 @@ import {
   generateSchedule,
   hardFilterFailures,
   parseClock,
+  rngFor,
+  selectDonors,
   verifyTimeline,
   type Clip,
   type ClipCatalog,
@@ -77,7 +79,7 @@ function rows(weekend: Partial<DonorRow> = {}, weekdayOver: Partial<DonorRow> = 
   return [...weekday, ...we];
 }
 
-type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number };
+type Over = { placeNodes?: Record<string, string>; day?: number; slot?: number; routine?: number; seed?: number };
 
 function makeWorld(o: Over = {}): World {
   return WorldSchema.parse({
@@ -117,19 +119,24 @@ function makeWorld(o: Over = {}): World {
       exception_rate: { slot: o.slot ?? 0.15, day: o.day ?? 0.1 },
       wake_sleep: "default_v1",
     },
-    seed: 20261112,
+    seed: o.seed ?? 20261112,
   });
 }
 
-function input(o: Over = {}, weekend: Partial<DonorRow> = {}, weekday: Partial<DonorRow> = {}): ScheduleInput {
+function input(
+  o: Over = {},
+  weekend: Partial<DonorRow> = {},
+  weekday: Partial<DonorRow> = {},
+  pool?: DonorRow[],
+): ScheduleInput {
   counter = 0;
   const world = makeWorld(o);
   return {
     world,
-    templates: TemplatesSchema.parse(readConfig("timeline/templates.v1.json")),
+    templates: TemplatesSchema.parse(readConfig("timeline/templates.v2.json")),
     gaps: GapTableSchema.parse(readConfig("timeline/gaps.v1.json")) as GapTable,
     exceptions: ExceptionCatalogSchema.parse(readConfig("timeline/exceptions.v1.json")),
-    source: atus2025Source(rows(weekend, weekday)),
+    source: atus2025Source(pool ?? rows(weekend, weekday)),
     boundNodes: new Set(Object.keys(world.node_binding)),
     defaults: ScheduleDefaultsSchema.parse(readConfig("schedule_defaults_atus2025.json")),
   };
@@ -158,7 +165,7 @@ describe("generateSchedule", () => {
     const schedule = generateSchedule(input());
     expect(ScheduleSchema.parse(schedule)).toEqual(schedule);
     expect(schedule.generator_version).toBe("schedule.v1");
-    expect(schedule.template_version).toBe("templates.v1");
+    expect(schedule.template_version).toBe("templates.v2");
     expect(schedule.gap_table_version).toBe("gaps.v1");
     expect(schedule.exception_catalog_version).toBe("exceptions.v1");
     expect(schedule.days.map((d) => d.day_index)).toEqual(Array.from({ length: 28 }, (_, i) => i + 1));
@@ -228,28 +235,28 @@ describe("generateSchedule", () => {
   });
 
   it("uses the weekend donor for leave days and records day exceptions", () => {
-    // Weekend donors wake at 10:00, weekday donors around 06:45; routine 1 keeps σ at 20 min.
+    // Weekend donors wake at 10:00, weekday donors around 06:45 (at most 07:00); routine 1 keeps σ at 20 min.
     const schedule = generateSchedule(input({ day: 1, routine: 1 }, { wake: 600, breakfast_time: 630 }));
     const leave = schedule.days.filter((d) => d.day_type === "leave_day");
     expect(leave.length).toBeGreaterThan(0);
     for (const day of leave) {
-      expect(parseClock(day.wake)).toBeGreaterThan(540);
+      expect(parseClock(day.wake)).toBeGreaterThan(500);
       expect(day.exceptions).toEqual([{ scope: "day", type: "leave_day", replaces: "workday", day_range: [day.day_index, day.day_index] }]);
       expect(day.slots.map((s) => s.role)).toContain("chores");
       expect(day.slots.some((s) => s.spec.category === "work")).toBe(false);
     }
   });
 
-  it("workday hobby with no room before sleep is dropped as no_time; required slots stay (R21)", () => {
+  it("workday hobby with no room before sleep is shrunk or dropped; required slots stay (R21, E4)", () => {
     // Weekday donors go to bed at 21:00, so a 90-min hobby after dinner never fits.
     const schedule = generateSchedule(input({ day: 0, slot: 0, routine: 1 }, {}, { bed: 1260 }));
     const workdays = schedule.days.filter((d) => d.day_type === "workday");
     const hobbyDropped = workdays.filter((d) => d.dropped_slots.some((x) => x.role === "hobby"));
     expect(hobbyDropped.length).toBeGreaterThan(0);
     for (const day of workdays) {
-      for (const x of day.dropped_slots) expect(x.reason).toBe("no_time");
+      for (const x of day.dropped_slots) expect(["no_time", "shrunk"]).toContain(x.reason);
       const roles = day.slots.map((s) => s.role);
-      for (const role of ["home_morning", "work_am", "work_pm"]) expect(roles).toContain(role);
+      for (const role of ["home_morning", "work_am", "work_pm", "dinner"]) expect(roles).toContain(role);
       expect(day.slots.every((s) => parseClock(s.window[1]) <= parseClock(day.sleep))).toBe(true);
     }
     expect(schedule.days.filter((d) => d.day_type !== "workday").every((d) => d.dropped_slots.length === 0)).toBe(true);
@@ -261,7 +268,7 @@ describe("generateSchedule", () => {
     const schedule = generateSchedule(inp);
     let workplaceLunches = 0;
     for (const day of schedule.days.filter((d) => d.day_type === "workday")) {
-      const decided = decideDay(inp.world, inp.exceptions, { boundNodes: inp.boundNodes }, day.day_index, day.attempt);
+      const decided = decideDay(inp.world, inp.exceptions, { boundNodes: inp.boundNodes, defaults: inp.defaults }, day.day_index, day.attempt);
       if (decided.meal_place.lunch === "workplace") {
         workplaceLunches += 1;
         expect(day.slots.map((x) => x.role)).toContain("lunch");
@@ -319,6 +326,83 @@ describe("generateSchedule", () => {
     const wakes = schedule.days.map((d) => parseClock(d.wake));
     expect(Math.min(...wakes)).toBe(240);
     for (const day of schedule.days) expect(day.slots[0]!.spec.time_of_day).not.toBe("night");
+  });
+
+  it("every workday keeps its required dinner (CR2)", () => {
+    for (const o of [{ routine: 0 }, { routine: 0.5 }, { routine: 1 }]) {
+      const schedule = generateSchedule(input({ ...o, day: 0 }));
+      const workdays = schedule.days.filter((d) => d.day_type === "workday");
+      expect(workdays.length).toBeGreaterThan(0);
+      for (const day of workdays) {
+        const dinner = day.slots.find((s) => s.role === "dinner");
+        expect(dinner, `day ${day.day_index}`).toBeDefined();
+        expect(dinner!.required).toBe(true);
+      }
+    }
+  });
+
+  it("a jitter that pushes wake below 04:00 is redrawn, not clamped (E6)", () => {
+    // Weekday donors wake at 04:10; with σ 20 min the first jitter draw is below 04:00 on about a third of workdays.
+    const inp = input({ day: 0, slot: 0, routine: 1 }, {}, { wake: 250, breakfast_time: 330 });
+    const schedule = generateSchedule(inp);
+    const sigma = inp.defaults.day_level_sigma.routine_strength_1;
+    const firstDrawEarly = schedule.days.filter(
+      (d) =>
+        d.day_type === "workday" &&
+        Math.round(250 + rngFor(inp.world.seed, "day", d.day_index, d.attempt, "jitter", 0, "wake").normal(0, sigma)) < 240,
+    );
+    expect(firstDrawEarly.length).toBeGreaterThan(0);
+    for (const day of schedule.days) {
+      expect(day.anchor_adjustments).toEqual([]);
+      expect(parseClock(day.wake)).toBeGreaterThanOrEqual(240);
+    }
+  });
+
+  it("a huge σ exhausts the redraws and records the clamps as anchor_adjustments (E6)", () => {
+    const base = input({ day: 0, slot: 0, routine: 1 });
+    const { donors } = generateSchedule(base);
+    const wild: ScheduleInput = {
+      ...base,
+      defaults: { ...base.defaults, day_level_sigma: { routine_strength_0: 400, routine_strength_1: 400 } },
+    };
+    const adjusted = [];
+    for (let d = 1; d <= 28; d++) {
+      try {
+        const day = generateDay(wild, donors, d, 0);
+        if (day.anchor_adjustments.length > 0) adjusted.push(day);
+      } catch (e) {
+        if (!(e instanceof TimelineError && e.code === "SCHEDULE_INFEASIBLE")) throw e;
+      }
+    }
+    expect(adjusted.length).toBeGreaterThan(0);
+    for (const day of adjusted) {
+      expect(parseClock(day.wake)).toBeGreaterThanOrEqual(240);
+      expect(parseClock(day.sleep)).toBeLessThanOrEqual(1679);
+      for (const a of day.anchor_adjustments) expect(a.from).not.toBe(a.to);
+    }
+  });
+
+  it("a weekday donor whose required workday slots cannot lay out is redrawn (E5)", () => {
+    // Bad rows end work at 21:40 with dinner at 21:30 and bed at 22:40: the bounds hold, but dinner
+    // starts after work_end + 20 min and runs past bed. Good rows carry 4x the weight.
+    counter = 0;
+    const bad = Array.from({ length: 20 }, (_, i) =>
+      row({ id: `bad${i}`, w: 1, work_end: 1300, dinner_time: 1290, bed: 1360 }),
+    );
+    const good = Array.from({ length: 20 }, (_, i) => row({ id: `good${i}`, w: 4 }));
+    const weekend = Array.from({ length: 40 }, () =>
+      row({ daytype: "weekend", worked: false, work_start: null, work_end: null, wake: 470, bed: 1390, breakfast_time: 500 }),
+    );
+    const pool = [...bad, ...good, ...weekend];
+    const src = atus2025Source(pool);
+    const attrs = makeWorld().attributes;
+    let seed = 1;
+    while (!selectDonors(attrs, src, { seed, allowCountryFallback: false }).weekday.case_id.startsWith("bad")) seed++;
+
+    const schedule = generateSchedule(input({ day: 0, slot: 0, routine: 1, seed }, {}, {}, pool));
+    expect(schedule.donors.weekday.redraws).toBeGreaterThan(0);
+    expect(schedule.donors.weekday.case_id).toMatch(/^good/);
+    expect(schedule.donors.weekday.adjustments).toEqual([]);
   });
 
   it("schedule clocks accept 00:00–27:59 and reject 28:00 and minute 60 (R44)", () => {

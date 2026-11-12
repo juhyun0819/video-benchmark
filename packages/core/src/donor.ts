@@ -314,8 +314,8 @@ export function donorBoundViolations(
 
 const CLAMP_ORDER = ["wake", "sleep", "breakfast", "dinner", "work_end", "lunch", "sport"] as const;
 
-/** Clamp violated items to their bounds in dependency order, recording each change. */
-function clampToBounds(
+/** Clamp violated items to their bounds in dependency order, recording each change (E5, E6). */
+export function clampToBounds(
   kind: DayKind,
   profile: DayProfile,
   lunchMinutes: number,

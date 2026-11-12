@@ -155,7 +155,7 @@ world(합성 사람 한 명) 파일 하나가 입력이다. 예시는 `config/wo
 
 | 파일 | 내용 |
 |---|---|
-| `templates.v1.json` | 요일 유형별 하루 템플릿 |
+| `templates.v2.json` | 요일 유형별 하루 템플릿과 줄이는 순서(`reduce_order`) |
 | `exceptions.v1.json` | 날 단위·슬롯 단위 예외 |
 | `gaps.v1.json` | 전환 사이 공백 시간 표. `reviewed: false`이므로 통근 외 전환은 사람이 검토해야 한다(스펙 13절 열린 항목 1) |
 
