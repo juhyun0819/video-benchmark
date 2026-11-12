@@ -13,6 +13,7 @@ import {
   type ScheduleDay,
   type Slot,
   type Timeline,
+  type TransitionBlock,
   type World,
 } from "@vb/core";
 
@@ -102,8 +103,7 @@ export function collectDates(catalog: ClipCatalog, world: World): Map<string, Re
   const person = personSourceOf(world);
   const trips = tripDatesOf(world);
   const groups = new Map<string, RealClip[]>();
-  for (const clip of catalog.clips()) {
-    if (clip.person_source !== person) continue;
+  for (const clip of deOverlap(catalog.clips().filter((c) => c.person_source === person))) {
     const start = realStartOf(clip);
     if (start === undefined) continue;
     const rc = { clip, start, end: start + clip.source_end_s - clip.source_start_s };
@@ -129,6 +129,35 @@ export function collectDates(catalog: ClipCatalog, world: World): Map<string, Re
   return out;
 }
 
+/**
+ * Fix ruling 2: real L3 clips can nest or overlap inside one video. Per video, the longest clip is
+ * kept and every clip overlapping a kept one is dropped (ties: earlier start, then clip_id), so no
+ * two clips that could be planned share footage.
+ */
+export function deOverlap(clips: readonly Clip[]): Clip[] {
+  const byVideo = new Map<string, Clip[]>();
+  for (const c of clips) {
+    const key = `${c.source.dataset}:${c.source.video_id}`;
+    byVideo.set(key, [...(byVideo.get(key) ?? []), c]);
+  }
+  const keep = new Set<string>();
+  for (const group of byVideo.values()) {
+    const kept: Clip[] = [];
+    const longestFirst = [...group].sort(
+      (a, b) =>
+        b.source_end_s - b.source_start_s - (a.source_end_s - a.source_start_s) ||
+        a.source_start_s - b.source_start_s ||
+        (a.clip_id < b.clip_id ? -1 : a.clip_id > b.clip_id ? 1 : 0),
+    );
+    for (const c of longestFirst) {
+      if (kept.some((k) => k.source_start_s < c.source_end_s && c.source_start_s < k.source_end_s)) continue;
+      kept.push(c);
+      keep.add(c.clip_id);
+    }
+  }
+  return clips.filter((c) => keep.has(c.clip_id));
+}
+
 const byRealTime = (a: RealClip, b: RealClip) =>
   a.start - b.start || (a.clip.clip_id < b.clip.clip_id ? -1 : a.clip.clip_id > b.clip.clip_id ? 1 : 0);
 const sum = (cs: readonly RealClip[]) => cs.reduce((s, c) => s + c.end - c.start, 0);
@@ -137,7 +166,10 @@ export type Pool = "work" | "rest" | "trip";
 export type DayLike = Pick<ScheduleDay, "day_index" | "day_type" | "trip" | "exceptions">;
 export type DateAssignment = { day_index: number; day_type: DayType; pool: Pool; date: string | null };
 
-/** Trip days take trip dates; workdays (plain or late) take work dates; leave days and the other rest days take rest dates. */
+/**
+ * Trip days take trip dates; workdays (plain or late) take work dates; leave days and the other rest
+ * days take rest dates, then partial work dates once the rest dates run out (fix ruling 4).
+ */
 export function poolOf(day: DayLike): Pool {
   if (day.trip !== undefined) return "trip";
   if (day.exceptions.some((e) => e.type === "leave_day")) return "rest";
@@ -152,7 +184,9 @@ const rank = (a: RealDate, b: RealDate) =>
  * B5 step 3: one real date per synthetic day, each date used once. Trip days take their trip's
  * day_group_sequence entry at `trip.index`. Other days are visited in an order shuffled with
  * rngFor(seed, "block_dates") and take the best unused date of their pool; late workdays prefer
- * first work at or after 11:00, plain workdays earlier. A day whose pool is empty gets `date: null`.
+ * first work at or after 11:00, plain workdays earlier; when that side is empty, the day takes the
+ * other side's date whose first work is closest to its preference (latest for late days, earliest
+ * otherwise). Rest days fall back to partial dates. A day whose pool is empty gets `date: null`.
  */
 export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string, RealDate>, world: World): DateAssignment[] {
   const used = new Set<string>();
@@ -171,13 +205,15 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
       const d = world.node_binding[day.trip!.node]?.day_group_sequence?.[day.trip!.index];
       date = d !== undefined && !used.has(d) ? d : null;
     } else {
-      const free = sorted.filter((x) => x.kind === pool && !used.has(x.date));
+      const free = (kind: DateKind) => sorted.filter((x) => x.kind === kind && !used.has(x.date));
       if (pool === "work") {
         const late = day.day_type === "workday_late";
-        const preferred = free.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
-        date = (preferred[0] ?? free[0])?.date ?? null;
+        const work = free("work");
+        const preferred = work.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
+        const fallback = [...work].sort((a, b) => (late ? b.first_work_s! - a.first_work_s! : a.first_work_s! - b.first_work_s!) || rank(a, b));
+        date = (preferred[0] ?? fallback[0])?.date ?? null;
       } else {
-        date = free[0]?.date ?? null;
+        date = (free("rest")[0] ?? free("partial")[0])?.date ?? null;
       }
     }
     if (date !== null) used.add(date);
@@ -224,7 +260,7 @@ function slotKind(world: World, slot: Slot): SlotKind {
 
 /**
  * B5 step 4–5: the block plan of one synthetic day from its real date. Meal slots are planned first,
- * then the other slots in window order, then home↔work transitions. Each slot takes the unused clips
+ * then the other slots in window order, then the morning and evening commutes. Each slot takes the unused clips
  * of its real phase in real-time order until they fill its window (layoutBlocks trims the last); a
  * clip is used once. Only clips the world binds to the slot's place are used (ruling 2).
  */
@@ -233,7 +269,8 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const clips = date.clips;
   const used = new Set<string>();
   const planned = new Map<string, RealClip[]>();
-  const rest = date.kind === "rest";
+  // Partial dates are used only by rest days (fix ruling 4), so they follow the rest-date rules.
+  const rest = date.kind === "rest" || date.kind === "partial";
 
   const home = (c: RealClip) => isHome(world, c.clip);
   const away = clips.filter((c) => !home(c));
@@ -254,7 +291,8 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
       case "dinner":
         return { cands: meals.filter(inRange(H(17), Infinity)), run: true };
       case "home_morning":
-        return { cands: clips.filter((c) => bound(c) && c.start < firstAway), run: false };
+        // Fix ruling 3: on rest dates only the morning (before 12:00).
+        return { cands: clips.filter((c) => bound(c) && c.start < firstAway && (!rest || c.start < H(12))), run: false };
       case "work_am":
         return { cands: clips.filter((c) => bound(c) && c.clip.category !== "meal" && c.start < lunchStart), run: false };
       case "work_pm":
@@ -299,21 +337,29 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
     take(slot.slot_id, run ? firstRun(free) : free, we - ws);
   }
 
-  const kinds = new Map(day.slots.map((s) => [s.slot_id, slotKind(world, s)] as const));
-  const transit = clips.filter((c) => transitAccepts(world, c.clip));
-  for (const tr of transitionBlocks(day)) {
-    // Ruling 1: an empty span would drop its clips silently.
-    if (tr.span[1] <= tr.span[0]) continue;
-    const from = kinds.get(tr.from_slot);
-    const to = kinds.get(tr.to_slot);
-    if (!((from === "home" && to === "work") || (from === "work" && to === "home"))) continue;
-    const before = planned.get(tr.from_slot);
-    const after = planned.get(tr.to_slot);
-    if (before === undefined && after === undefined) continue;
-    const lo = before !== undefined ? Math.max(...before.map((c) => c.end)) : -Infinity;
-    const hi = after !== undefined ? Math.min(...after.map((c) => c.start)) : Infinity;
-    const free = transit.filter((c) => !used.has(c.clip.clip_id) && c.start >= lo && c.start < hi);
-    take(tr.transition_id, free, tr.span[1] - tr.span[0]);
+  // Fix ruling 1: commute windows come from the date's real phases, not from what the slots planned.
+  // Morning: after the real home_morning phase, before the first workplace clip. Evening: after the
+  // last workplace clip (any category), before the first home clip after it (open end if none).
+  const work = clips.filter((c) => isWork(world, c.clip));
+  if (work.length > 0) {
+    const kinds = new Map(day.slots.map((s) => [s.slot_id, slotKind(world, s)] as const));
+    // Ruling 1 (empty spans drop their clips silently).
+    const spans = transitionBlocks(day).filter((tr) => tr.span[1] > tr.span[0]);
+    const between = (from: SlotKind, to: SlotKind) =>
+      spans.filter((tr) => kinds.get(tr.from_slot) === from && kinds.get(tr.to_slot) === to).sort((a, b) => a.span[0] - b.span[0]);
+    const lastWorkEnd = Math.max(...work.map((c) => c.end));
+    const homeMorning = clips.filter((c) => home(c) && c.start < firstAway);
+    const windows: [TransitionBlock | undefined, number, number][] = [
+      [between("home", "work")[0], homeMorning.length > 0 ? Math.max(...homeMorning.map((c) => c.end)) : -Infinity, work[0]!.start],
+      [between("work", "home").at(-1), lastWorkEnd, clips.find((c) => home(c) && c.start >= lastWorkEnd)?.start ?? Infinity],
+    ];
+    const transit = clips.filter((c) => transitAccepts(world, c.clip));
+    // Only the day's first home→work and last work→home transitions are commutes; midday ones stay empty.
+    for (const [tr, lo, hi] of windows) {
+      if (tr === undefined) continue;
+      const free = transit.filter((c) => !used.has(c.clip.clip_id) && c.start >= lo && c.start < hi);
+      take(tr.transition_id, free, tr.span[1] - tr.span[0]);
+    }
   }
 
   const order = [...ordered.map((s) => s.slot_id), ...transitionBlocks(day).map((x) => x.transition_id)];

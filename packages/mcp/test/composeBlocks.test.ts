@@ -18,7 +18,7 @@ import {
   type World,
 } from "@vb/core";
 import { loadConfig, scheduleInput } from "../src/config.js";
-import { assignDates, collectDates, composeBlocks, planDay, realStartOf, type DayLike } from "../src/composeBlocks.js";
+import { assignDates, collectDates, composeBlocks, deOverlap, planDay, realStartOf, type DayLike } from "../src/composeBlocks.js";
 import { CONFIG_DIR, EXAMPLE_WORLD, REPO_ROOT, filesIn, makeTempDir, writeAtusPool, writeDataset } from "./helpers.js";
 
 // Synthetic data only: every clip below is made up for these tests.
@@ -259,6 +259,28 @@ describe("real dates", () => {
   });
 });
 
+describe("overlapping clips of one video", () => {
+  const world = makeWorld();
+
+  it("keeps the longest clip of a video and drops the ones nested in or overlapping it", () => {
+    const clips = rec("2026-05-04", [
+      { at: "08:00", min: 60, node: "workplace" },
+      { at: "08:10", min: 20, node: "workplace" }, // nested
+      { at: "08:50", min: 30, node: "workplace" }, // partly overlapping
+      { at: "09:20", min: 30, node: "workplace" }, // touches the dropped 08:50 clip only: kept
+    ]);
+    const other = rec("2026-05-04", [{ at: "08:10", min: 20, node: "workplace" }], { video: "rec-b" });
+    expect(deOverlap([...clips, ...other]).map((c) => c.clip_id)).toEqual([
+      "nextme800:rec-2026-05-04:08:00",
+      "nextme800:rec-2026-05-04:09:20",
+      "nextme800:rec-b:08:10",
+    ]);
+    const date = collectDates(new MemCatalog(clips), world).get("2026-05-04")!;
+    expect(date.clips.map((c) => c.clip.clip_id)).toEqual(["nextme800:rec-2026-05-04:08:00", "nextme800:rec-2026-05-04:09:20"]);
+    expect(date.work_seconds).toBe(90 * 60);
+  });
+});
+
 describe("date assignment", () => {
   const world = makeWorld();
   const day = (day_index: number, day_type: DayLike["day_type"], trip?: DayLike["trip"]): DayLike => ({
@@ -293,6 +315,36 @@ describe("date assignment", () => {
     expect(assignDates([day(1, "workday_late")], onlyEarly, world)[0]!.date).toBe("2026-05-04");
     const onlyLate = collectDates(new MemCatalog(workDate("2026-05-05", { late: true })), world);
     expect(assignDates([day(1, "workday")], onlyLate, world)[0]!.date).toBe("2026-05-05");
+  });
+
+  it("uses partial work dates for rest days only after the rest dates run out", () => {
+    // The partial date ranks higher (home first, more footage) but still comes after the rest date.
+    const partial = rec("2026-05-12", [{ at: "06:00", min: 600, node: "home" }, { at: "16:30", min: 30, node: "workplace" }]);
+    const dates = collectDates(new MemCatalog([...restDate("2026-05-09"), ...partial]), world);
+    expect(dates.get("2026-05-12")!.kind).toBe("partial");
+    expect(assignDates([day(1, "home_day")], dates, world).map((a) => a.date)).toEqual(["2026-05-09"]);
+    const three = assignDates([day(1, "home_day"), day(2, "leave_day"), day(3, "hobby_day")], dates, world);
+    expect(three.flatMap((a) => (a.date === null ? [] : [a.date])).sort()).toEqual(["2026-05-09", "2026-05-12"]);
+    expect(three.filter((a) => a.date === null)).toHaveLength(1);
+    expect(assignDates([day(1, "workday")], dates, world)[0]!.date).toBeNull();
+  });
+
+  it("falls back to the other side's date closest to the preferred first-work time", () => {
+    // The 10:00 date ranks lower than the 08:40 one but is the closer fallback for a late day.
+    const early = collectDates(
+      new MemCatalog([...workDate("2026-05-04"), ...rec("2026-05-06", [{ at: "10:00", min: 120, node: "workplace" }])]),
+      world,
+    );
+    expect(assignDates([day(1, "workday_late")], early, world)[0]!.date).toBe("2026-05-06");
+    // The 15:00 date ranks higher than the 12:40 one but a plain workday takes the earliest first work.
+    const late = collectDates(
+      new MemCatalog([
+        ...workDate("2026-05-05", { late: true }),
+        ...rec("2026-05-07", [{ at: "07:00", min: 300, node: "home" }, { at: "15:00", min: 120, node: "workplace" }]),
+      ]),
+      world,
+    );
+    expect(assignDates([day(1, "workday")], late, world)[0]!.date).toBe("2026-05-05");
   });
 
   it("ranks dates by home footage before leaving, then by labeled minutes", () => {
@@ -360,6 +412,45 @@ describe("real day phases", () => {
       "d1-s7": ["18:20", "19:20"],
       "d1-t1": ["08:00"],
       "d1-t2": ["17:30"],
+    });
+  });
+
+  it("takes commute bounds from the real phases, not from the clips a short slot planned", () => {
+    const clips = rec("2026-05-04", [
+      { at: "07:00", min: 30, node: "home" },
+      { at: "08:00", min: 30, node: "transit" },
+      { at: "08:40", min: 120, node: "workplace" },
+      { at: "12:00", min: 20, node: "workplace", category: "meal" },
+      { at: "13:00", min: 60, node: "workplace" },
+      { at: "14:10", min: 15, node: "transit" }, // an errand between two work clips
+      { at: "14:30", min: 90, node: "workplace" },
+      { at: "17:00", min: 30, node: "workplace", category: "meal" }, // a workplace dinner, placed in the home dinner slot
+      { at: "17:30", min: 40, node: "transit" },
+      { at: "18:20", min: 20, node: "home" },
+      { at: "19:30", min: 20, node: "transit" }, // after the first home clip that follows the last work: not a commute
+    ]);
+    const day = mkDay("workday", [
+      slot(1, "home_morning", "home", "07:00", "08:00"),
+      slot(2, "work_am", "workplace", "08:30", "12:00"),
+      slot(3, "lunch", "workplace", "12:00", "12:45"),
+      slot(4, "work_pm", "workplace", "12:45", "13:45"),
+      slot(5, "dinner", "home", "18:30", "19:15"),
+    ], [[1, 2, 30], [4, 5, 45]]);
+    const got = byBlock(world, day, clips, "2026-05-04");
+    expect(got["d1-s4"]).toEqual(["13:00"]);
+    expect(got["d1-s5"]).toEqual(["17:00"]);
+    expect(got["d1-t1"]).toEqual(["08:00"]);
+    expect(got["d1-t2"]).toEqual(["17:30"]);
+  });
+
+  it("on a rest date, home_morning takes only home footage before 12:00", () => {
+    const day = mkDay("hobby_day", [
+      slot(1, "home_morning", "home", "07:00", "13:00"),
+      slot(2, "home_afternoon", "home", "13:00", "17:00"),
+    ]);
+    expect(byBlock(world, day, restDate("2026-05-09"), "2026-05-09")).toEqual({
+      "d1-s1": ["08:00", "09:10", "10:00"],
+      "d1-s2": ["12:30", "13:10", "14:20", "15:30"],
     });
   });
 
