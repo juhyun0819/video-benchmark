@@ -119,10 +119,12 @@ function layout(kept: Kept[], anchors: DayAnchors, gap: GapFn): Layout | Failure
 /**
  * R24: the failing slot itself when optional, else the nearest optional slot
  * before it, else the last optional slot after it; -1 when none is optional.
+ * B16: overridden (`exempt`) slots count as not optional.
  */
-function slotToDrop(kept: Kept[], failing: number): number {
-  for (let i = failing; i >= 0; i--) if (!kept[i]!.slot.required) return i;
-  for (let i = kept.length - 1; i > failing; i--) if (!kept[i]!.slot.required) return i;
+function slotToDrop(kept: Kept[], failing: number, exempt: ReadonlySet<string>): number {
+  const optional = (i: number) => !kept[i]!.slot.required && !exempt.has(kept[i]!.slot.role);
+  for (let i = failing; i >= 0; i--) if (optional(i)) return i;
+  for (let i = kept.length - 1; i > failing; i--) if (optional(i)) return i;
   return -1;
 }
 
@@ -131,7 +133,8 @@ function slotToDrop(kept: Kept[], failing: number): number {
  * still kept and can affect the failing slot (G10: a slot's layout depends only
  * on itself, the slots before it and the next one, so a drop may target up to
  * failing + 1; a shrink only up to failing). A shrink needs a duration above
- * min_minutes. Returns false when no step applies.
+ * min_minutes. Returns false when no step applies. B16: steps on an
+ * overridden (`exempt`) role never apply.
  */
 function applyReduceStep(
   kept: Kept[],
@@ -139,11 +142,12 @@ function applyReduceStep(
   used: boolean[],
   failing: number,
   dropped: DroppedSlot[],
+  exempt: ReadonlySet<string>,
 ): boolean {
   for (let si = 0; si < steps.length; si++) {
     if (used[si]) continue;
     const step = steps[si]!;
-    const i = kept.findIndex((k) => k.slot.role === step.role && !k.slot.required);
+    const i = exempt.has(step.role) ? -1 : kept.findIndex((k) => k.slot.role === step.role && !k.slot.required);
     if (i < 0) {
       used[si] = true;
       continue;
@@ -272,6 +276,49 @@ function shrinkEvening(
   return true;
 }
 
+/** B16: one day's slot override (dials.slot_overrides without the day). */
+export type SlotDuration = { role: string; duration_min: number };
+/** B16: home-place slots after an overridden slot may shrink to this (or their own lower min) before they are dropped. */
+export const OVERRIDE_HOME_MIN_MINUTES = 20;
+/** B16: the home-place slots that give way to an overridden slot before it. */
+const OVERRIDE_HOME_ROLES: ReadonlySet<string> = new Set(["home_afternoon", "chores", "home_evening"]);
+
+/**
+ * B16 step 1: the overridden slot as the normal layout sees it. It lasts at
+ * most its override (a template duration above it is cut to it) and its
+ * min_minutes is at most the override; the slot is exempt from reductions.
+ */
+function overrideCapped(slot: TemplateSlot, minutes: number): TemplateSlot {
+  const capped = { ...slot, min_minutes: Math.min(slot.min_minutes, minutes) };
+  if (slot.duration_minutes !== undefined) capped.duration_minutes = Math.min(slot.duration_minutes, minutes);
+  return capped;
+}
+
+/**
+ * B16 step 2: the home-place slot after the first overridden slot that gives
+ * way for a failure at `failing`. Any one that can still shrink (min_minutes
+ * above 20, required or not) goes before any that can be dropped (optional);
+ * within each, the failing slot itself, else the nearest one before it, else
+ * the last one after it. Undefined when there is none.
+ */
+function homeToGiveWay(
+  kept: Kept[],
+  first: number,
+  failing: number,
+  exempt: ReadonlySet<string>,
+): { index: number; action: "shrink" | "drop" } | undefined {
+  const home = (i: number) => i > first && OVERRIDE_HOME_ROLES.has(kept[i]!.slot.role) && !exempt.has(kept[i]!.slot.role);
+  const pick = (ok: (i: number) => boolean): number => {
+    for (let i = Math.min(failing, kept.length - 1); i > first; i--) if (home(i) && ok(i)) return i;
+    for (let i = kept.length - 1; i > failing; i--) if (home(i) && ok(i)) return i;
+    return -1;
+  };
+  const shrink = pick((i) => kept[i]!.slot.min_minutes > OVERRIDE_HOME_MIN_MINUTES);
+  if (shrink >= 0) return { index: shrink, action: "shrink" };
+  const drop = pick((i) => !kept[i]!.slot.required);
+  return drop >= 0 ? { index: drop, action: "drop" } : undefined;
+}
+
 /**
  * Lays one day's template out in time (§5.2 step 5). Slots are dropped for
  * "skip" meals, absent optional keys and unresolved optional nodes. While the
@@ -282,6 +329,17 @@ function shrinkEvening(
  * Required slots are never shrunk or dropped; when no optional slot is left it throws.
  * B8: `evening` activities are inserted (withEveningSlots); while the day does
  * not fit they shrink first (shrinkEvening), before the reduce order.
+ * B16: with `overrides`, the day is first laid out as above with each
+ * overridden slot capped at its override and exempt from every reduction
+ * (overrideCapped). Then each overridden slot gets exactly its duration from
+ * the start that layout gave it (an end anchor no longer applies) and the day
+ * is laid out again: later slots shift; while it does not fit, the home-place
+ * slots after the first overridden one shrink to 20 min (homeToGiveWay;
+ * recorded "shrunk" when shorter than their template min), then optional ones
+ * are dropped as no_time; nothing else gives way. A day that
+ * still does not fit, or lacks an overridden slot, throws SCHEDULE_INFEASIBLE
+ * with details.slot_override; an override of a role the day's template does
+ * not have is WORLD_INVALID.
  */
 export function resolveDayWindows(
   template: TemplateSlot[],
@@ -291,13 +349,34 @@ export function resolveDayWindows(
   gap: GapFn,
   reduceOrder: readonly ReduceStep[] = [],
   evening: readonly EveningActivity[] = [],
+  overrides: readonly SlotDuration[] = [],
 ): { slots: Slot[]; transitions: SlotTransition[]; dropped: DroppedSlot[] } {
   const day = decisions.day_index;
   const infeasible = (role: string, reason: string): TimelineError =>
     new TimelineError("SCHEDULE_INFEASIBLE", `day ${day}: slot ${role} is infeasible (${reason})`, { day, role, reason });
+  const fixed = new Map(overrides.map((o) => [o.role, o.duration_min]));
+  const overrideInfeasible = (role: string, reason: string): TimelineError =>
+    new TimelineError(
+      "SCHEDULE_INFEASIBLE",
+      `day ${day}: slot override ${role} (${fixed.get(role)} min) is infeasible (${reason})`,
+      { day, role, reason, slot_override: true },
+    );
+
+  const daySlots = withEveningSlots(orderBySportAnchor(template, anchors), evening);
+  for (const { role } of overrides) {
+    if (daySlots.some((s) => s.role === role)) continue;
+    const why = `day ${day} (${decisions.template}) has no ${role} slot`;
+    throw new TimelineError("WORLD_INVALID", `dials.slot_overrides: ${why}`, {
+      day,
+      role,
+      issues: [{ path: "dials.slot_overrides", message: why }],
+    });
+  }
 
   const kept: Kept[] = [];
-  for (const slot of withEveningSlots(orderBySportAnchor(template, anchors), evening)) {
+  for (const entry of daySlots) {
+    const minutes = fixed.get(entry.role);
+    const slot = minutes === undefined ? entry : overrideCapped(entry, minutes);
     if (slot.optional_key !== undefined && decisions.optional[slot.optional_key] === false) continue;
     const node = resolveNode(slot, decisions, world);
     if (node === null) continue;
@@ -312,21 +391,67 @@ export function resolveDayWindows(
     kept.push({ slot, node, place });
   }
   if (kept.length === 0) throw infeasible("-", "no slots");
+  for (const { role } of overrides) {
+    if (!kept.some((k) => k.slot.role === role)) throw overrideInfeasible(role, "the slot is not on this day");
+  }
 
   const dropped: DroppedSlot[] = [];
   const used = reduceOrder.map(() => false);
-  const elastic = new Set(evening.map((a) => a.role));
+  const exempt: ReadonlySet<string> = new Set(fixed.keys());
+  const elastic = new Set(evening.map((a) => a.role).filter((role) => !exempt.has(role)));
   let result = layout(kept, anchors, gap);
   while ("role" in result) {
     if (shrinkEvening(kept, elastic, result.index, anchors, gap, dropped)) {
       // shrunk an evening activity
-    } else if (!applyReduceStep(kept, reduceOrder, used, result.index, dropped)) {
-      const victim = slotToDrop(kept, result.index);
-      if (victim < 0) throw infeasible(result.role, result.reason);
+    } else if (!applyReduceStep(kept, reduceOrder, used, result.index, dropped, exempt)) {
+      const victim = slotToDrop(kept, result.index, exempt);
+      if (victim < 0) {
+        throw fixed.has(result.role) ? overrideInfeasible(result.role, result.reason) : infeasible(result.role, result.reason);
+      }
       dropped.push({ role: kept[victim]!.slot.role, reason: "no_time" });
       kept.splice(victim, 1);
     }
     result = layout(kept, anchors, gap);
+  }
+
+  if (fixed.size > 0) {
+    // B16 step 2: exact durations from the starts step 1 gave; home slots after the first one give way.
+    const first = kept.findIndex((k) => fixed.has(k.slot.role));
+    const templateMin = new Map<string, number>();
+    kept.forEach((k, i) => {
+      const minutes = fixed.get(k.slot.role);
+      if (minutes !== undefined) {
+        const { end_anchor: _end, ...slot } = k.slot;
+        kept[i] = { ...k, slot: { ...slot, duration_minutes: minutes, min_minutes: minutes } };
+      } else if (i > first && OVERRIDE_HOME_ROLES.has(k.slot.role)) {
+        templateMin.set(k.slot.role, k.slot.min_minutes);
+      }
+    });
+    result = layout(kept, anchors, gap);
+    while ("role" in result) {
+      const give = homeToGiveWay(kept, first, result.index, exempt);
+      if (give === undefined) {
+        // Name the overridden slot the failure follows from: the last one at or before the failing slot.
+        let at = first;
+        for (let i = first; i <= Math.min(result.index, kept.length - 1); i++) if (exempt.has(kept[i]!.slot.role)) at = i;
+        throw overrideInfeasible(kept[at]!.slot.role, `${result.role}: ${result.reason}`);
+      }
+      const k = kept[give.index]!;
+      if (give.action === "shrink") {
+        kept[give.index] = { ...k, slot: { ...k.slot, min_minutes: OVERRIDE_HOME_MIN_MINUTES } };
+      } else {
+        dropped.push({ role: k.slot.role, reason: "no_time" });
+        kept.splice(give.index, 1);
+      }
+      result = layout(kept, anchors, gap);
+    }
+    const laid = result;
+    kept.forEach((k, i) => {
+      const min = templateMin.get(k.slot.role);
+      const role = k.slot.role;
+      if (min === undefined || laid.end[i]! - laid.start[i]! >= min) return;
+      if (!dropped.some((x) => x.role === role && x.reason === "shrunk")) dropped.push({ role, reason: "shrunk" });
+    });
   }
   const { start, end, gaps } = result;
 

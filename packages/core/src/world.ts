@@ -101,6 +101,17 @@ export const EveningActivitySchema = z.object({
   max_per_week: z.number().int().min(1).optional(),
 });
 export type EveningActivity = z.infer<typeof EveningActivitySchema>;
+
+/**
+ * B16: on day `day_index` (1-based) the slot with `role` lasts exactly `duration_min`. Its start stays
+ * where the layout puts it; later slots shift, and home-place slots after it give way before sleep.
+ */
+export const SlotOverrideSchema = z.object({
+  day_index: z.number().int().min(1),
+  role: z.string(),
+  duration_min: z.number().int().positive(),
+});
+export type SlotOverride = z.infer<typeof SlotOverrideSchema>;
 /** E8: every meal distribution must sum to 1 within this tolerance. */
 const MEAL_SUM_TOLERANCE = 0.01;
 
@@ -151,6 +162,8 @@ export const WorldSchema = z
       missing_required_allowance: z.array(z.object({ role: z.string(), max_days: z.number().int().min(1) })).default([]),
       /** B8: evening activities on routine workdays. Optional with no default, so worlds without it keep their bytes. */
       evening_activities: z.array(EveningActivitySchema).optional(),
+      /** B16: per-day slot durations. Optional with no default, so worlds without it keep their bytes. */
+      slot_overrides: z.array(SlotOverrideSchema).optional(),
     }),
     seed: z.number().int().min(0),
   })
@@ -232,6 +245,22 @@ export const WorldSchema = z
         ctx.addIssue({ code: "custom", path: [...path, "role"], message: `role "${a.role}" is listed twice` });
       }
       roles.add(a.role);
+    });
+    const overridden = new Set<string>();
+    (w.dials.slot_overrides ?? []).forEach((o, i) => {
+      const path = ["dials", "slot_overrides", i];
+      if (o.day_index > w.dials.length_days) {
+        ctx.addIssue({
+          code: "custom",
+          path: [...path, "day_index"],
+          message: `day_index ${o.day_index} is past length_days ${w.dials.length_days}`,
+        });
+      }
+      const key = `${o.day_index}:${o.role}`;
+      if (overridden.has(key)) {
+        ctx.addIssue({ code: "custom", path: [...path, "role"], message: `day ${o.day_index} role "${o.role}" is listed twice` });
+      }
+      overridden.add(key);
     });
     const seen = new Set<string>();
     w.dials.trips.forEach((t, i) => {

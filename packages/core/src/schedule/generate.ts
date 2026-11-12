@@ -13,7 +13,7 @@ import {
 import { TimelineError } from "../errors.js";
 import { gapQuantile, sampleGap, type GapTable } from "../gaps.js";
 import { rngFor } from "../rng.js";
-import type { EveningActivity, World } from "../world.js";
+import type { EveningActivity, SlotOverride, World } from "../world.js";
 import {
   catalogDayType,
   decideDay,
@@ -36,7 +36,7 @@ import type {
   TemplateName,
   Templates,
 } from "./types.js";
-import { resolveDayWindows } from "./windows.js";
+import { resolveDayWindows, type SlotDuration } from "./windows.js";
 
 /** schedule.v2: rev3 (rest_day meals, donor/day acceptance, realized). Older schedules do not parse (G25). */
 export const SCHEDULE_GENERATOR_VERSION = "schedule.v2";
@@ -259,7 +259,8 @@ type DayLayout = ReturnType<typeof resolveDayWindows>;
 /**
  * The day's template laid out with its reduce order and the day's gap draws.
  * The base layout and every slot-exception re-layout go through here (G14),
- * and the B8 re-layout with the day's evening activities.
+ * the B8 re-layout with the day's evening activities and the B16 re-layout
+ * with its slot overrides.
  */
 function layoutDay(
   input: ScheduleInput,
@@ -267,6 +268,7 @@ function layoutDay(
   decisions: DayDecisions,
   attempt: number,
   evening: readonly EveningActivity[] = [],
+  overrides: readonly SlotDuration[] = [],
 ): DayLayout {
   const { world, gaps, templates } = input;
   const d = decisions.day_index;
@@ -278,10 +280,18 @@ function layoutDay(
     (from, to, i) => sampleGap(gaps, from, to, rngFor(world.seed, "day", d, attempt, "gap", i)),
     templates.reduce_order?.[decisions.template],
     evening,
+    overrides,
   );
 }
 
-type SlotExceptionPlacement = { layout: DayLayout; exceptions: Exception[]; eligible: boolean; candidates: number };
+/** `decisions` are the day's decisions with the placed exception's meal place, if any. */
+type SlotExceptionPlacement = {
+  layout: DayLayout;
+  decisions: DayDecisions;
+  exceptions: Exception[];
+  eligible: boolean;
+  candidates: number;
+};
 
 /**
  * §5.2 step 8 (E1, E3, G14): after windows and reductions. A candidate is a
@@ -298,34 +308,35 @@ function placeSlotException(
   attempt: number,
   base: DayLayout,
 ): SlotExceptionPlacement {
-  const none: SlotExceptionPlacement = { layout: base, exceptions: decisions.exceptions, eligible: false, candidates: 0 };
+  const none: SlotExceptionPlacement = { layout: base, decisions, exceptions: decisions.exceptions, eligible: false, candidates: 0 };
   if (decisions.exceptions.length > 0) return none;
   const { world, boundNodes } = input;
   const kept = new Set(base.slots.map((s) => s.role));
   const required = base.slots.filter((s) => s.required).map((s) => s.role);
 
-  const feasible: { entry: ExceptionCatalog["slot"][number]; layout: DayLayout }[] = [];
+  const feasible: { entry: ExceptionCatalog["slot"][number]; layout: DayLayout; decisions: DayDecisions }[] = [];
   for (const entry of input.exceptions.slot) {
     const role = entry.replaces_role;
     if (!entry.day_types.includes(catalogDayType(decisions.day_type)) || !kept.has(role)) continue;
     if (!mealPlaceUsable(world, entry.meal_place, boundNodes)) continue;
-    const meal_place = { ...decisions.meal_place, [role]: entry.meal_place };
+    const replaced = { ...decisions, meal_place: { ...decisions.meal_place, [role]: entry.meal_place } };
     let layout: DayLayout;
     try {
-      layout = layoutDay(input, anchors, { ...decisions, meal_place }, attempt);
+      layout = layoutDay(input, anchors, replaced, attempt);
     } catch (e) {
       if (isInfeasible(e)) continue;
       throw e;
     }
     const roles = new Set(layout.slots.map((s) => s.role));
-    if (roles.has(role) && required.every((r) => roles.has(r))) feasible.push({ entry, layout });
+    if (roles.has(role) && required.every((r) => roles.has(r))) feasible.push({ entry, layout, decisions: replaced });
   }
   if (feasible.length === 0) return none;
 
   const d = decisions.day_index;
   const placed: SlotExceptionPlacement = { ...none, eligible: true, candidates: feasible.length };
   if (!rngFor(world.seed, "day", d, attempt, "slot_exception").bernoulli(world.dials.exception_rate.slot)) return placed;
-  const { entry, layout } = feasible[rngFor(world.seed, "day", d, attempt, "slot_exception_pick").int(0, feasible.length)]!;
+  const pick = feasible[rngFor(world.seed, "day", d, attempt, "slot_exception_pick").int(0, feasible.length)]!;
+  const { entry, layout } = pick;
   const routine = decisions.meal_place[entry.replaces_role];
   const exception: Exception = {
     scope: "slot",
@@ -336,7 +347,7 @@ function placeSlotException(
     // The replaced slot was kept, so its routine place is a place, never "skip".
     ...(routine !== undefined && routine !== "skip" ? { routine_place: routine } : {}),
   };
-  return { ...placed, layout, exceptions: [exception] };
+  return { ...placed, layout, decisions: pick.decisions, exceptions: [exception] };
 }
 
 type BaseDay = { anchors: DayAnchors; adjustments: DonorAdjustment[]; redraws: number; placed: SlotExceptionPlacement };
@@ -399,20 +410,58 @@ function eveningOn(world: World, plan: readonly ReadonlySet<number>[], decisions
   return (world.dials.evening_activities ?? []).filter((_, i) => plan[i]!.has(decisions.day_index));
 }
 
+/** B16: the day's slot overrides, in dial order. */
+function overridesOn(world: World, dayIndex: number): SlotDuration[] {
+  return (world.dials.slot_overrides ?? [])
+    .filter((o) => o.day_index === dayIndex)
+    .map(({ role, duration_min }) => ({ role, duration_min }));
+}
+
+/** An infeasible slot override: not retried with other attempts (B16). */
+const isOverrideFailure = (e: unknown): boolean => isInfeasible(e) && e.details.slot_override === true;
+
+/**
+ * B16: every override role must be a role of some day type's template or an
+ * evening activity; WORLD_INVALID otherwise. Whether the role is on its day is
+ * checked when that day is laid out.
+ */
+function checkSlotOverrideRoles(world: World, templates: Templates): void {
+  const known = new Set([
+    ...Object.values(templates.day_types).flatMap((slots) => slots.map((s) => s.role)),
+    ...(world.dials.evening_activities ?? []).map((a) => a.role),
+  ]);
+  const issues = (world.dials.slot_overrides ?? [])
+    .map((o: SlotOverride, i) => ({ o, path: `dials.slot_overrides.${i}.role` }))
+    .filter(({ o }) => !known.has(o.role))
+    .map(({ o, path }) => ({ path, message: `unknown slot role "${o.role}" (day ${o.day_index})` }));
+  if (issues.length > 0) {
+    throw new TimelineError("WORLD_INVALID", issues.map((x) => `${x.path}: ${x.message}`).join("; "), { issues });
+  }
+}
+
 function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions, attempt: number): ScheduleDay {
   const d = decisions.day_index;
   const { anchors, adjustments, redraws, placed } = baseDay(input, donors, decisions, attempt);
   const { exceptions, eligible, candidates } = placed;
   let { layout } = placed;
   // B8: evening activities go on top of the finished routine day; its anchors stay as they are.
-  const evening = eveningOn(input.world, eveningPlan(input, donors), decisions, exceptions);
+  let evening = eveningOn(input.world, eveningPlan(input, donors), decisions, exceptions);
+  let eveningDropped: DayLayout["dropped"] = [];
   if (evening.length > 0) {
     try {
       layout = layoutDay(input, anchors, decisions, attempt, evening);
     } catch (e) {
       if (!isInfeasible(e)) throw e;
-      layout = { ...layout, dropped: [...layout.dropped, ...evening.map((a) => ({ role: a.role, reason: "no_time" as const }))] };
+      eveningDropped = evening.map((a) => ({ role: a.role, reason: "no_time" as const }));
+      evening = [];
+      layout = { ...layout, dropped: [...layout.dropped, ...eveningDropped] };
     }
+  }
+  // B16: slot overrides go on top of everything above (same anchors, exception and evening activities).
+  const overrides = overridesOn(input.world, d);
+  if (overrides.length > 0) {
+    const fixed = layoutDay(input, anchors, placed.decisions, attempt, evening, overrides);
+    layout = { ...fixed, dropped: [...fixed.dropped, ...eveningDropped] };
   }
   return {
     day_index: d,
@@ -435,6 +484,7 @@ function buildDay(input: ScheduleInput, donors: Donors, decisions: DayDecisions,
 
 /** One day at a given regeneration attempt; attempt 0 matches generateSchedule's first try. */
 export function generateDay(input: ScheduleInput, donors: Donors, dayIndex: number, attempt: number): ScheduleDay {
+  checkSlotOverrideRoles(input.world, input.templates);
   const opts = { boundNodes: input.boundNodes, defaults: input.defaults };
   const decisions = decideDay(input.world, input.exceptions, opts, dayIndex, attempt);
   return buildDay(input, donors, decisions, attempt);
@@ -443,9 +493,11 @@ export function generateDay(input: ScheduleInput, donors: Donors, dayIndex: numb
 /**
  * schedule.json for one world (§4.3, §5.2). A day that is infeasible is
  * regenerated with attempts 1..5; after the 5th the error names the day.
+ * B16: an infeasible slot override is thrown at once, without retries.
  */
 export function generateSchedule(input: ScheduleInput): Schedule {
   const { world, templates, gaps, exceptions, source, boundNodes, defaults } = input;
+  checkSlotOverrideRoles(world, templates);
   const requiredSlots: DonorViolation[] = [{ item: "required_slots", bound: 0, value: 1 }];
   // G7/G9: a weekday pick that still fails this check after its clamps has
   // work_end pulled earlier (repairWorkEnd); if nothing fits, its days rely on
@@ -470,14 +522,14 @@ export function generateSchedule(input: ScheduleInput): Schedule {
     try {
       return buildDay(input, donors, decisions, 0);
     } catch (e) {
-      if (!isInfeasible(e)) throw e;
+      if (!isInfeasible(e) || isOverrideFailure(e)) throw e;
       last = e;
     }
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         return generateDay(input, donors, decisions.day_index, attempt);
       } catch (e) {
-        if (!isInfeasible(e)) throw e;
+        if (!isInfeasible(e) || isOverrideFailure(e)) throw e;
         last = e;
       }
     }

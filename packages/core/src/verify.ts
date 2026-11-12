@@ -126,6 +126,7 @@ export function verifyTimeline(t: Timeline, catalog: ClipCatalog, opts?: VerifyO
       }
     }
     checkEveningActivities(t.world, day, add);
+    checkSlotOverrides(t.world, day, add);
 
     const wake = parseClock(day.wake);
     const sleep = parseClock(day.sleep);
@@ -362,6 +363,29 @@ function checkEveningActivities(world: World, day: ScheduleDay, add: Add): void 
         v(`${a.role} (${a.position}) must come ${a.position === "before_dinner" ? "after work_pm and before dinner" : "after dinner"}`);
       }
     });
+  }
+}
+
+/**
+ * B16 (slot_window rule): a slot with a dials.slot_overrides entry for its day and role lasts exactly
+ * duration_min; an override whose slot is missing is reported too. Other slot lengths are not checked.
+ */
+function checkSlotOverrides(world: World, day: ScheduleDay, add: Add): void {
+  for (const o of world.dials.slot_overrides ?? []) {
+    if (o.day_index !== day.day_index) continue;
+    const s = day.slots.find((x) => x.role === o.role);
+    if (s === undefined) {
+      add("slot_window", { day_index: day.day_index, detail: `slot override ${o.role} (${o.duration_min} min) has no slot` });
+      continue;
+    }
+    const minutes = parseClock(s.window[1]) - parseClock(s.window[0]);
+    if (minutes !== o.duration_min) {
+      add("slot_window", {
+        day_index: day.day_index,
+        slot_id: s.slot_id,
+        detail: `slot ${o.role} lasts ${minutes} min; slot_overrides sets ${o.duration_min} min`,
+      });
+    }
   }
 }
 
