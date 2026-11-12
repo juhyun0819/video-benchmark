@@ -1100,6 +1100,97 @@ describe("composeBlocks on a generated schedule", () => {
   });
 });
 
+describe("pins (B22)", () => {
+  const dataDir = makeTempDir();
+  writeAtusPool(dataDir);
+  const config = loadConfig(CONFIG_DIR, dataDir);
+  const PIN_DATE = "2026-07-20";
+  const WORK = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+  const REST = Array.from({ length: 30 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+  /** A partial date (30 min of work) holding one 4-clip home video, plus one clip of it outside the span. */
+  const pinDate = (): Clip[] => [
+    ...rec(PIN_DATE, [
+      { at: "09:10", min: 10, node: "home" },
+      { at: "09:25", min: 10, node: "home" },
+      { at: "09:40", min: 10, node: "home" },
+      { at: "09:55", min: 10, node: "home" },
+      { at: "12:00", min: 10, node: "home" },
+    ], { video: "pin-vid", wall: "09:00" }),
+    ...rec(PIN_DATE, [{ at: "14:00", min: 30, node: "workplace" }], { video: "pin-work", wall: "14:00" }),
+  ];
+  const PIN_FROM = 600;
+  const PIN_TO = 3900;
+  const world = makeWorld();
+  const t = createTimeline(world, generateSchedule(scheduleInput(config, world)), () => "compose-test-pin");
+  const pinDay = t.schedule.days.find((d) => d.day_type === "workday" && d.slots.some((s) => s.role === "home_morning"))!;
+  const pin = { day_index: pinDay.day_index, role: "home_morning", video_id: "pin-vid", from_s: PIN_FROM, to_s: PIN_TO };
+  const morning = pinDay.slots.find((s) => s.role === "home_morning")!;
+  const clips = [...WORK.flatMap((d) => workDate(d)), ...REST.flatMap(restDate), ...pinDate(), ...TRIP.flatMap(tripDate)];
+  const pinned = ["09:10", "09:25", "09:40", "09:55"].map((h) => `nextme800:pin-vid:${h}`);
+
+  it("places the pinned clips first in the pinned slot in source order, nowhere else, and verifies", () => {
+    const catalog = new MemCatalog(clips);
+    const r = composeBlocks(t, catalog, { pins: [pin] });
+    const inSlot = r.placements.filter((p) => p.slot_id === morning.slot_id).sort((a, b) => a.synthetic_start_s - b.synthetic_start_s);
+    expect(inSlot.slice(0, 4).map((p) => p.clip.clip_id)).toEqual(pinned);
+    expect(inSlot[0]!.synthetic_start_s).toBe((pin.day_index - 1) * 86400 + sec(morning.window[0]));
+    for (const id of [...pinned, "nextme800:pin-vid:12:00"]) {
+      const where = r.placements.filter((p) => p.clip.clip_id === id);
+      if (id.endsWith("12:00")) expect(where.every((p) => p.slot_id !== morning.slot_id)).toBe(true);
+      else expect(where.map((p) => p.slot_id)).toEqual([morning.slot_id]);
+    }
+    // the rest of the day_group is not a spare any more: no other day uses it
+    expect(r.placements.filter((p) => p.clip.day_group === PIN_DATE && p.day_index !== pin.day_index)).toEqual([]);
+    expect(r.summary.pins).toEqual([{ ...pin, slot_id: morning.slot_id, day_group: PIN_DATE, clips: 4, seconds: 2400 }]);
+    const report = verifyTimeline(t, catalog, { mode: "block", placements: r.placements });
+    expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+  });
+
+  it("without pins the summary lists none, and the pinned clips are not placed", () => {
+    const r = composeBlocks(t, new MemCatalog(clips));
+    expect(r.summary.pins).toEqual([]);
+  });
+
+  it("errors when the pinned day_group is another day's assigned date", () => {
+    // the only rest date is the pinned one, so a rest day is assigned it
+    const only = [...WORK.flatMap((d) => workDate(d)), ...rec(PIN_DATE, [{ at: "09:10", min: 10, node: "home" }, { at: "09:25", min: 10, node: "home" }, { at: "12:00", min: 10, node: "home" }], { video: "pin-vid", wall: "09:00" }), ...TRIP.flatMap(tripDate)];
+    expect(() => composeBlocks(t, new MemCatalog(only), { pins: [pin] })).toThrow(/assigned real date/);
+  });
+
+  it("errors on an unknown day, an unknown role and a span that matches no clips", () => {
+    const catalog = new MemCatalog(clips);
+    expect(() => composeBlocks(t, catalog, { pins: [{ ...pin, day_index: 99 }] })).toThrow(/unknown day/);
+    expect(() => composeBlocks(t, catalog, { pins: [{ ...pin, role: "nope" }] })).toThrow(/no nope slot/);
+    expect(() => composeBlocks(t, catalog, { pins: [{ ...pin, from_s: 90000, to_s: 99000 }] })).toThrow(/matches no clips/);
+    expect(() => composeBlocks(t, catalog, { pins: [{ ...pin, video_id: "absent" }] })).toThrow(/matches no clips/);
+  });
+
+  it("applies the same pinned assignment in both passes of fit_roles", () => {
+    const w = parseWorld({ ...worldJson(), nodes: { ...worldJson().nodes, hobby_1: { kind: "hobby", activity: "lego building", setting: "home_indoor", weekly_freq: 1, tags: ["lego"] } }, node_binding: { ...worldJson().node_binding, hobby_1: { dataset: ["youtube"], tags_any: ["lego"] } } });
+    const lego = (i: number, min: number): Clip => ({
+      clip_id: `youtube:lego:${i}`, category: "hobby", setting: "home_indoor", node: "hobby", activity: "lego building", time_of_day: "unknown", tags: ["lego"],
+      source: { dataset: "youtube", video_id: "lego", media: { kind: "video", fps: 30, path: "lego.mp4" } },
+      source_start_s: i * 200 * 60, source_end_s: i * 200 * 60 + min * 60, day_group: `youtube:lego:${i}`, person_source: "youtube:lego", fingerprint: null, extractor_version: "fixture.v1",
+    });
+    const build = (x: World) => createTimeline(x, generateSchedule(scheduleInput(config, x)), () => "compose-test-pin-fit");
+    const catalog = new MemCatalog([...clips, lego(0, 133), lego(1, 106), lego(2, 171)]);
+    const t0 = build(w);
+    const day = t0.schedule.days.find((d) => d.day_type === "workday" && d.slots.some((s) => s.role === "home_morning"))!;
+    const p = { ...pin, day_index: day.day_index };
+    const r = composeBlocksFit(t0, catalog, ["hobby"], build, [p]);
+    expect(r.slot_overrides.length).toBeGreaterThan(0);
+    expect(r.summary.pins.map((x) => [x.day_index, x.clips, x.seconds])).toEqual([[day.day_index, 4, 2400]]);
+    const slot = r.timeline.schedule.days[day.day_index - 1]!.slots.find((s) => s.role === "home_morning")!;
+    const inSlot = r.placements.filter((x) => x.slot_id === slot.slot_id).sort((a, b) => a.synthetic_start_s - b.synthetic_start_s);
+    expect(inSlot.slice(0, 4).map((x) => x.clip.clip_id)).toEqual(pinned);
+    expect(composeBlocks(t0, catalog, { fit_roles: ["hobby"], pins: [p] }).summary.pins).toEqual(
+      composeBlocks(r.timeline, catalog, { fit_roles: ["hobby"], pins: [p] }).summary.pins,
+    );
+    const report = verifyTimeline(r.timeline, catalog, { mode: "block", placements: r.placements });
+    expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+  });
+});
+
 const TSX = join(REPO_ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 const SCRIPT = join(REPO_ROOT, "packages", "mcp", "src", "composeBlocksCli.ts");
 

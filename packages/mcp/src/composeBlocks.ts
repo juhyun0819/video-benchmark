@@ -423,8 +423,9 @@ function slotKind(world: World, slot: Slot): SlotKind {
  * then the other slots in window order, then the morning and evening commutes. Each slot takes the unused clips
  * of its real phase in real-time order until they fill its window (layoutBlocks trims the last); a
  * clip is used once. Only clips the world binds to the slot's place are used (ruling 2).
+ * `reserved` (B22): seconds of a slot's window already taken by pinned clips.
  */
-export function planDay(day: ScheduleDay, date: RealDate | undefined, world: World): BlockPlanEntry[] {
+export function planDay(day: ScheduleDay, date: RealDate | undefined, world: World, reserved: ReadonlyMap<string, number> = new Map()): BlockPlanEntry[] {
   if (date === undefined) return [];
   const clips = date.clips;
   const used = new Set<string>();
@@ -532,7 +533,8 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
     const free = cands.filter((c) => !used.has(c.clip.clip_id) && contentOk(world, slot, c.clip));
     const [ws, we] = windowSeconds(slot);
     const picked = run ? firstRun(free) : free;
-    take(slot.slot_id, MEAL_ROLES.has(slot.role) ? trimMeal(picked) : picked, we - ws);
+    // B22: seconds already taken by pinned clips come off the window.
+    take(slot.slot_id, MEAL_ROLES.has(slot.role) ? trimMeal(picked) : picked, we - ws - (reserved.get(slot.slot_id) ?? 0));
   }
 
   // B10: the transit right before a gym run fills the transition into its exercise slot.
@@ -978,6 +980,8 @@ export type ComposeSummary = {
   fills: Fill[];
   /** @deprecated alias of `fills` (the B6 name), the same list. */
   home_fills: Fill[];
+  /** B22: the pins applied, in the order given. */
+  pins: PinApplied[];
 };
 
 /** B17: a fitted slot: its whole clip and the whole-minute length the slot is sized to. */
@@ -992,21 +996,86 @@ export type ComposeResult = {
   summary: ComposeSummary;
 };
 
+/** B22: pin a video span into one day's slot. */
+export type Pin = { day_index: number; role: string; video_id: string; from_s: number; to_s: number };
+export type PinApplied = Pin & { slot_id: string; day_group: string; clips: number; seconds: number };
+type ResolvedPin = { pin: Pin; slot: Slot; clips: Clip[] };
+
+/** B22: validates the pins against the schedule and the catalog and resolves each to its slot and clips (source order). */
+export function resolvePins(t: Timeline, catalog: ClipCatalog, pins: readonly Pin[]): ResolvedPin[] {
+  const seen = new Set<string>();
+  return pins.map((pin) => {
+    const label = `pin day ${pin.day_index} ${pin.role} ${pin.video_id} [${pin.from_s}, ${pin.to_s}]`;
+    const day = t.schedule.days.find((d) => d.day_index === pin.day_index);
+    if (day === undefined) throw new Error(`${label}: unknown day`);
+    const slot = day.slots.find((s) => s.role === pin.role);
+    if (slot === undefined) throw new Error(`${label}: day ${pin.day_index} has no ${pin.role} slot`);
+    const clips = deOverlap(catalog.clips().filter((c) => c.source.video_id === pin.video_id))
+      .filter((c) => c.source_start_s >= pin.from_s && c.source_end_s <= pin.to_s)
+      .sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1));
+    if (clips.length === 0) throw new Error(`${label}: the span matches no clips`);
+    for (const c of clips) {
+      if (seen.has(c.clip_id)) throw new Error(`${label}: clip ${c.clip_id} is pinned twice`);
+      seen.add(c.clip_id);
+    }
+    return { pin, slot, clips };
+  });
+}
+
+/** A catalog without the pinned clips (B22: they are in no other candidate pool). */
+function withoutClips(catalog: ClipCatalog, ids: ReadonlySet<string>): ClipCatalog {
+  return {
+    clips: () => catalog.clips().filter((c) => !ids.has(c.clip_id)),
+    getClip: (id) => catalog.getClip(id),
+    getAnnotations: (d, v) => catalog.getAnnotations(d, v),
+  };
+}
+
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** B5 steps 2–5 for a timeline whose schedule is already generated: dates, plan, placements and summary. */
-export function composeBlocks(t: Timeline, catalog: ClipCatalog, opts: { fit_roles?: readonly string[] } = {}): ComposeResult {
+export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit_roles?: readonly string[]; pins?: readonly Pin[] } = {}): ComposeResult {
   const world = t.world;
+  const resolved = resolvePins(t, fullCatalog, opts.pins ?? []);
+  const catalog = resolved.length === 0 ? fullCatalog : withoutClips(fullCatalog, new Set(resolved.flatMap((r) => r.clips.map((c) => c.clip_id))));
   const dates = collectDates(catalog, world);
   const assignments = assignDates(t.schedule.days, dates, world);
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
-  const plan = t.schedule.days.flatMap((day) => {
-    const date = dateOf.get(day.day_index);
-    return planDay(day, date === null || date === undefined ? undefined : dates.get(date), world);
-  });
-  const filled = homeFill(t.schedule.days, plan, assignments, dates, world);
+  // B22: a pinned clip's day_group belongs to the pinned day only.
+  const groupOwner = new Map<string, number>();
+  for (const r of resolved) {
+    for (const g of new Set(r.clips.map((c) => c.day_group))) {
+      const other = assignments.find((a) => a.date === g && a.day_index !== r.pin.day_index);
+      if (other !== undefined) throw new Error(`pin day ${r.pin.day_index} ${r.pin.role} ${r.pin.video_id}: day_group ${g} is day ${other.day_index}'s assigned real date`);
+      const prev = groupOwner.get(g);
+      if (prev !== undefined && prev !== r.pin.day_index) throw new Error(`pins on days ${prev} and ${r.pin.day_index} share day_group ${g}`);
+      groupOwner.set(g, r.pin.day_index);
+    }
+  }
+  const spareDates: ReadonlyMap<string, RealDate> = groupOwner.size === 0 ? dates : new Map([...dates].filter(([d]) => !groupOwner.has(d)));
+  const pinnedEntries: BlockPlanEntry[] = resolved.flatMap((r) =>
+    r.clips.map((c) => ({ slot_id: r.slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s })),
+  );
+  const reserved = new Map<string, number>();
+  for (const e of pinnedEntries) reserved.set(e.slot_id, (reserved.get(e.slot_id) ?? 0) + e.source_end_s - e.source_start_s);
+  const pinApplied: PinApplied[] = resolved.map((r) => ({
+    ...r.pin,
+    slot_id: r.slot.slot_id,
+    day_group: r.clips[0]!.day_group,
+    clips: r.clips.length,
+    seconds: r.clips.reduce((s, c) => s + c.source_end_s - c.source_start_s, 0),
+  }));
+  // Pinned entries come first, so layoutBlocks places them first in their slot and the normal fill follows.
+  const plan = [
+    ...pinnedEntries,
+    ...t.schedule.days.flatMap((day) => {
+      const date = dateOf.get(day.day_index);
+      return planDay(day, date === null || date === undefined ? undefined : dates.get(date), world, reserved);
+    }),
+  ];
+  const filled = homeFill(t.schedule.days, plan, assignments, spareDates, world);
   // B13: top-up entries come after the slot's primary (and B6) entries, so layoutBlocks places them right after.
-  const topped = topUpFill(t.schedule.days, [...plan, ...filled.entries], assignments, dates, world, filled.fills);
+  const topped = topUpFill(t.schedule.days, [...plan, ...filled.entries], assignments, spareDates, world, filled.fills);
   const fitRoles = new Set(opts.fit_roles ?? []);
   const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries, ...topped.entries], catalog, world, fitRoles);
   const slotOf = new Map(t.schedule.days.flatMap((d) => d.slots.map((s) => [s.slot_id, { day: d.day_index, role: s.role }] as const)));
@@ -1017,12 +1086,12 @@ export function composeBlocks(t: Timeline, catalog: ClipCatalog, opts: { fit_rol
       return { day_index: slotOf.get(x.slot_id)!.day, slot_id: x.slot_id, role: x.role, clip_id, seconds: x.seconds, duration_min: Math.ceil(x.seconds / 60) };
     });
   const full = [...plan, ...filled.entries, ...topped.entries, ...evening.entries];
-  const placements = layoutBlocks(t, catalog, full);
+  const placements = layoutBlocks(t, fullCatalog, full);
   const fills = [...filled.fills, ...topped.fills];
-  return { assignments, plan: full, placements, fitted, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills } };
+  return { assignments, plan: full, placements, fitted, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills, pins: pinApplied } };
 }
 
-function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "fills" | "home_fills"> {
+function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "fills" | "home_fills" | "pins"> {
   const days_by_type: Partial<Record<DayType, number>> = {};
   for (const d of t.schedule.days) days_by_type[d.day_type] = (days_by_type[d.day_type] ?? 0) + 1;
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
@@ -1099,10 +1168,11 @@ export function composeBlocksFit(
   catalog: ClipCatalog,
   fitRoles: readonly string[],
   regenerate: (world: World) => Timeline,
+  pins: readonly Pin[] = [],
 ): FitResult {
   const bad = fitRoles.filter((r) => !FIT_ROLES.has(r));
   if (bad.length > 0) throw new Error(`fit_roles: unsupported role ${bad.map((r) => JSON.stringify(r)).join(", ")}; supported: ${[...FIT_ROLES].join(", ")}`);
-  const first = composeBlocks(t, catalog, { fit_roles: fitRoles });
+  const first = composeBlocks(t, catalog, { fit_roles: fitRoles, pins });
   if (fitRoles.length === 0 || first.fitted.length === 0) return { ...first, timeline: t, slot_overrides: [] };
   const computed: SlotOverride[] = first.fitted.map((f) => ({ day_index: f.day_index, role: f.role, duration_min: f.duration_min }));
   const keep = (t.world.dials.slot_overrides ?? []).filter((o) => !computed.some((c) => c.day_index === o.day_index && c.role === o.role));
@@ -1114,8 +1184,10 @@ export function composeBlocksFit(
   } catch (e) {
     throw fitError(computed, e);
   }
-  const second = composeBlocks(timeline, catalog, { fit_roles: fitRoles });
+  const second = composeBlocks(timeline, catalog, { fit_roles: fitRoles, pins });
   const key = (r: ComposeResult) => JSON.stringify(r.fitted.map((f) => [f.day_index, f.slot_id, f.clip_id]));
   if (key(first) !== key(second)) throw new Error("fit_roles: the clip assignment changed after the schedule was regenerated with the slot overrides");
+  const pinKey = (r: ComposeResult) => JSON.stringify(r.summary.pins.map((p) => [p.day_index, p.slot_id, p.video_id, p.clips, p.seconds]));
+  if (pinKey(first) !== pinKey(second)) throw new Error("fit_roles: the pinned assignment changed after the schedule was regenerated with the slot overrides");
   return { ...second, timeline, slot_overrides };
 }
