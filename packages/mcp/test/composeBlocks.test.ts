@@ -18,7 +18,7 @@ import {
   type World,
 } from "@vb/core";
 import { loadConfig, scheduleInput } from "../src/config.js";
-import { assignDates, collectDates, composeBlocks, deOverlap, planDay, realStartOf, type DayLike } from "../src/composeBlocks.js";
+import { assignDates, collectDates, composeBlocks, deOverlap, homeFill, planDay, realStartOf, type DayLike, type DateAssignment } from "../src/composeBlocks.js";
 import { CONFIG_DIR, EXAMPLE_WORLD, REPO_ROOT, filesIn, makeTempDir, writeAtusPool, writeDataset } from "./helpers.js";
 
 // Synthetic data only: every clip below is made up for these tests.
@@ -533,6 +533,102 @@ describe("real day phases", () => {
   });
 });
 
+describe("home fill from spare dates", () => {
+  const world = makeWorld();
+  /** Day `n` with ids d<n>-s<k>; `date` is its assigned real date. */
+  const dayN = (n: number, slots: Slot[], trip?: ScheduleDay["trip"]): ScheduleDay => {
+    const d = mkDay("home_day", slots.map((s) => ({ ...s, slot_id: s.slot_id.replace("d1-", `d${n}-`) })), [], trip);
+    return { ...d, day_index: n };
+  };
+  const ASSIGNED = (rows: [number, string | null][]): DateAssignment[] =>
+    rows.map(([day_index, date]) => ({ day_index, day_type: "home_day", pool: "rest", date }));
+  const home = (at: string, min: number, category?: ClipCategory): Spec => ({ at, min, node: "home", ...(category ? { category } : {}) });
+  /** An assigned date with no home footage, so every home slot stays empty after the primary plan. */
+  const bare = (date: string) => rec(date, [{ at: "05:00", min: 10, node: "transit" }]);
+  const MORNING = slot(1, "home_morning", "home", "07:00", "08:00");
+  const EVENING = slot(2, "home_evening", "home", "20:30", "22:00");
+
+  function fill(days: ScheduleDay[], assigned: [number, string | null][], clips: Clip[]) {
+    const dates = collectDates(new MemCatalog(clips), world);
+    const assignments = ASSIGNED(assigned);
+    const r = homeFill(days, [], assignments, dates, world);
+    return { ...r, slots: r.fills.map((f) => `${f.slot_id}<-${f.from_date}`) };
+  }
+
+  it("fills an empty home_morning from a spare date within 90 minutes, filling until the block end", () => {
+    const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:30", 30), home("08:05", 30), home("08:45", 30)])];
+    const r = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], clips);
+    expect(r.fills).toEqual([{ day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 30, seconds: 3600 }]);
+    expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["07:30", "08:05"]);
+    expect(r.entries.every((e) => e.slot_id === "d1-s1")).toBe(true);
+  });
+
+  it("does not use a candidate more than 90 minutes from the block start", () => {
+    const edge = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("08:30", 30)])]);
+    expect(edge.fills.map((f) => f.delta_min)).toEqual([90]);
+    const out = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("08:31", 30)])]);
+    expect(out.fills).toEqual([]);
+    expect(out.entries).toEqual([]);
+  });
+
+  it("never uses an assigned date as a spare", () => {
+    const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:00", 30)])];
+    expect(fill([dayN(1, [MORNING])], [[1, "2026-05-01"], [2, "2026-05-02"]], clips).fills).toEqual([]);
+  });
+
+  it("skips slots that already got footage in the primary plan", () => {
+    const dates = collectDates(new MemCatalog([...bare("2026-05-01"), ...rec("2026-05-02", [home("07:00", 30)])]), world);
+    const primary = [{ slot_id: "d1-s1", clip_id: "x", source_start_s: 0, source_end_s: 60 }];
+    expect(homeFill([dayN(1, [MORNING])], primary, ASSIGNED([[1, "2026-05-01"]]), dates, world).fills).toEqual([]);
+  });
+
+  it("serves one synthetic day per spare date, but morning and evening of that day alike", () => {
+    const clips = [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("07:10", 30), home("20:40", 30)])];
+    const r = fill([dayN(1, [MORNING, EVENING]), dayN(2, [MORNING, EVENING])], [[1, "2026-05-01"], [2, "2026-05-03"]], clips);
+    expect(r.slots).toEqual(["d1-s1<-2026-05-02", "d1-s2<-2026-05-02"]);
+  });
+
+  it("gives the spare date to the first day in index order and the next spare to the second day", () => {
+    const clips = [...bare("2026-05-01"), ...bare("2026-05-03"), ...rec("2026-05-02", [home("07:00", 30)]), ...rec("2026-05-04", [home("07:20", 30)])];
+    const r = fill([dayN(2, [MORNING]), dayN(1, [MORNING])], [[1, "2026-05-01"], [2, "2026-05-03"]], clips);
+    expect(r.slots).toEqual(["d1-s1<-2026-05-02", "d2-s1<-2026-05-04"]);
+  });
+
+  it("prefers the smallest time difference, then more footage in the run, then the earlier date", () => {
+    const base = bare("2026-05-01");
+    const near = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...base, ...rec("2026-05-02", [home("07:10", 30)]), ...rec("2026-05-03", [home("07:20", 30)])]);
+    expect(near.fills[0]!.from_date).toBe("2026-05-02");
+    const longer = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...base, ...rec("2026-05-02", [home("07:10", 10)]), ...rec("2026-05-03", [home("07:10", 30)])]);
+    expect(longer.fills[0]!.from_date).toBe("2026-05-03");
+    const tie = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], [...base, ...rec("2026-05-04", [home("07:10", 30)]), ...rec("2026-05-03", [home("07:10", 30)])]);
+    expect(tie.fills[0]!.from_date).toBe("2026-05-03");
+  });
+
+  it("fills a home meal slot only with home meal clips", () => {
+    const dinner = slot(1, "dinner", "home", "18:30", "19:15");
+    const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("18:25", 5), home("18:50", 20, "meal")])];
+    const r = fill([dayN(1, [dinner])], [[1, "2026-05-01"]], clips);
+    expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["18:50"]);
+    expect(r.fills[0]).toMatchObject({ role: "dinner", delta_min: 20, seconds: 1200 });
+    const none = fill([dayN(1, [dinner])], [[1, "2026-05-01"]], [...bare("2026-05-01"), ...rec("2026-05-02", [home("18:30", 30)])]);
+    expect(none.fills).toEqual([]);
+  });
+
+  it("leaves empty hobby and work slots empty", () => {
+    const slots = [slot(1, "hobby", "hobby_1", "08:30", "09:30"), slot(2, "work_am", "workplace", "09:30", "12:00")];
+    const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("08:30", 30), home("09:30", 30), { at: "09:30", min: 30, node: "workplace" }])];
+    expect(fill([dayN(1, slots)], [[1, "2026-05-01"]], clips).fills).toEqual([]);
+  });
+
+  it("leaves trip days untouched and never uses a trip date as a spare", () => {
+    const tripDay = dayN(1, [MORNING], { node: "trip_1", index: 0 });
+    const clips = [...tripDate("2026-06-29"), ...rec("2026-06-29", [home("07:00", 30)], { video: "extra" }), ...bare("2026-05-01")];
+    expect(fill([tripDay, dayN(2, [MORNING])], [[1, "2026-06-29"], [2, "2026-05-01"]], clips).fills).toEqual([]);
+    const spare = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:00", 30)])];
+    expect(fill([tripDay], [[1, "2026-05-01"]], spare).fills).toEqual([]);
+  });
+});
+
 describe("composeBlocks on a generated schedule", () => {
   const dataDir = makeTempDir();
   writeAtusPool(dataDir);
@@ -570,6 +666,26 @@ describe("composeBlocks on a generated schedule", () => {
     const secs = result.placements.filter((p) => p.day_index === 1).reduce((s, p) => s + p.synthetic_end_s - p.synthetic_start_s, 0);
     expect(day1.footage_hours).toBeCloseTo(secs / 3600, 3);
     expect(day1.first_real).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("fills home blocks of a generated schedule from spare dates, passes block-mode verify and lists home_fills", () => {
+    const spareRest = Array.from({ length: 20 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+    const { t, catalog, result } = compose([...WORK.flatMap((d) => workDate(d, { homeMorning: false })), ...spareRest.flatMap(restDate), ...TRIP.flatMap(tripDate)]);
+    const report = verifyTimeline(t, catalog, { mode: "block", placements: result.placements });
+    expect(report.pass).toBe(true);
+    const fills = result.summary.home_fills;
+    expect(fills.length).toBeGreaterThan(0);
+    const assigned = new Set(result.assignments.map((a) => a.date));
+    const dayOf = new Map<string, number>();
+    for (const f of fills) {
+      expect(assigned.has(f.from_date)).toBe(false);
+      expect(TRIP).not.toContain(f.from_date);
+      expect(dayOf.get(f.from_date) ?? f.day_index).toBe(f.day_index);
+      dayOf.set(f.from_date, f.day_index);
+      expect(f.delta_min).toBeLessThanOrEqual(90);
+      expect(result.placements.some((p) => p.slot_id === f.slot_id)).toBe(true);
+      expect(t.schedule.days[f.day_index - 1]!.trip).toBeUndefined();
+    }
   });
 
   it("reports days left without a date when a pool runs out, with all their blocks empty", () => {

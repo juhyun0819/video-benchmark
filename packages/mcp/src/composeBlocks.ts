@@ -27,6 +27,8 @@ const WORK_DATE_MIN_S = H(1);
 const LATE_FIRST_WORK_S = H(11);
 /** Consecutive clips of a meal (or outing) run are at most this far apart. */
 const RUN_GAP_S = 15 * 60;
+/** B6: a home block takes spare-date footage whose real start is at most this far from the block start. */
+const FILL_WINDOW_S = 90 * 60;
 const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
 /** A catalog clip with its real start and end, in seconds since its date's 00:00. */
@@ -373,6 +375,83 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   );
 }
 
+export type HomeFill = { day_index: number; slot_id: string; role: string; from_date: string; delta_min: number; seconds: number };
+
+/**
+ * B6: every non-trip day's home slot (node kind home or kitchen) with no planned footage is filled from
+ * a spare date: not assigned to a day, not a trip date, and serving one day only (it may fill several
+ * home blocks of that day, and is preferred for the day's later ones). Days go in index order, slots in
+ * window order. Candidates are the date's unused home clips (home meal clips for meal slots) starting
+ * within ±90 min of the window start; the smallest |Δt| wins, then the longer run, then the earlier
+ * date. The block takes that clip and the following run of candidates (gap ≤ 15 min) until it is full.
+ */
+export function homeFill(
+  days: readonly ScheduleDay[],
+  plan: readonly BlockPlanEntry[],
+  assignments: readonly DateAssignment[],
+  dates: ReadonlyMap<string, RealDate>,
+  world: World,
+): { entries: BlockPlanEntry[]; fills: HomeFill[] } {
+  const assigned = new Set(assignments.flatMap((a) => (a.date === null ? [] : [a.date])));
+  const spares = [...dates.values()].filter((d) => d.kind !== "trip" && !assigned.has(d.date)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const planned = new Set(plan.map((e) => e.slot_id));
+  const taken = new Set<string>(); // spare dates already serving a day
+  const entries: BlockPlanEntry[] = [];
+  const fills: HomeFill[] = [];
+
+  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
+    if (day.trip !== undefined) continue;
+    const empty = day.slots.filter((s) => slotKind(world, s) === "home" && !planned.has(s.slot_id)).sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0]);
+    const used = new Set<string>();
+    let own: RealDate | undefined;
+    for (const slot of empty) {
+      const [ws, we] = windowSeconds(slot);
+      const meal = MEAL_ROLES.has(slot.role);
+      /** The best run start of `d` for this slot: smallest |Δt|, then the longer run, then the earlier clip. */
+      const best = (d: RealDate) => {
+        const pool = d.clips.filter((c) => isHome(world, c.clip) && (!meal || c.clip.category === "meal") && !used.has(c.clip.clip_id));
+        let pick: { run: RealClip[]; delta: number; footage: number } | undefined;
+        pool.forEach((c, i) => {
+          const delta = Math.abs(c.start - ws);
+          if (delta > FILL_WINDOW_S) return;
+          const run = [c];
+          for (const n of pool.slice(i + 1)) {
+            if (n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
+            run.push(n);
+          }
+          const footage = sum(run);
+          if (pick === undefined || delta < pick.delta || (delta === pick.delta && footage > pick.footage)) pick = { run, delta, footage };
+        });
+        return pick;
+      };
+      let chosen: { date: RealDate; run: RealClip[]; delta: number } | undefined;
+      const ownPick = own === undefined ? undefined : best(own);
+      if (own !== undefined && ownPick !== undefined) chosen = { date: own, ...ownPick };
+      else {
+        let top: { date: RealDate; run: RealClip[]; delta: number; footage: number } | undefined;
+        for (const d of spares) {
+          if (taken.has(d.date)) continue;
+          const b = best(d);
+          if (b !== undefined && (top === undefined || b.delta < top.delta || (b.delta === top.delta && b.footage > top.footage))) top = { date: d, ...b };
+        }
+        chosen = top;
+      }
+      if (chosen === undefined) continue;
+      own = chosen.date;
+      taken.add(own.date);
+      let filled = 0;
+      for (const c of chosen.run) {
+        if (filled >= we - ws) break;
+        entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
+        used.add(c.clip.clip_id);
+        filled += c.end - c.start;
+      }
+      fills.push({ day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: own.date, delta_min: Math.round(chosen.delta / 60), seconds: Math.min(filled, we - ws) });
+    }
+  }
+  return { entries, fills };
+}
+
 export type DaySummary = {
   day_index: number;
   day_type: DayType;
@@ -395,6 +474,8 @@ export type ComposeSummary = {
   commute_blocks: number;
   unassigned_days: { day_index: number; day_type: DayType; pool: Pool }[];
   per_day: DaySummary[];
+  /** B6: home blocks filled from spare dates. */
+  home_fills: HomeFill[];
 };
 
 export type ComposeResult = {
@@ -416,11 +497,13 @@ export function composeBlocks(t: Timeline, catalog: ClipCatalog): ComposeResult 
     const date = dateOf.get(day.day_index);
     return planDay(day, date === null || date === undefined ? undefined : dates.get(date), world);
   });
-  const placements = layoutBlocks(t, catalog, plan);
-  return { assignments, plan, placements, summary: summarize(t, assignments, placements) };
+  const filled = homeFill(t.schedule.days, plan, assignments, dates, world);
+  const full = [...plan, ...filled.entries];
+  const placements = layoutBlocks(t, catalog, full);
+  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements), home_fills: filled.fills } };
 }
 
-function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[]): ComposeSummary {
+function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[]): Omit<ComposeSummary, "home_fills"> {
   const days_by_type: Partial<Record<DayType, number>> = {};
   for (const d of t.schedule.days) days_by_type[d.day_type] = (days_by_type[d.day_type] ?? 0) + 1;
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
