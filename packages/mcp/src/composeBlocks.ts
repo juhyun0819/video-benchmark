@@ -180,61 +180,152 @@ export function poolOf(day: DayLike): Pool {
   return day.day_type === "workday" || day.day_type === "workday_late" ? "work" : "rest";
 }
 
-/** Best first: home footage before leaving, then more labeled footage, then the earlier date. */
-const rank = (a: RealDate, b: RealDate) =>
-  Number(b.home_first) - Number(a.home_first) || b.labeled_seconds - a.labeled_seconds || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-
 const isWeekend = (date: string) => [0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay());
 
+/** B12: an exercise day that gets a date with gym footage scores this much more. */
+const GYM_BONUS_S = H(10);
+/** B12: a late day whose date's first work is at or after 11:00, or a plain workday whose is earlier, scores this much more. */
+const LATE_BONUS_S = H(1);
+
 /**
- * B5 step 3: one real date per synthetic day, each date used once. Trip days take their trip's
- * day_group_sequence entry at `trip.index`. Other days are visited in an order shuffled with
- * rngFor(seed, "block_dates") and take the best unused date of their pool; late workdays prefer
- * first work at or after 11:00, plain workdays earlier; when that side is empty, the day takes the
- * other side's date whose first work is closest to its preference (latest for late days, earliest
- * otherwise), each within the weekday dates first and the Sat/Sun dates only after (B7). Rest days fall back to partial dates. A day whose pool is empty gets `date: null`.
+ * B12: max-weight assignment of rows to columns (Hungarian method, O(n²(n+m))). `value[i][j]` is the
+ * worth of giving column j to row i; a row may also stay unassigned (worth 0), and a column serves
+ * at most one row. Returns the column of each row, or null. Deterministic: with equal totals the
+ * result depends only on the row and column order. Values must be safe integers for an exact optimum.
+ */
+export function maxWeightAssignment(value: readonly (readonly number[])[]): (number | null)[] {
+  const n = value.length;
+  if (n === 0) return [];
+  const real = value[0]!.length;
+  // n dummy columns of worth 0 let any row stay unassigned and make the problem n × (m + n), m + n ≥ n.
+  const m = real + n;
+  const cost = (i: number, j: number) => (j < real ? -value[i]![j]! : 0);
+  // 1-based potentials u (rows), v (columns); p[j]: row matched to column j (0: none); way: augmenting path.
+  const u = new Array<number>(n + 1).fill(0);
+  const v = new Array<number>(m + 1).fill(0);
+  const p = new Array<number>(m + 1).fill(0);
+  const way = new Array<number>(m + 1).fill(0);
+  for (let i = 1; i <= n; i++) {
+    p[0] = i;
+    let j0 = 0;
+    const minv = new Array<number>(m + 1).fill(Infinity);
+    const used = new Array<boolean>(m + 1).fill(false);
+    do {
+      used[j0] = true;
+      const i0 = p[j0]!;
+      let delta = Infinity;
+      let j1 = 0;
+      for (let j = 1; j <= m; j++) {
+        if (used[j]) continue;
+        const cur = cost(i0 - 1, j - 1) - u[i0]! - v[j]!;
+        if (cur < minv[j]!) {
+          minv[j] = cur;
+          way[j] = j0;
+        }
+        if (minv[j]! < delta) {
+          delta = minv[j]!;
+          j1 = j;
+        }
+      }
+      for (let j = 0; j <= m; j++) {
+        if (used[j]) {
+          u[p[j]!] = u[p[j]!]! + delta;
+          v[j] = v[j]! - delta;
+        } else minv[j] = minv[j]! - delta;
+      }
+      j0 = j1;
+    } while (p[j0] !== 0);
+    do {
+      const j1 = way[j0]!;
+      p[j0] = p[j1]!;
+      j0 = j1;
+    } while (j0 !== 0);
+  }
+  const out = new Array<number | null>(n).fill(null);
+  for (let j = 1; j <= real; j++) if (p[j] !== 0) out[p[j]! - 1] = j - 1;
+  return out;
+}
+
+/** B12: placed seconds of a block plan: per block the planned footage, cut at the block length as layoutBlocks does. */
+function plannedSeconds(day: ScheduleDay, plan: readonly BlockPlanEntry[]): number {
+  const len = new Map<string, number>(day.slots.map((s) => [s.slot_id, windowSeconds(s)[1] - windowSeconds(s)[0]] as const));
+  for (const tr of transitionBlocks(day)) len.set(tr.transition_id, tr.span[1] - tr.span[0]);
+  const got = new Map<string, number>();
+  for (const e of plan) got.set(e.slot_id, (got.get(e.slot_id) ?? 0) + e.source_end_s - e.source_start_s);
+  let total = 0;
+  for (const [id, s] of got) total += Math.min(s, len.get(id) ?? 0);
+  return total;
+}
+
+/**
+ * B12 score s(d, x) in whole seconds: the placed seconds of planDay(d, x) (before any spare-date fill),
+ * plus 10 h when an exercise day gets a date with gym footage, plus 1 h when a late day gets a date
+ * whose first work is at or after 11:00 or a plain workday one whose first work is earlier. A day
+ * without slots (or transitions) plans nothing and scores its bonuses only.
+ */
+function dateScore(day: DayLike, date: RealDate, world: World, gymNode: string | undefined): number {
+  const full = day.slots !== undefined && "transitions" in day ? (day as ScheduleDay) : undefined;
+  let s = full === undefined ? 0 : Math.round(plannedSeconds(full, planDay(full, date, world)));
+  if (gymNode !== undefined && date.clips.some((c) => bindingAccepts(world, gymNode, c.clip))) s += GYM_BONUS_S;
+  if (poolOf(day) === "work" && date.first_work_s !== null) {
+    const late = day.day_type === "workday_late";
+    if ((date.first_work_s >= LATE_FIRST_WORK_S) === late) s += LATE_BONUS_S;
+  }
+  return s;
+}
+
+/**
+ * B5 step 3 with B12: one real date per synthetic day, each date used once. Trip days take their
+ * trip's day_group_sequence entry at `trip.index`. The work days (plain or late) and the rest days
+ * (leave days included) are each solved as one max-weight assignment over their pool:
+ * - work days: Mon–Fri work dates (tier 1), then Sat/Sun work dates (tier 2, B7);
+ * - rest days: rest dates (tier 1), then partial work dates (tier 2, fix ruling 4).
+ * The worth of (day, date) is Q + P·[tier 1] + s(d, x) (see dateScore), with P larger than any
+ * possible score total and Q larger than any tier and score total, so the assignment is lexicographic:
+ * first as many days with a date as possible, then as many tier-1 dates as possible, then the most
+ * score. Ties go by row and column order, which is a permutation of days and dates drawn with
+ * rngFor(seed, "block_dates"). A day whose pool runs out gets `date: null`.
  */
 export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string, RealDate>, world: World): DateAssignment[] {
-  const used = new Set<string>();
   const out = new Map<number, DateAssignment>();
-  const order = [...days];
+  const byIndex = [...days].sort((a, b) => a.day_index - b.day_index);
+  const all = [...dates.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const rng = rngFor(world.seed, "block_dates");
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = rng.int(0, i + 1);
-    [order[i], order[j]] = [order[j]!, order[i]!];
-  }
-  const sorted = [...dates.values()].sort(rank);
-  // B10: days with an exercise slot go first, so they get the dates with gym footage before other days do.
-  const exerciseNode = new Map(order.map((d) => [d.day_index, exerciseNodeOf(d, world)] as const));
-  order.sort((a, b) => Number(exerciseNode.get(b.day_index) !== undefined) - Number(exerciseNode.get(a.day_index) !== undefined));
-  for (const day of order) {
-    const pool = poolOf(day);
-    let date: string | null = null;
-    if (pool === "trip") {
-      const d = world.node_binding[day.trip!.node]?.day_group_sequence?.[day.trip!.index];
-      date = d !== undefined && !used.has(d) ? d : null;
-    } else {
-      const free = (kind: DateKind) => sorted.filter((x) => x.kind === kind && !used.has(x.date));
-      if (pool === "work") {
-        const late = day.day_type === "workday_late";
-        // B7: real Mon-Fri dates first; Sat/Sun dates only once no weekday work date is left.
-        const gymNode = exerciseNode.get(day.day_index);
-        const pick = (all: RealDate[]) => {
-          // B10: an exercise day prefers the dates that have gym footage.
-          const gym = gymNode === undefined ? [] : all.filter((x) => x.clips.some((c) => bindingAccepts(world, gymNode, c.clip)));
-          const work = gym.length > 0 ? gym : all;
-          const preferred = work.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
-          const fallback = [...work].sort((a, b) => (late ? b.first_work_s! - a.first_work_s! : a.first_work_s! - b.first_work_s!) || rank(a, b));
-          return (preferred[0] ?? fallback[0])?.date;
-        };
-        const work = free("work");
-        date = pick(work.filter((x) => !isWeekend(x.date))) ?? pick(work.filter((x) => isWeekend(x.date))) ?? null;
-      } else {
-        date = (free("rest")[0] ?? free("partial")[0])?.date ?? null;
-      }
+  const shuffle = <T>(xs: T[]): T[] => {
+    for (let i = xs.length - 1; i > 0; i--) {
+      const j = rng.int(0, i + 1);
+      [xs[i], xs[j]] = [xs[j]!, xs[i]!];
     }
-    if (date !== null) used.add(date);
-    out.set(day.day_index, { day_index: day.day_index, day_type: day.day_type, pool, date });
+    return xs;
+  };
+
+  const usedTrip = new Set<string>();
+  for (const day of byIndex.filter((d) => poolOf(d) === "trip")) {
+    const d = world.node_binding[day.trip!.node]?.day_group_sequence?.[day.trip!.index];
+    const date = d !== undefined && !usedTrip.has(d) ? d : null;
+    if (date !== null) usedTrip.add(date);
+    out.set(day.day_index, { day_index: day.day_index, day_type: day.day_type, pool: "trip", date });
+  }
+
+  for (const pool of ["work", "rest"] as const) {
+    const rows = shuffle(byIndex.filter((d) => poolOf(d) === pool));
+    const tier1 = pool === "work" ? all.filter((x) => x.kind === "work" && !isWeekend(x.date)) : all.filter((x) => x.kind === "rest");
+    const tier2 = pool === "work" ? all.filter((x) => x.kind === "work" && isWeekend(x.date)) : all.filter((x) => x.kind === "partial");
+    const cols = shuffle([...tier1.map((x) => ({ x, tier1: true })), ...tier2.map((x) => ({ x, tier1: false }))]);
+    if (rows.length === 0) continue;
+    const scores = rows.map((day) => {
+      const gym = exerciseNodeOf(day, world);
+      return cols.map((c) => dateScore(day, c.x, world, gym));
+    });
+    const maxScore = Math.max(0, ...scores.flat());
+    const P = rows.length * maxScore + 1;
+    const Q = rows.length * (P + maxScore) + 1;
+    if (!Number.isSafeInteger(rows.length * (Q + P + maxScore))) throw new Error("assignDates: date scores too large for an exact assignment");
+    const pick = maxWeightAssignment(scores.map((r) => r.map((s, j) => Q + (cols[j]!.tier1 ? P : 0) + s)));
+    rows.forEach((day, i) => {
+      const j = pick[i];
+      out.set(day.day_index, { day_index: day.day_index, day_type: day.day_type, pool, date: j === null || j === undefined ? null : cols[j]!.x.date });
+    });
   }
   return days.map((d) => out.get(d.day_index)!);
 }
@@ -444,7 +535,12 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   );
 }
 
-export type HomeFill = { day_index: number; slot_id: string; role: string; from_date: string; delta_min: number; seconds: number; fallback?: true };
+/** home: B6; home_fallback: B6b (also `fallback: true`, kept for compatibility); topup: B13. */
+export type FillKind = "home" | "home_fallback" | "topup";
+/** A block filled (or topped up) from a spare date: real-time distance of the first clip and placed seconds. */
+export type Fill = { kind: FillKind; day_index: number; slot_id: string; role: string; from_date: string; delta_min: number; seconds: number; fallback?: true };
+/** @deprecated the B6 name of Fill. */
+export type HomeFill = Fill;
 
 /**
  * B6: every non-trip day's home slot (node kind home or kitchen) with no planned footage is filled from
@@ -464,13 +560,13 @@ export function homeFill(
   assignments: readonly DateAssignment[],
   dates: ReadonlyMap<string, RealDate>,
   world: World,
-): { entries: BlockPlanEntry[]; fills: HomeFill[] } {
+): { entries: BlockPlanEntry[]; fills: Fill[] } {
   const assigned = new Set(assignments.flatMap((a) => (a.date === null ? [] : [a.date])));
   const spares = [...dates.values()].filter((d) => d.kind !== "trip" && !assigned.has(d.date)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const planned = new Set(plan.map((e) => e.slot_id));
   const taken = new Set<string>(); // spare dates already serving a day
   const entries: BlockPlanEntry[] = [];
-  const fills: HomeFill[] = [];
+  const fills: Fill[] = [];
 
   for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
     if (day.trip !== undefined) continue;
@@ -519,7 +615,7 @@ export function homeFill(
         used.add(c.clip.clip_id);
         filled += c.end - c.start;
       }
-      fills.push({ day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: own.date, delta_min: Math.round(chosen.delta / 60), seconds: Math.min(filled, we - ws) });
+      fills.push({ kind: "home", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: own.date, delta_min: Math.round(chosen.delta / 60), seconds: Math.min(filled, we - ws) });
     }
   }
 
@@ -552,7 +648,87 @@ export function homeFill(
         entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
         filled += c.end - c.start;
       }
-      fills.push({ day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: top.date.date, delta_min: Math.round(Math.abs(top.run[0]!.start - ws) / 60), seconds: Math.min(filled, we - ws), fallback: true });
+      fills.push({ kind: "home_fallback", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: top.date.date, delta_min: Math.round(Math.abs(top.run[0]!.start - ws) / 60), seconds: Math.min(filled, we - ws), fallback: true });
+    }
+  }
+  return { entries, fills };
+}
+
+/** B13: a work_am, work_pm or home slot with at least this much of its window unfilled is topped up. */
+const TOPUP_MIN_S = 10 * 60;
+
+/**
+ * B13: after the primary plan, B6 and B6b, every non-trip day's work_am, work_pm and non-meal home
+ * slot (node kind home or kitchen) whose window still has ≥ 10 min unfilled is topped up from a spare
+ * date (not assigned to a day, not a trip date). A spare date serves one synthetic day only, shared
+ * with B6/B6b (`prior` fills say which day each spare date already serves). Candidates are the
+ * date's unused clips that the slot's node binding accepts (no meal clips for work slots) whose real
+ * start is within ±180 min of the unfilled part's start (window start + placed seconds); each starts a
+ * run of the following candidates (gap ≤ 15 min). The run that places the most seconds wins, then a
+ * date already serving the day, then the smaller |Δt|, then the earlier date. The slot takes the run
+ * until full; its entries come after the slot's earlier ones, so layoutBlocks places them right after
+ * the primary clips. Days go in index order, slots in window order.
+ */
+export function topUpFill(
+  days: readonly ScheduleDay[],
+  plan: readonly BlockPlanEntry[],
+  assignments: readonly DateAssignment[],
+  dates: ReadonlyMap<string, RealDate>,
+  world: World,
+  prior: readonly Fill[],
+): { entries: BlockPlanEntry[]; fills: Fill[] } {
+  const assigned = new Set(assignments.flatMap((a) => (a.date === null ? [] : [a.date])));
+  const spares = [...dates.values()].filter((d) => d.kind !== "trip" && !assigned.has(d.date)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const owner = new Map(prior.map((f) => [f.from_date, f.day_index] as const)); // spare date -> the day it serves
+  const usedClips = new Set(plan.map((e) => e.clip_id));
+  const placed = new Map<string, number>();
+  for (const e of plan) placed.set(e.slot_id, (placed.get(e.slot_id) ?? 0) + e.source_end_s - e.source_start_s);
+  const entries: BlockPlanEntry[] = [];
+  const fills: Fill[] = [];
+
+  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
+    if (day.trip !== undefined) continue;
+    const slots = day.slots
+      .filter((s) => !MEAL_ROLES.has(s.role) && (s.role === "work_am" || s.role === "work_pm" || slotKind(world, s) === "home"))
+      .sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0]);
+    for (const slot of slots) {
+      const [ws, we] = windowSeconds(slot);
+      const filled = Math.min(placed.get(slot.slot_id) ?? 0, we - ws);
+      const need = we - ws - filled;
+      if (need < TOPUP_MIN_S) continue;
+      const at = ws + filled;
+      const work = slot.role === "work_am" || slot.role === "work_pm";
+      const accepts = (c: RealClip) => bindingAccepts(world, slot.spec.node, c.clip) && (!work || c.clip.category !== "meal") && !usedClips.has(c.clip.clip_id);
+      let top: { date: RealDate; run: RealClip[]; seconds: number; own: boolean; delta: number } | undefined;
+      for (const d of spares) {
+        const by = owner.get(d.date);
+        if (by !== undefined && by !== day.day_index) continue;
+        const own = by === day.day_index;
+        const pool = d.clips.filter(accepts);
+        pool.forEach((c, i) => {
+          const delta = Math.abs(c.start - at);
+          if (delta > FILL_WINDOW_S) return;
+          const run = [c];
+          for (const n of pool.slice(i + 1)) {
+            if (sum(run) >= need || n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
+            run.push(n);
+          }
+          const seconds = Math.min(sum(run), need);
+          const better =
+            top === undefined ||
+            seconds > top.seconds ||
+            (seconds === top.seconds && (Number(own) > Number(top.own) || (own === top.own && delta < top.delta)));
+          if (better) top = { date: d, run, seconds, own, delta };
+        });
+      }
+      if (top === undefined) continue;
+      owner.set(top.date.date, day.day_index);
+      for (const c of top.run) {
+        entries.push({ slot_id: slot.slot_id, clip_id: c.clip.clip_id, source_start_s: c.clip.source_start_s, source_end_s: c.clip.source_end_s });
+        usedClips.add(c.clip.clip_id);
+      }
+      placed.set(slot.slot_id, (placed.get(slot.slot_id) ?? 0) + sum(top.run));
+      fills.push({ kind: "topup", day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, from_date: top.date.date, delta_min: Math.round(top.delta / 60), seconds: top.seconds });
     }
   }
   return { entries, fills };
@@ -561,11 +737,25 @@ export function homeFill(
 export type EveningTake = { day_index: number; slot_id: string; role: string; take: string; day_group: string; seconds: number };
 
 /**
- * B10: every evening-activity slot whose node is not bound to the NextMe person (hobby_2: Ego-Exo4D)
- * and that has no planned footage takes whole catalog takes accepted by its binding. Takes are the
- * binding's clips grouped by video, in an order shuffled with rngFor(seed, "hobby_2"); a take is used
- * once and its day_group is never used on another day. Days go in index order, slots in window order;
- * the block takes one take's clips from its start (source order), then the next take until it is full.
+ * B14: the participant of an Ego-Exo4D take. Catalog clips carry no participant field, so it is the
+ * take-name prefix `<site>_<number>` (e.g. `upenn_0331` of `upenn_0331_Guitar_2_4`) that the ingest
+ * writes into the activity as `<task> (<take_name>)`; without one, the take is its own participant.
+ */
+export function participantOf(c: Clip): string {
+  const m = /\(([A-Za-z]+_\d+)_[^()]*\)\s*$/.exec(c.activity);
+  return m !== null ? m[1]! : `${c.source.dataset}:${c.source.video_id}`;
+}
+
+/**
+ * B10 with B14: every evening-activity slot whose node is not bound to the NextMe person (hobby_2:
+ * Ego-Exo4D) and that has no planned footage takes whole catalog takes accepted by its binding. Takes
+ * are the binding's clips grouped by video, in an order shuffled with rngFor(seed, "hobby_2"). The
+ * takes are dealt round-robin over the node's slots (days in index order, slots in window order), one
+ * take per slot per round, until every slot is full or no take is left, so the takes spread evenly.
+ * A slot takes a take of the participant it already has (participantOf) first; otherwise, of the
+ * participant that no other day uses yet and that has the most takes left (ties: shuffled order). A
+ * take is used once and its day_group is never used on another day. The block takes a take's clips
+ * from its start (source order) until it is full.
  */
 export function eveningFill(
   days: readonly ScheduleDay[],
@@ -582,53 +772,87 @@ export function eveningFill(
     const c = catalog.getClip(e.clip_id);
     if (c !== undefined && !groupDay.has(c.day_group)) groupDay.set(c.day_group, dayOfSlot.get(e.slot_id)!);
   }
-  const entries: BlockPlanEntry[] = [];
-  const takes: EveningTake[] = [];
   const catalogClips = catalog.clips();
-  const shuffled = new Map<string, Clip[][]>(); // by node: the takes in shuffled order
+  /** The node's takes in shuffled order. */
   const takesOf = (node: string): Clip[][] => {
-    let list = shuffled.get(node);
-    if (list === undefined) {
-      const byTake = new Map<string, Clip[]>();
-      for (const c of deOverlap(catalogClips.filter((x) => x.person_source !== person && bindingAccepts(world, node, x)))) {
-        const key = `${c.source.dataset}:${c.source.video_id}`;
-        byTake.set(key, [...(byTake.get(key) ?? []), c]);
-      }
-      list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1)));
-      const rng = rngFor(world.seed, "hobby_2");
-      for (let i = list.length - 1; i > 0; i--) {
-        const j = rng.int(0, i + 1);
-        [list[i], list[j]] = [list[j]!, list[i]!];
-      }
-      shuffled.set(node, list);
+    const byTake = new Map<string, Clip[]>();
+    for (const c of deOverlap(catalogClips.filter((x) => x.person_source !== person && bindingAccepts(world, node, x)))) {
+      const key = `${c.source.dataset}:${c.source.video_id}`;
+      byTake.set(key, [...(byTake.get(key) ?? []), c]);
+    }
+    const list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1)));
+    const rng = rngFor(world.seed, "hobby_2");
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = rng.int(0, i + 1);
+      [list[i], list[j]] = [list[j]!, list[i]!];
     }
     return list;
   };
-  const usedTakes = new Set<Clip[]>();
+
+  type Open = { day: number; slot: Slot; len: number; filled: number; participant?: string; entries: BlockPlanEntry[]; takes: EveningTake[] };
+  const open: Open[] = [];
   for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
     const slots = day.slots.filter((s) => roles.has(s.role) && world.node_binding[s.spec.node]?.person_source !== person && !planned.has(s.slot_id));
     for (const slot of slots.sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0])) {
       const [ws, we] = windowSeconds(slot);
-      let filled = 0;
-      for (const take of takesOf(slot.spec.node)) {
-        if (filled >= we - ws) break;
-        const group = take[0]!.day_group;
-        if (usedTakes.has(take) || (groupDay.has(group) && groupDay.get(group) !== day.day_index)) continue;
-        usedTakes.add(take);
-        groupDay.set(group, day.day_index);
+      open.push({ day: day.day_index, slot, len: we - ws, filled: 0, entries: [], takes: [] });
+    }
+  }
+  const usedTakes = new Set<string>();
+  for (const node of [...new Set(open.map((o) => o.slot.spec.node))].sort()) {
+    const takes = takesOf(node);
+    const slots = open.filter((o) => o.slot.spec.node === node);
+    const usable = (o: Open) => (take: Clip[]) => {
+      const group = take[0]!.day_group;
+      return !usedTakes.has(`${take[0]!.source.dataset}:${take[0]!.source.video_id}`) && (!groupDay.has(group) || groupDay.get(group) === o.day);
+    };
+    /** B14: the next take for slot `o`: its participant's first, else the free participant with the most takes left. */
+    const pick = (o: Open): Clip[] | undefined => {
+      const left = takes.filter(usable(o));
+      if (left.length === 0) return undefined;
+      const same = o.participant === undefined ? undefined : left.find((t) => participantOf(t[0]!) === o.participant);
+      if (same !== undefined) return same;
+      const others = new Set(slots.filter((x) => x.day !== o.day && x.participant !== undefined).map((x) => x.participant!));
+      const count = new Map<string, number>();
+      for (const t of left) count.set(participantOf(t[0]!), (count.get(participantOf(t[0]!)) ?? 0) + 1);
+      let best: Clip[] | undefined;
+      for (const t of left) {
+        if (best === undefined) {
+          best = t;
+          continue;
+        }
+        const p = participantOf(t[0]!);
+        const q = participantOf(best[0]!);
+        const key = (x: string) => [Number(!others.has(x)), count.get(x)!] as const;
+        const [pf, pc] = key(p);
+        const [qf, qc] = key(q);
+        if (pf > qf || (pf === qf && pc > qc)) best = t;
+      }
+      return best;
+    };
+    for (let progress = true; progress; ) {
+      progress = false;
+      for (const o of slots) {
+        if (o.filled >= o.len) continue;
+        const take = pick(o);
+        if (take === undefined) continue;
+        progress = true;
+        usedTakes.add(`${take[0]!.source.dataset}:${take[0]!.source.video_id}`);
+        groupDay.set(take[0]!.day_group, o.day);
+        o.participant = participantOf(take[0]!);
         let seconds = 0;
         for (const c of take) {
-          if (filled >= we - ws) break;
-          entries.push({ slot_id: slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
+          if (o.filled >= o.len) break;
+          o.entries.push({ slot_id: o.slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
           const len = c.source_end_s - c.source_start_s;
-          seconds += len;
-          filled += len;
+          seconds += Math.min(len, o.len - o.filled);
+          o.filled += len;
         }
-        takes.push({ day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, take: take[0]!.source.video_id, day_group: group, seconds: Math.min(seconds, we - ws) });
+        o.takes.push({ day_index: o.day, slot_id: o.slot.slot_id, role: o.slot.role, take: take[0]!.source.video_id, day_group: take[0]!.day_group, seconds });
       }
     }
   }
-  return { entries, takes };
+  return { entries: open.flatMap((o) => o.entries), takes: open.flatMap((o) => o.takes) };
 }
 
 export type EveningSource = { role: string; source_date_or_take: string; seconds: number };
@@ -657,8 +881,10 @@ export type ComposeSummary = {
   commute_blocks: number;
   unassigned_days: { day_index: number; day_type: DayType; pool: Pool }[];
   per_day: DaySummary[];
-  /** B6: home blocks filled from spare dates. */
-  home_fills: HomeFill[];
+  /** B6, B6b and B13: blocks filled or topped up from spare dates, by `kind`. */
+  fills: Fill[];
+  /** @deprecated alias of `fills` (the B6 name), the same list. */
+  home_fills: Fill[];
 };
 
 export type ComposeResult = {
@@ -681,13 +907,16 @@ export function composeBlocks(t: Timeline, catalog: ClipCatalog): ComposeResult 
     return planDay(day, date === null || date === undefined ? undefined : dates.get(date), world);
   });
   const filled = homeFill(t.schedule.days, plan, assignments, dates, world);
-  const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries], catalog, world);
-  const full = [...plan, ...filled.entries, ...evening.entries];
+  // B13: top-up entries come after the slot's primary (and B6) entries, so layoutBlocks places them right after.
+  const topped = topUpFill(t.schedule.days, [...plan, ...filled.entries], assignments, dates, world, filled.fills);
+  const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries, ...topped.entries], catalog, world);
+  const full = [...plan, ...filled.entries, ...topped.entries, ...evening.entries];
   const placements = layoutBlocks(t, catalog, full);
-  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements, world), home_fills: filled.fills } };
+  const fills = [...filled.fills, ...topped.fills];
+  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements, world), fills, home_fills: fills } };
 }
 
-function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "home_fills"> {
+function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "fills" | "home_fills"> {
   const days_by_type: Partial<Record<DayType, number>> = {};
   for (const d of t.schedule.days) days_by_type[d.day_type] = (days_by_type[d.day_type] ?? 0) + 1;
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));

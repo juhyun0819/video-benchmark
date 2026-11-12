@@ -18,7 +18,20 @@ import {
   type World,
 } from "@vb/core";
 import { loadConfig, scheduleInput } from "../src/config.js";
-import { assignDates, collectDates, composeBlocks, deOverlap, eveningFill, homeFill, planDay, realStartOf, type DayLike, type DateAssignment } from "../src/composeBlocks.js";
+import {
+  assignDates,
+  collectDates,
+  composeBlocks,
+  deOverlap,
+  eveningFill,
+  homeFill,
+  maxWeightAssignment,
+  planDay,
+  realStartOf,
+  topUpFill,
+  type DayLike,
+  type DateAssignment,
+} from "../src/composeBlocks.js";
 import { CONFIG_DIR, EXAMPLE_WORLD, REPO_ROOT, filesIn, makeTempDir, writeAtusPool, writeDataset } from "./helpers.js";
 
 // Synthetic data only: every clip below is made up for these tests.
@@ -351,39 +364,7 @@ describe("date assignment", () => {
     expect(assignDates([day(1, "workday")], dates, world)[0]!.date).toBeNull();
   });
 
-  it("falls back to the other side's date closest to the preferred first-work time", () => {
-    // The 10:00 date ranks lower than the 08:40 one but is the closer fallback for a late day.
-    const early = collectDates(
-      new MemCatalog([...workDate("2026-05-04"), ...rec("2026-05-06", [{ at: "10:00", min: 120, node: "workplace" }])]),
-      world,
-    );
-    expect(assignDates([day(1, "workday_late")], early, world)[0]!.date).toBe("2026-05-06");
-    // The 15:00 date ranks higher than the 12:40 one but a plain workday takes the earliest first work.
-    const late = collectDates(
-      new MemCatalog([
-        ...workDate("2026-05-05", { late: true }),
-        ...rec("2026-05-07", [{ at: "07:00", min: 300, node: "home" }, { at: "15:00", min: 120, node: "workplace" }]),
-      ]),
-      world,
-    );
-    expect(assignDates([day(1, "workday")], late, world)[0]!.date).toBe("2026-05-05");
-  });
-
-  it("ranks dates by home footage before leaving, then by labeled minutes", () => {
-    const dates = collectDates(
-      new MemCatalog([
-        ...workDate("2026-05-04"),
-        ...workDate("2026-05-06", { homeMorning: false, extraWork: 600 }),
-        ...workDate("2026-05-07", { extraWork: 60 }),
-      ]),
-      world,
-    );
-    expect(assignDates([day(1, "workday")], dates, world)[0]!.date).toBe("2026-05-07");
-    const two = assignDates([day(1, "workday"), day(2, "workday")], dates, world).map((a) => a.date).sort();
-    expect(two).toEqual(["2026-05-04", "2026-05-07"]);
-  });
-
-  it("visits days in a seeded shuffle so the best date is not always on the first day", () => {
+  it("breaks ties with the seed, so the best date is not always on the first day", () => {
     const clips = Array.from({ length: 6 }, (_, i) => workDate(`2026-05-0${i + 1}`, { extraWork: 10 * i })).flat();
     const dates = collectDates(new MemCatalog(clips), world);
     const days = Array.from({ length: 6 }, (_, i) => day(i + 1, "workday"));
@@ -391,6 +372,63 @@ describe("date assignment", () => {
     const seen = new Set(Array.from({ length: 12 }, (_, s) => best(s)));
     expect(seen.size).toBeGreaterThan(1);
     expect(best(7)).toBe(best(7));
+  });
+
+  /** Day `n` of `day_type` with slot ids d<n>-s<k>. */
+  const full = (n: number, day_type: ScheduleDay["day_type"], slots: Slot[]): ScheduleDay => ({
+    ...mkDay(day_type, slots.map((s) => ({ ...s, slot_id: s.slot_id.replace("d1-", `d${n}-`) }))),
+    day_index: n,
+  });
+  const work = (at: string, min: number): Spec => ({ at, min, node: "workplace" });
+
+  it("B12: maximizes the total planned footage where a greedy order would not", () => {
+    // 05-05 has morning and afternoon work, 05-04 morning work only. Day 1 gains little from the
+    // afternoon (a short work_pm), day 2 has only a work_pm: the best total gives 05-05 to day 2,
+    // although day 1 alone would fill more with it and 05-05 is the richer date.
+    const dates = collectDates(
+      new MemCatalog([...rec("2026-05-05", [work("08:40", 240), work("13:00", 240)]), ...rec("2026-05-04", [work("08:40", 240)])]),
+      world,
+    );
+    const d1 = full(1, "workday", [slot(1, "work_am", "workplace", "08:30", "12:00"), slot(2, "work_pm", "workplace", "12:45", "14:00")]);
+    const d2 = full(2, "workday", [slot(1, "work_pm", "workplace", "12:45", "17:30")]);
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      for (const days of [[d1, d2], [d2, d1]]) {
+        const out = assignDates(days, dates, makeWorld({ seed }));
+        expect(Object.fromEntries(out.map((a) => [a.day_index, a.date]))).toEqual({ 1: "2026-05-04", 2: "2026-05-05" });
+      }
+    }
+  });
+
+  it("B12: keeps the tiers hard: weekday before weekend work dates, rest before partial dates", () => {
+    const pm = [slot(1, "work_am", "workplace", "08:30", "12:00"), slot(2, "work_pm", "workplace", "12:45", "17:30")];
+    // A Saturday date full of work still loses to a Monday date with one hour of it.
+    const weekend = collectDates(new MemCatalog([...rec("2026-05-04", [work("09:00", 60)]), ...workDate("2026-05-09", { extraWork: 300 })]), world);
+    expect(assignDates([full(1, "workday", pm)], weekend, world).map((a) => a.date)).toEqual(["2026-05-04"]);
+    expect(assignDates([full(1, "workday", pm), full(2, "workday", pm)], weekend, world).map((a) => a.date).sort()).toEqual(["2026-05-04", "2026-05-09"]);
+    // A partial date full of home footage still loses to a rest date with ten minutes of it.
+    const rest = collectDates(
+      new MemCatalog([
+        ...rec("2026-05-09", [{ at: "08:00", min: 10, node: "home" }]),
+        ...rec("2026-05-12", [{ at: "06:00", min: 600, node: "home" }, work("16:30", 30)]),
+      ]),
+      world,
+    );
+    const homeDay = full(1, "home_day", [slot(1, "home_morning", "home", "07:00", "09:00"), slot(2, "home_afternoon", "home", "12:00", "17:00")]);
+    expect(assignDates([homeDay], rest, world).map((a) => a.date)).toEqual(["2026-05-09"]);
+  });
+
+  it("B12: a late day gets one hour of bonus for a first work at or after 11:00, a plain workday for an earlier one", () => {
+    const pm = [slot(1, "work_pm", "workplace", "12:45", "17:30")];
+    // 05-05: first work 13:00, 2 h in work_pm. 05-04: first work 09:00, more in work_pm.
+    const lateDate = rec("2026-05-05", [work("13:00", 120)]);
+    const within = collectDates(new MemCatalog([...lateDate, ...rec("2026-05-04", [work("09:00", 10), work("13:00", 150)])]), world);
+    const beyond = collectDates(new MemCatalog([...lateDate, ...rec("2026-05-04", [work("09:00", 10), work("13:00", 190)])]), world);
+    for (const seed of [1, 2, 3]) {
+      const w = makeWorld({ seed });
+      expect(assignDates([full(1, "workday_late", pm)], within, w)[0]!.date).toBe("2026-05-05"); // 2 h + 1 h > 2.5 h
+      expect(assignDates([full(1, "workday_late", pm)], beyond, w)[0]!.date).toBe("2026-05-04"); // 3 h 10 min > 2 h + 1 h
+      expect(assignDates([full(1, "workday", pm)], within, w)[0]!.date).toBe("2026-05-04");
+    }
   });
 
   it("gives trip days the trip sequence in order and leave days rest dates", () => {
@@ -411,6 +449,39 @@ describe("date assignment", () => {
       ["trip", TRIP[2]],
       ["rest", "2026-05-09"],
     ]);
+  });
+});
+
+describe("max-weight assignment (B12)", () => {
+  /** Best total by brute force: every row takes an unused column or none (0). */
+  function brute(v: number[][], row = 0, used = new Set<number>()): number {
+    if (row === v.length) return 0;
+    let best = brute(v, row + 1, used);
+    v[row]!.forEach((x, j) => {
+      if (used.has(j)) return;
+      used.add(j);
+      best = Math.max(best, x + brute(v, row + 1, used));
+      used.delete(j);
+    });
+    return best;
+  }
+
+  it("matches brute force on small rectangular matrices and uses each column once", () => {
+    let state = 12345;
+    const next = () => (state = (state * 1103515245 + 12345) % 2147483648) % 50 + 1;
+    for (let n = 1; n <= 5; n++) {
+      for (let m = 1; m <= 5; m++) {
+        for (let k = 0; k < 6; k++) {
+          const v = Array.from({ length: n }, () => Array.from({ length: m }, next));
+          const got = maxWeightAssignment(v);
+          expect(got).toHaveLength(n);
+          const cols = got.filter((j): j is number => j !== null);
+          expect(new Set(cols).size).toBe(cols.length);
+          expect(got.reduce<number>((s, j, i) => s + (j === null ? 0 : v[i]![j]!), 0)).toBe(brute(v));
+          expect(cols.length).toBe(Math.min(n, m)); // positive values: every row that can be matched is
+        }
+      }
+    }
   });
 });
 
@@ -601,7 +672,7 @@ describe("home fill from spare dates", () => {
   it("fills an empty home_morning from a spare date within 180 minutes, filling until the block end", () => {
     const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("07:30", 30), home("08:05", 30), home("08:45", 30)])];
     const r = fill([dayN(1, [MORNING])], [[1, "2026-05-01"]], clips);
-    expect(r.fills).toEqual([{ day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 30, seconds: 3600 }]);
+    expect(r.fills).toEqual([{ kind: "home", day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 30, seconds: 3600 }]);
     expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["07:30", "08:05"]);
     expect(r.entries.every((e) => e.slot_id === "d1-s1")).toBe(true);
   });
@@ -678,7 +749,7 @@ describe("home fill from spare dates", () => {
     it("fills a home_morning with no in-window candidate from a spare date whose home clips precede its first away clip", () => {
       const clips = [...bare("2026-05-01"), ...rec("2026-05-02", [home("11:40", 30), away("12:30")])];
       const r = fill([dayN(1, [MORNING])], A1, clips);
-      expect(r.fills).toEqual([{ day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 280, seconds: 1800, fallback: true }]);
+      expect(r.fills).toEqual([{ kind: "home_fallback", day_index: 1, slot_id: "d1-s1", role: "home_morning", from_date: "2026-05-02", delta_min: 280, seconds: 1800, fallback: true }]);
       expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["11:40"]);
     });
 
@@ -713,6 +784,75 @@ describe("home fill from spare dates", () => {
       const tie = fill([dayN(1, [MORNING])], A1, [...base, ...rec("2026-05-04", [home("11:00", 20)]), ...rec("2026-05-03", [home("11:00", 20)])]);
       expect(tie.fills[0]!.from_date).toBe("2026-05-03");
     });
+  });
+});
+
+describe("top-up fills from spare dates (B13)", () => {
+  const world = makeWorld();
+  const PM = slot(1, "work_pm", "workplace", "12:45", "17:30");
+  const MORNING = slot(2, "home_morning", "home", "07:00", "08:00");
+  const dayN = (n: number, slots: Slot[]): ScheduleDay => ({
+    ...mkDay("workday", slots.map((s) => ({ ...s, slot_id: s.slot_id.replace("d1-", `d${n}-`) }))),
+    day_index: n,
+  });
+  const work = (at: string, min: number, category?: ClipCategory): Spec => ({ at, min, node: "workplace", ...(category ? { category } : {}) });
+
+  /** Primary plan from the assigned dates, then B6/B6b, then the top-up. */
+  function topUp(days: ScheduleDay[], assigned: [number, string][], clips: Clip[]) {
+    const dates = collectDates(new MemCatalog(clips), world);
+    const assignments: DateAssignment[] = assigned.map(([day_index, date]) => ({ day_index, day_type: "workday", pool: "work", date }));
+    const plan = days.flatMap((d) => planDay(d, dates.get(assigned.find(([i]) => i === d.day_index)![1]), world));
+    const home = homeFill(days, plan, assignments, dates, world);
+    const r = topUpFill(days, [...plan, ...home.entries], assignments, dates, world, home.fills);
+    return { plan, home, ...r, slots: r.fills.map((f) => `${f.slot_id}<-${f.from_date}`) };
+  }
+  /** Day 1's assigned date: one hour of work from 13:00, so work_pm is unfilled from 13:45. */
+  const own = rec("2026-05-04", [work("13:00", 60)]);
+
+  it("tops up a half-filled work_pm from a spare date within ±3 h of the unfilled part's start, after the primary clips", () => {
+    const r = topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...own, ...rec("2026-05-06", [work("16:45", 60), work("17:50", 30), work("18:40", 30)])]);
+    expect(r.plan.map((e) => e.clip_id.slice(-5))).toEqual(["13:00"]);
+    expect(r.fills).toEqual([{ kind: "topup", day_index: 1, slot_id: "d1-s1", role: "work_pm", from_date: "2026-05-06", delta_min: 180, seconds: 90 * 60 }]);
+    // a contiguous run: 18:40 is more than 15 min after 18:20
+    expect(r.entries.map((e) => `${e.slot_id}@${e.clip_id.slice(-5)}`)).toEqual(["d1-s1@16:45", "d1-s1@17:50"]);
+    const before = topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...own, ...rec("2026-05-06", [work("10:45", 30)])]);
+    expect(before.fills.map((f) => f.delta_min)).toEqual([180]);
+  });
+
+  it("does not top up from clips more than 3 h away, from workplace meals, or when less than 10 min is unfilled", () => {
+    expect(topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...own, ...rec("2026-05-06", [work("16:46", 60)])]).fills).toEqual([]);
+    expect(topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...own, ...rec("2026-05-06", [work("10:44", 60)])]).fills).toEqual([]);
+    expect(topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...own, ...rec("2026-05-06", [work("14:00", 60, "meal")])]).fills).toEqual([]);
+    const spare = rec("2026-05-06", [work("16:00", 60)]);
+    // work_pm is 285 min long: 276 min of primary footage leaves 9 min, 275 min leaves 10.
+    expect(topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...rec("2026-05-04", [work("13:00", 276)]), ...spare]).fills).toEqual([]);
+    expect(topUp([dayN(1, [PM])], [[1, "2026-05-04"]], [...rec("2026-05-04", [work("13:00", 275)]), ...spare]).fills).toMatchObject([{ kind: "topup", seconds: 600 }]);
+  });
+
+  it("never lets a spare date serve two days, counting the dates B6 already gave a day", () => {
+    const two: [number, string][] = [[1, "2026-05-04"], [2, "2026-05-05"]];
+    const days = [dayN(1, [PM]), dayN(2, [PM])];
+    const second = rec("2026-05-05", [work("13:00", 60)]);
+    const one = topUp(days, two, [...own, ...second, ...rec("2026-05-06", [work("13:45", 60), work("15:00", 60)])]);
+    expect(one.slots).toEqual(["d1-s1<-2026-05-06"]);
+    const both = topUp(days, two, [...own, ...second, ...rec("2026-05-06", [work("13:45", 60)]), ...rec("2026-05-07", [work("13:45", 60)])]);
+    expect(both.slots).toEqual(["d1-s1<-2026-05-06", "d2-s1<-2026-05-07"]);
+    // B6 gives 05-06 to day 1's home_morning: day 2 cannot top up from it, day 1 can.
+    const spare = rec("2026-05-06", [{ at: "07:00", min: 30, node: "home" }, work("13:45", 60)]);
+    const b6 = topUp([dayN(1, [MORNING]), dayN(2, [PM])], two, [...own, ...second, ...spare]);
+    expect(b6.home.fills.map((f) => `${f.slot_id}<-${f.from_date}`)).toEqual(["d1-s2<-2026-05-06"]);
+    expect(b6.fills).toEqual([]);
+    const sameDay = topUp([dayN(1, [MORNING, PM])], [[1, "2026-05-04"]], [...own, ...spare]);
+    expect(sameDay.home.fills.map((f) => f.from_date)).toEqual(["2026-05-06"]);
+    expect(sameDay.slots).toEqual(["d1-s1<-2026-05-06"]);
+  });
+
+  it("tops up a partly filled home slot with the home clips of a spare date", () => {
+    const evening = slot(1, "home_evening", "home", "20:00", "22:00");
+    const date = rec("2026-05-04", [work("09:00", 60), { at: "20:00", min: 30, node: "home" }]);
+    const r = topUp([dayN(1, [evening])], [[1, "2026-05-04"]], [...date, ...rec("2026-05-06", [work("18:00", 60), { at: "20:40", min: 60, node: "home" }])]);
+    expect(r.fills).toMatchObject([{ kind: "topup", role: "home_evening", from_date: "2026-05-06", delta_min: 10, seconds: 3600 }]);
+    expect(r.entries.map((e) => e.clip_id.slice(-5))).toEqual(["20:40"]);
   });
 });
 
@@ -760,8 +900,21 @@ describe("composeBlocks on a generated schedule", () => {
     const { t, catalog, result } = compose([...WORK.flatMap((d) => workDate(d, { homeMorning: false })), ...spareRest.flatMap(restDate), ...TRIP.flatMap(tripDate)]);
     const report = verifyTimeline(t, catalog, { mode: "block", placements: result.placements });
     expect(report.pass).toBe(true);
-    const fills = result.summary.home_fills;
-    expect(fills.length).toBeGreaterThan(0);
+    const fills = result.summary.fills;
+    expect(result.summary.home_fills).toBe(fills);
+    expect(fills.filter((f) => f.kind === "home").length).toBeGreaterThan(0);
+    const topups = fills.filter((f) => f.kind === "topup");
+    expect(topups.length).toBeGreaterThan(0);
+    const dateOfDay = new Map(result.assignments.map((a) => [a.day_index, a.date]));
+    for (const f of topups.filter((x) => x.role === "work_am" || x.role === "work_pm")) {
+      // the top-up follows the slot's primary clips back to back from the window start
+      const ps = result.placements.filter((p) => p.slot_id === f.slot_id).sort((a, b) => a.synthetic_start_s - b.synthetic_start_s);
+      const slotDef = t.schedule.days[f.day_index - 1]!.slots.find((x) => x.slot_id === f.slot_id)!;
+      expect(ps[0]!.synthetic_start_s).toBe((f.day_index - 1) * 86400 + sec(slotDef.window[0]));
+      for (let i = 1; i < ps.length; i++) expect(ps[i]!.synthetic_start_s).toBeCloseTo(ps[i - 1]!.synthetic_end_s, 3);
+      const groups = ps.map((p) => p.clip.day_group);
+      expect(groups.lastIndexOf(dateOfDay.get(f.day_index)!)).toBeLessThan(groups.indexOf(f.from_date));
+    }
     const assigned = new Set(result.assignments.map((a) => a.date));
     const dayOf = new Map<string, number>();
     for (const f of fills) {
@@ -883,13 +1036,13 @@ describe("evening activities (B10)", () => {
     ], { video: `rec-${date}-gym`, wall: "16:00" }),
   ];
 
-  const guitar = (take: string, group: string, n = 2, min = 20): Clip[] =>
+  const guitar = (take: string, group: string, n = 2, min = 20, activity = "guitar"): Clip[] =>
     Array.from({ length: n }, (_, i): Clip => ({
       clip_id: `egoexo4d:${take}:${i}`,
       category: "hobby",
       setting: "venue_indoor",
       node: "hobby",
-      activity: "guitar",
+      activity,
       time_of_day: "unknown",
       tags: ["music_guitar"],
       source: { dataset: "egoexo4d", video_id: take, media: { kind: "video", fps: 30, path: `${take}.mp4` } },
@@ -961,6 +1114,59 @@ describe("evening activities (B10)", () => {
     expect(r.entries.length).toBeGreaterThan(0);
     // deterministic
     expect(eveningFill(days, [], new MemCatalog(clips), world)).toEqual(r);
+  });
+
+  it("B12: an exercise day takes a gym date for its 10 h bonus over a date that fills more of its other blocks", () => {
+    const sparseGym = [...rec("2026-05-05", [{ at: "09:00", min: 60, node: "workplace" }]), ...gymDate("2026-05-05").filter((c) => c.clip_id.includes("-gym:"))];
+    const dates = collectDates(new MemCatalog([...workDate("2026-05-04", { extraWork: 120 }), ...sparseGym]), world);
+    expect(dates.get("2026-05-05")!.work_seconds).toBe(3600);
+    const ex = mkDay("workday", [
+      slot(1, "work_am", "workplace", "08:30", "12:00"),
+      slot(2, "work_pm", "workplace", "12:45", "17:00"),
+      hobbySlot(3, "exercise", "gym_1", "17:30", "18:30"),
+    ]);
+    for (const seed of [1, 2, 3]) expect(assignDates([ex], dates, eveningWorld(seed))[0]!.date).toBe("2026-05-05");
+  });
+
+  /** Ego-Exo4D-style guitar takes: one 4-min clip each, the take name (participant prefix) in the activity. */
+  const takesOf = (participants: number, perParticipant: number): Clip[] =>
+    Array.from({ length: participants * perParticipant }, (_, i) => {
+      const p = Math.floor(i / perParticipant);
+      const name = `upenn_03${String(p).padStart(2, "0")}_Guitar_1_${i % perParticipant}`;
+      return guitar(`take${String(i).padStart(2, "0")}`, `egoexo4d:take${i}`, 1, 4, `Playing Guitar (${name})`);
+    }).flat();
+  const hobbyDays = (n: number): ScheduleDay[] =>
+    Array.from({ length: n }, (_, k) => {
+      const s = { ...hobbySlot(1, "hobby_2", "hobby_2", "19:30", "20:15"), slot_id: `d${k + 1}-s1` };
+      return { ...mkDay("workday", [s]), day_index: k + 1, slots: [s] };
+    });
+
+  it("B14: spreads hobby_2 takes round-robin over the days, each take once, so every day gets one when takes >= days", () => {
+    const clips = takesOf(7, 4); // 28 takes of 4 min for 6 days of 45 min
+    for (const seed of [1, 2, 3]) {
+      const r = eveningFill(hobbyDays(6), [], new MemCatalog(clips), eveningWorld(seed));
+      const per = [1, 2, 3, 4, 5, 6].map((d) => r.takes.filter((x) => x.day_index === d).length);
+      expect(Math.min(...per)).toBeGreaterThanOrEqual(1);
+      expect(Math.max(...per) - Math.min(...per)).toBeLessThanOrEqual(1);
+      expect(r.takes).toHaveLength(28);
+      expect(new Set(r.takes.map((x) => x.take)).size).toBe(28);
+    }
+    // fewer takes than days: the first days get one each
+    const few = eveningFill(hobbyDays(6), [], new MemCatalog(takesOf(1, 4)), world);
+    expect(few.takes.map((x) => x.day_index)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("B14: within a day, prefers takes of the same participant", () => {
+    const clips = takesOf(3, 4); // 3 participants x 4 takes for 3 days
+    for (const seed of [1, 2, 3, 4]) {
+      const r = eveningFill(hobbyDays(3), [], new MemCatalog(clips), eveningWorld(seed));
+      const byTake = new Map(clips.map((c) => [c.source.video_id, c.activity.slice(16, 26)]));
+      for (const d of [1, 2, 3]) {
+        const people = r.takes.filter((x) => x.day_index === d).map((x) => byTake.get(x.take));
+        expect(people).toHaveLength(4);
+        expect(new Set(people).size).toBe(1);
+      }
+    }
   });
 
   it("composeBlocks: exercise and hobby_2 fill, the summary lists them and block verify passes", () => {
