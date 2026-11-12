@@ -80,7 +80,6 @@ export const OCCUPATION_CODES: Record<string, number> = {
 };
 
 const MIN_CELL = 30;
-const MAX_WEEKEND_REDRAWS = 5;
 const EARLY_WEEKEND_MARGIN = 120;
 const DAY_SHIFT_START: readonly [number, number] = [300, 660];
 const LOC_MAP: Record<number, MealPlace> = { 1: "home", 2: "workplace", 3: "others_home", 4: "eat_out" };
@@ -365,17 +364,13 @@ export function selectDonors(
   const weekdayDonor = drawDonor("weekday", wd.rows, opts.seed, 0);
 
   const we = pickLevel("weekend", weekendPool, attrs);
-  let weekendDonor = drawDonor("weekend", we.rows, opts.seed, 0);
-  let redraws = 0;
-  const floor = (weekdayDonor.wake as number) - EARLY_WEEKEND_MARGIN;
-  while ((weekendDonor.wake as number) < floor && redraws < MAX_WEEKEND_REDRAWS) {
-    redraws += 1;
-    weekendDonor = drawDonor("weekend", we.rows, opts.seed, redraws);
-  }
 
-  const violationsOf = (kind: DayKind, profile: DayProfile): DonorViolation[] => [
+  const violationsOf = (kind: DayKind, profile: DayProfile, wakeFloor?: number): DonorViolation[] => [
     ...donorBoundViolations(kind, profile, lunchMinutes, hobbyMinutes),
     ...(opts.accept?.(kind, profile) ?? []),
+    ...(wakeFloor !== undefined && profile.wake < wakeFloor
+      ? [{ item: "weekend_wake_floor", bound: wakeFloor, value: profile.wake }]
+      : []),
   ];
   const accepted = (
     kind: DayKind,
@@ -383,11 +378,12 @@ export function selectDonors(
     level: BackoffLevel,
     rows: DonorRow[],
     pool: DonorRow[],
+    wakeFloor?: number,
   ): DonorPick => {
     let donor = first;
     let pick = buildPick(kind, donor, level, rows, pool, opts.seed);
     let k = 0;
-    while (violationsOf(kind, pick.profile).length > 0 && k < MAX_ACCEPT_REDRAWS) {
+    while (violationsOf(kind, pick.profile, wakeFloor).length > 0 && k < MAX_ACCEPT_REDRAWS) {
       k += 1;
       donor = drawDonor(kind, rows, opts.seed, "accept", k);
       pick = buildPick(kind, donor, level, rows, pool, opts.seed);
@@ -399,10 +395,16 @@ export function selectDonors(
     return pick;
   };
 
+  const weekday = accepted("weekday", weekdayDonor, wd.level, wd.rows, weekdayPool);
+  // The floor follows the final weekday pick and is never clamped.
+  const wakeFloor = weekday.profile.wake - EARLY_WEEKEND_MARGIN;
+  const weekendFirst = drawDonor("weekend", we.rows, opts.seed, 0);
+  const weekend = accepted("weekend", weekendFirst, we.level, we.rows, weekendPool, wakeFloor);
+
   return {
-    weekday: accepted("weekday", weekdayDonor, wd.level, wd.rows, weekdayPool),
-    weekend: accepted("weekend", weekendDonor, we.level, we.rows, weekendPool),
+    weekday,
+    weekend,
     country_fallback: mismatch,
-    weekend_redraws: redraws,
+    weekend_redraws: weekend.redraws,
   };
 }

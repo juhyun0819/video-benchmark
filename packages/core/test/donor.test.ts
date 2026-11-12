@@ -228,17 +228,59 @@ describe("donor acceptance redraws", () => {
   it("redraws a first-draw bed of 1700 into range without adjustments", () => {
     const src = atus2025Source([
       ...many(40),
-      ...weekendRows(20, { id: "late", bed: 1700 }),
-      ...weekendRows(20, { id: "ok", bed: 1380 }),
+      ...weekendRows(1, { id: "late", bed: 1700 }),
+      ...weekendRows(39, { id: "ok", bed: 1380 }),
     ]);
     let redrawn = 0;
-    for (let seed = 0; seed < 40; seed++) {
+    for (let seed = 0; seed < 200; seed++) {
       const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
       expect(r.weekend.profile.sleep).toBe(1380);
       expect(r.weekend.adjustments).toEqual([]);
       if (r.weekend.redraws > 0) redrawn++;
     }
     expect(redrawn).toBeGreaterThan(0);
+  });
+
+  it("acceptance redraws never land below the weekend wake floor", () => {
+    const src = atus2025Source([
+      ...many(40, { wake: 480, breakfast_time: 510 }),
+      ...weekendRows(1, { wake: 300 }),
+      ...weekendRows(1, { wake: 480, breakfast_time: 510, bed: 1700 }),
+      ...weekendRows(38, { wake: 480, breakfast_time: 510 }),
+    ]);
+    let redrawn = 0;
+    for (let seed = 0; seed < 200; seed++) {
+      const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
+      expect(r.weekend.profile.wake).toBeGreaterThanOrEqual(360);
+      expect(r.weekend.profile.sleep).toBe(1380);
+      expect(r.weekend_redraws).toBe(r.weekend.redraws);
+      if (r.weekend.redraws > 0) redrawn++;
+    }
+    expect(redrawn).toBeGreaterThan(0);
+  });
+
+  it("never clamps the wake floor and still reports it", () => {
+    const src = atus2025Source([...many(40, { wake: 480, breakfast_time: 510 }), ...weekendRows(40, { wake: 300 })]);
+    const r = selectDonors(ATTRS, src, OPTS);
+    expect(r.weekend.redraws).toBe(5);
+    expect(r.weekend.profile.wake).toBe(300);
+    expect(r.weekend.adjustments).toEqual([]);
+  });
+
+  it("the wake floor follows the final weekday donor, not the draw-0 one", () => {
+    const src = atus2025Source([
+      ...many(8, { wake: 700, breakfast_time: 720, bed: 1700 }),
+      ...many(32, { wake: 420 }),
+      ...weekendRows(40, { wake: 320, breakfast_time: 360 }),
+    ]);
+    let redrawnWeekday = 0;
+    for (let seed = 0; seed < 100; seed++) {
+      const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
+      expect(r.weekday.profile.wake).toBe(420);
+      expect(r.weekend.redraws).toBe(0);
+      if (r.weekday.redraws > 0) redrawnWeekday++;
+    }
+    expect(redrawnWeekday).toBeGreaterThan(0);
   });
 
   it("clamps the last pick after 5 failed redraws and records it", () => {
