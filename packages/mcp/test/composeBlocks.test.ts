@@ -18,7 +18,7 @@ import {
   type World,
 } from "@vb/core";
 import { loadConfig, scheduleInput } from "../src/config.js";
-import { assignDates, collectDates, composeBlocks, deOverlap, homeFill, planDay, realStartOf, type DayLike, type DateAssignment } from "../src/composeBlocks.js";
+import { assignDates, collectDates, composeBlocks, deOverlap, eveningFill, homeFill, planDay, realStartOf, type DayLike, type DateAssignment } from "../src/composeBlocks.js";
 import { CONFIG_DIR, EXAMPLE_WORLD, REPO_ROOT, filesIn, makeTempDir, writeAtusPool, writeDataset } from "./helpers.js";
 
 // Synthetic data only: every clip below is made up for these tests.
@@ -852,5 +852,124 @@ describe("npm run compose-blocks", () => {
     const r = run([]);
     expect(r.status).toBe(1);
     expect(JSON.parse(r.stderr).error.message).toContain("usage: npm run compose-blocks");
+  });
+});
+
+describe("evening activities (B10)", () => {
+  const EVENING = [
+    { node: "gym_1", role: "exercise", position: "before_dinner", duration_min: 60, weekdays: ["Tue", "Thu"] },
+    { node: "hobby_2", role: "hobby_2", position: "after_dinner", duration_min: 45, weekdays: ["Mon", "Wed"] },
+  ];
+  function eveningWorld(seed?: number): World {
+    const base = worldJson({ trip: false, ...(seed !== undefined ? { seed } : {}) });
+    base.nodes.gym_1 = { kind: "hobby", activity: "gym workout", setting: "venue_indoor", weekly_freq: 0, tags: ["gym"] };
+    base.nodes.hobby_2 = { kind: "hobby", activity: "guitar", setting: "venue_indoor", weekly_freq: 0, tags: ["music_guitar"] };
+    base.node_binding.gym_1 = { dataset: ["nextme800"], person_source: PERSON, node: "gym" };
+    base.node_binding.hobby_2 = { dataset: ["egoexo4d"], tags_any: ["music_guitar"] };
+    base.dials.evening_activities = EVENING;
+    return parseWorld(base);
+  }
+  const world = eveningWorld();
+  const hobbySlot = (i: number, role: string, node: string, from: string, to: string): Slot => ({ ...slot(i, role, node, from, to), spec: { ...slot(i, role, node, from, to).spec, category: "hobby" } });
+
+  /** A work date with a gym run (transit, then gym clips) after work. */
+  const gymDate = (date: string, gap = 5): Clip[] => [
+    ...workDate(date),
+    ...rec(date, [
+      { at: "16:50", min: 10, node: "transit" },
+      { at: "17:05", min: 30, node: "gym", category: "hobby" },
+      { at: `17:${35 + gap}`, min: 20, node: "gym", category: "hobby" },
+      { at: "19:00", min: 20, node: "gym", category: "hobby" }, // a second, shorter run
+    ], { video: `rec-${date}-gym`, wall: "16:00" }),
+  ];
+
+  const guitar = (take: string, group: string, n = 2, min = 20): Clip[] =>
+    Array.from({ length: n }, (_, i): Clip => ({
+      clip_id: `egoexo4d:${take}:${i}`,
+      category: "hobby",
+      setting: "venue_indoor",
+      node: "hobby",
+      activity: "guitar",
+      time_of_day: "unknown",
+      tags: ["music_guitar"],
+      source: { dataset: "egoexo4d", video_id: take, media: { kind: "video", fps: 30, path: `${take}.mp4` } },
+      source_start_s: i * min * 60,
+      source_end_s: (i + 1) * min * 60,
+      day_group: group,
+      person_source: `egoexo4d:${take}`,
+      fingerprint: null,
+      extractor_version: "fixture.v1",
+    }));
+
+  it("gym dates: an exercise day prefers the work date with gym footage", () => {
+    const dates = collectDates(new MemCatalog([...workDate("2026-05-04"), ...gymDate("2026-05-05"), ...workDate("2026-05-06")]), world);
+    expect(dates.get("2026-05-05")!.kind).toBe("work");
+    const ex = mkDay("workday", [hobbySlot(1, "exercise", "gym_1", "17:30", "18:30")]);
+    const plain = mkDay("workday", [slot(1, "work_am", "workplace", "08:30", "12:00")]);
+    for (const seed of [1, 2, 3, 4]) {
+      const w = eveningWorld(seed);
+      const out = assignDates([{ ...plain, day_index: 1 }, { ...ex, day_index: 2 }], dates, w);
+      expect(out.find((a) => a.day_index === 2)!.date).toBe("2026-05-05");
+    }
+  });
+
+  it("planDay: the exercise block takes the date's longest gym run and the transit just before it", () => {
+    const day = mkDay("workday", [slot(1, "work_pm", "workplace", "12:45", "17:00"), hobbySlot(2, "exercise", "gym_1", "17:30", "19:30")], [[1, 2, 40]]);
+    // the transit goes to the transition block into the exercise slot, the gym clips to the slot
+    expect(byBlock(world, day, gymDate("2026-05-05"), "2026-05-05")).toMatchObject({ "d1-s2": ["17:05", "17:40"], "d1-t1": ["16:50"] });
+    // a gap over 15 minutes splits the run: the first run (30 min) is then the longest
+    const split = byBlock(world, day, gymDate("2026-05-05", 25), "2026-05-05");
+    expect(split["d1-s2"]).toEqual(["17:05"]);
+  });
+
+  it("planDay: no gym clips leaves the exercise block empty (no cross-date fill)", () => {
+    const day = mkDay("workday", [slot(1, "work_pm", "workplace", "12:45", "17:00"), hobbySlot(2, "exercise", "gym_1", "17:30", "18:30")], [[1, 2, 40]]);
+    const got = byBlock(world, day, workDate("2026-05-04"), "2026-05-04");
+    expect(got["d1-s2"]).toBeUndefined();
+    expect(got["d1-t1"]).toBeUndefined();
+  });
+
+  it("eveningFill: hobby_2 takes egoexo takes, each once, and never reuses a day_group on another day", () => {
+    const clips = [...guitar("tA", "gA", 2), ...guitar("tB", "gA", 2), ...guitar("tC", "gC", 2), ...guitar("tD", "gD", 1, 60)];
+    const mk = (n: number): ScheduleDay => ({ ...mkDay("workday", [hobbySlot(1, "hobby_2", "hobby_2", "19:30", "20:15")]), day_index: n, slots: [{ ...hobbySlot(1, "hobby_2", "hobby_2", "19:30", "20:15"), slot_id: `d${n}-s1` }] });
+    const days = [mk(1), mk(2), mk(3)];
+    const r = eveningFill(days, [], new MemCatalog(clips), world);
+    expect(r.takes.map((x) => x.take)).toHaveLength(new Set(r.takes.map((x) => x.take)).size);
+    const groupDays = new Map<string, Set<number>>();
+    for (const x of r.takes) groupDays.set(x.day_group, (groupDays.get(x.day_group) ?? new Set()).add(x.day_index));
+    for (const d of groupDays.values()) expect(d.size).toBe(1);
+    expect(new Set(r.entries.map((e) => e.clip_id)).size).toBe(r.entries.length);
+    expect(r.entries.length).toBeGreaterThan(0);
+    // deterministic
+    expect(eveningFill(days, [], new MemCatalog(clips), world)).toEqual(r);
+  });
+
+  it("composeBlocks: exercise and hobby_2 fill, the summary lists them and block verify passes", () => {
+    const dataDir = makeTempDir();
+    writeAtusPool(dataDir);
+    const config = loadConfig(CONFIG_DIR, dataDir);
+    const w = eveningWorld();
+    const t = createTimeline(w, generateSchedule(scheduleInput(config, w)), () => "compose-test-evening");
+    const work = Array.from({ length: 30 }, (_, i) => `2026-04-${String(i + 1).padStart(2, "0")}`);
+    const rest = Array.from({ length: 10 }, (_, i) => `2026-06-${String(i + 1).padStart(2, "0")}`);
+    const takes = Array.from({ length: 12 }, (_, i) => guitar(`tk${i}`, `grp${i % 6}`, 2, 25)).flat();
+    const clips = [...work.flatMap((d, i) => (i % 3 === 0 ? gymDate(d) : workDate(d))), ...rest.flatMap(restDate), ...takes];
+    const catalog = new MemCatalog(clips);
+    const result = composeBlocks(t, catalog);
+    const report = verifyTimeline(t, catalog, { mode: "block", placements: result.placements });
+    expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+    const evening = result.summary.per_day.flatMap((d) => d.evening);
+    const exercise = evening.filter((e) => e.role === "exercise");
+    const hobby2 = evening.filter((e) => e.role === "hobby_2");
+    expect(t.schedule.days.flatMap((d) => d.slots).some((s) => s.role === "exercise")).toBe(true);
+    expect(exercise.length).toBeGreaterThan(0);
+    expect(exercise.every((e) => /^2026-04-/.test(e.source_date_or_take))).toBe(true);
+    expect(hobby2.length).toBeGreaterThan(0);
+    expect(hobby2.every((e) => /^tk\d+$/.test(e.source_date_or_take) && e.seconds > 0)).toBe(true);
+    const used = result.placements.filter((p) => p.clip.source.dataset === "egoexo4d").map((p) => p.clip.clip_id);
+    expect(new Set(used).size).toBe(used.length);
+    // exercise blocks come from their day's assigned date
+    const dateOf = new Map(result.assignments.map((a) => [a.day_index, a.date]));
+    for (const d of result.summary.per_day) for (const e of d.evening.filter((x) => x.role === "exercise")) expect(e.source_date_or_take).toBe(dateOf.get(d.day_index));
   });
 });

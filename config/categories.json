@@ -7,6 +7,7 @@
     { "id": "cooking", "label": "Cooking", "dataset": "egoexo4d", "scenarios": ["Cooking"], "keywords": [] },
     { "id": "health", "label": "Health: COVID test and CPR", "dataset": "egoexo4d", "scenarios": ["Health"], "keywords": [] },
     { "id": "bike_repair", "label": "Bike repair", "dataset": "egoexo4d", "scenarios": ["Bike Repair"], "keywords": [] },
+    { "id": "hobby_guitar", "label": "Hobby: Guitar", "dataset": "egoexo4d", "scenarios": ["Music"], "keywords": ["guitar"], "clip": { "category": "hobby", "setting": "venue_indoor", "node": "hobby", "tags": ["music_guitar"] } },
     { "id": "hobby_music", "label": "Hobby: Music", "dataset": "egoexo4d", "scenarios": ["Music"], "keywords": [], "clip": { "category": "hobby", "setting": "venue_indoor", "node": "hobby", "tags": [] } },
     { "id": "hobby_dance", "label": "Hobby: Dance", "dataset": "egoexo4d", "scenarios": ["Dance"], "keywords": [], "clip": { "category": "hobby", "setting": "venue_indoor", "node": "hobby", "tags": [] } },
     { "id": "sport_basketball", "label": "Sport: Basketball", "dataset": "egoexo4d", "scenarios": ["Basketball"], "keywords": [], "clip": { "category": "hobby", "setting": "venue_indoor", "node": "hobby", "tags": [] } },

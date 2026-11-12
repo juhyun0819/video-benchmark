@@ -310,6 +310,22 @@ describe("shipped categories", () => {
   });
 });
 
+describe("guitar category (B11)", () => {
+  const cats = () => loadCategories(CATS_PATH).categories;
+  const mapped = (task: string) =>
+    buildEgoExoCatalog([take({ parent_task_name: "Music", task_name: task, take_name: "m1" }) as never], { "take-a": [run([desc(15, "C plays.")])] } as never, { "take-a": { segments: [] } }, cats(), newReport());
+  it("maps a Music take with guitar in its task name to hobby_guitar with tag music_guitar", () => {
+    const { candidates } = mapped("Playing Guitar");
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ category: "hobby_guitar" });
+    expect(cats().find((c) => c.id === "hobby_guitar")?.clip).toMatchObject({ node: "hobby", tags: ["music_guitar"] });
+  });
+  it("keeps a piano take in hobby_music", () => {
+    const { candidates } = mapped("Playing Piano");
+    expect(candidates[0]).toMatchObject({ category: "hobby_music" });
+  });
+});
+
 function writeRoot(root: string): void {
   mkdirSync(join(root, "annotations"), { recursive: true });
   const write = (name: string, value: unknown) => writeFileSync(join(root, name), JSON.stringify(value));

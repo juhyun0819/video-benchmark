@@ -77,7 +77,7 @@ const minutes = (hhmm: string): number => Number(hhmm.slice(0, 2)) * 60 + Number
 type Label = { node: string; setting: Setting; category: ClipCategory; tags: string[] };
 
 /** Label one text level (no fallback). Trip rules come first on trip dates; transit still applies there. */
-function labelText(text: string, rules: L3Rules, trip: boolean): Label | undefined {
+export function labelText(text: string, rules: L3Rules, trip: boolean): Label | undefined {
   const transit = rules.places.find((p) => p.node === "transit");
   const transitLabel = (): Label | undefined =>
     transit && hasAny(text, transit.words)

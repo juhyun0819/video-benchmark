@@ -167,7 +167,7 @@ const byRealTime = (a: RealClip, b: RealClip) =>
 const sum = (cs: readonly RealClip[]) => cs.reduce((s, c) => s + c.end - c.start, 0);
 
 export type Pool = "work" | "rest" | "trip";
-export type DayLike = Pick<ScheduleDay, "day_index" | "day_type" | "trip" | "exceptions">;
+export type DayLike = Pick<ScheduleDay, "day_index" | "day_type" | "trip" | "exceptions"> & Partial<Pick<ScheduleDay, "slots">>;
 export type DateAssignment = { day_index: number; day_type: DayType; pool: Pool; date: string | null };
 
 /**
@@ -204,6 +204,9 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
     [order[i], order[j]] = [order[j]!, order[i]!];
   }
   const sorted = [...dates.values()].sort(rank);
+  // B10: days with an exercise slot go first, so they get the dates with gym footage before other days do.
+  const exerciseNode = new Map(order.map((d) => [d.day_index, exerciseNodeOf(d, world)] as const));
+  order.sort((a, b) => Number(exerciseNode.get(b.day_index) !== undefined) - Number(exerciseNode.get(a.day_index) !== undefined));
   for (const day of order) {
     const pool = poolOf(day);
     let date: string | null = null;
@@ -215,7 +218,11 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
       if (pool === "work") {
         const late = day.day_type === "workday_late";
         // B7: real Mon-Fri dates first; Sat/Sun dates only once no weekday work date is left.
-        const pick = (work: RealDate[]) => {
+        const gymNode = exerciseNode.get(day.day_index);
+        const pick = (all: RealDate[]) => {
+          // B10: an exercise day prefers the dates that have gym footage.
+          const gym = gymNode === undefined ? [] : all.filter((x) => x.clips.some((c) => bindingAccepts(world, gymNode, c.clip)));
+          const work = gym.length > 0 ? gym : all;
           const preferred = work.filter((x) => (x.first_work_s! >= LATE_FIRST_WORK_S) === late);
           const fallback = [...work].sort((a, b) => (late ? b.first_work_s! - a.first_work_s! : a.first_work_s! - b.first_work_s!) || rank(a, b));
           return (preferred[0] ?? fallback[0])?.date;
@@ -230,6 +237,15 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
     out.set(day.day_index, { day_index: day.day_index, day_type: day.day_type, pool, date });
   }
   return days.map((d) => out.get(d.day_index)!);
+}
+
+/** B10: the roles of the world's evening activities, with the node each one uses. */
+const eveningNodes = (world: World): Map<string, string> => new Map((world.dials.evening_activities ?? []).map((a) => [a.role, a.node]));
+
+/** B10: the node of the day's exercise slot (the evening activity bound to the NextMe person), if any. */
+function exerciseNodeOf(day: DayLike, world: World): string | undefined {
+  const person = personSourceOf(world);
+  return (day.slots ?? []).find((s) => eveningNodes(world).has(s.role) && world.node_binding[s.spec.node]?.person_source === person)?.spec.node;
 }
 
 const windowSeconds = (s: Slot): [number, number] => [parseClock(s.window[0]) * 60, parseClock(s.window[1]) * 60];
@@ -290,6 +306,34 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
   const lunchStart = meals.find((c) => c.start >= H(11) && c.start < H(15))?.start ?? H(13);
   const inRange = (from: number, to: number) => (c: RealClip) => c.start >= from && c.start < to;
 
+  /**
+   * B10: the date's longest gym run (gap <= 15 min; ties: the earlier one) and the transit clips right
+   * before it (each at most 15 min before the next clip of the chain), kept for the transition block
+   * that ends at the slot. No gym clips: nothing.
+   */
+  const exerciseTransit = new Map<string, RealClip[]>();
+  function exerciseCands(slot: Slot): RealClip[] {
+    const gym = clips.filter((c) => bindingAccepts(world, slot.spec.node, c.clip));
+    const runs: RealClip[][] = [];
+    for (const c of gym) {
+      const last = runs[runs.length - 1];
+      if (last !== undefined && c.start - last[last.length - 1]!.end <= RUN_GAP_S) last.push(c);
+      else runs.push([c]);
+    }
+    const run = runs.reduce<RealClip[] | undefined>((best, r) => (best === undefined || sum(r) > sum(best) ? r : best), undefined);
+    if (run === undefined) return [];
+    const before: RealClip[] = [];
+    let next = run[0]!.start;
+    for (const c of clips.filter((x) => x.end <= run[0]!.start && transitAccepts(world, x.clip)).reverse()) {
+      if (next - c.end > RUN_GAP_S) break;
+      before.unshift(c);
+      next = c.start;
+    }
+    // The transit is not a gym clip: it goes to the transition block right before the exercise slot.
+    exerciseTransit.set(slot.slot_id, before);
+    return run;
+  }
+
   /** Real-phase candidates of a slot, before removing used clips; `run` keeps only the first run. */
   function phase(slot: Slot): { cands: RealClip[]; run: boolean } {
     const bound = (c: RealClip) => bindingAccepts(world, slot.spec.node, c.clip);
@@ -325,6 +369,8 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
         return { cands: clips.filter(bound), run: true };
       case "outing_pm":
         return { cands: clips.filter((c) => bound(c) && c.start >= lunchStart), run: false };
+      case "exercise":
+        return { cands: exerciseCands(slot), run: false };
       default:
         // hobby (spec §3.2.4) and any other role stay empty.
         return { cands: [], run: false };
@@ -350,6 +396,13 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
     const free = cands.filter((c) => !used.has(c.clip.clip_id));
     const [ws, we] = windowSeconds(slot);
     take(slot.slot_id, run ? firstRun(free) : free, we - ws);
+  }
+
+  // B10: the transit right before a gym run fills the transition into its exercise slot.
+  for (const [slotId, before] of exerciseTransit) {
+    const tr = transitionBlocks(day).find((x) => x.to_slot === slotId && x.span[1] > x.span[0]);
+    if (tr === undefined || !planned.has(slotId)) continue;
+    take(tr.transition_id, before.filter((c) => !used.has(c.clip.clip_id)), tr.span[1] - tr.span[0]);
   }
 
   // Fix ruling 1: commute windows come from the date's real phases, not from what the slots planned.
@@ -502,6 +555,81 @@ export function homeFill(
   return { entries, fills };
 }
 
+export type EveningTake = { day_index: number; slot_id: string; role: string; take: string; day_group: string; seconds: number };
+
+/**
+ * B10: every evening-activity slot whose node is not bound to the NextMe person (hobby_2: Ego-Exo4D)
+ * and that has no planned footage takes whole catalog takes accepted by its binding. Takes are the
+ * binding's clips grouped by video, in an order shuffled with rngFor(seed, "hobby_2"); a take is used
+ * once and its day_group is never used on another day. Days go in index order, slots in window order;
+ * the block takes one take's clips from its start (source order), then the next take until it is full.
+ */
+export function eveningFill(
+  days: readonly ScheduleDay[],
+  plan: readonly BlockPlanEntry[],
+  catalog: ClipCatalog,
+  world: World,
+): { entries: BlockPlanEntry[]; takes: EveningTake[] } {
+  const person = personSourceOf(world);
+  const roles = eveningNodes(world);
+  const planned = new Set(plan.map((e) => e.slot_id));
+  const groupDay = new Map<string, number>(); // day_group -> the day that uses it
+  const dayOfSlot = new Map(days.flatMap((d) => d.slots.map((s) => [s.slot_id, d.day_index] as const)));
+  for (const e of plan) {
+    const c = catalog.getClip(e.clip_id);
+    if (c !== undefined && !groupDay.has(c.day_group)) groupDay.set(c.day_group, dayOfSlot.get(e.slot_id)!);
+  }
+  const entries: BlockPlanEntry[] = [];
+  const takes: EveningTake[] = [];
+  const catalogClips = catalog.clips();
+  const shuffled = new Map<string, Clip[][]>(); // by node: the takes in shuffled order
+  const takesOf = (node: string): Clip[][] => {
+    let list = shuffled.get(node);
+    if (list === undefined) {
+      const byTake = new Map<string, Clip[]>();
+      for (const c of deOverlap(catalogClips.filter((x) => x.person_source !== person && bindingAccepts(world, node, x)))) {
+        const key = `${c.source.dataset}:${c.source.video_id}`;
+        byTake.set(key, [...(byTake.get(key) ?? []), c]);
+      }
+      list = [...byTake.keys()].sort().map((k) => byTake.get(k)!.sort((a, b) => a.source_start_s - b.source_start_s || (a.clip_id < b.clip_id ? -1 : 1)));
+      const rng = rngFor(world.seed, "hobby_2");
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = rng.int(0, i + 1);
+        [list[i], list[j]] = [list[j]!, list[i]!];
+      }
+      shuffled.set(node, list);
+    }
+    return list;
+  };
+  const usedTakes = new Set<Clip[]>();
+  for (const day of [...days].sort((a, b) => a.day_index - b.day_index)) {
+    const slots = day.slots.filter((s) => roles.has(s.role) && world.node_binding[s.spec.node]?.person_source !== person && !planned.has(s.slot_id));
+    for (const slot of slots.sort((a, b) => windowSeconds(a)[0] - windowSeconds(b)[0])) {
+      const [ws, we] = windowSeconds(slot);
+      let filled = 0;
+      for (const take of takesOf(slot.spec.node)) {
+        if (filled >= we - ws) break;
+        const group = take[0]!.day_group;
+        if (usedTakes.has(take) || (groupDay.has(group) && groupDay.get(group) !== day.day_index)) continue;
+        usedTakes.add(take);
+        groupDay.set(group, day.day_index);
+        let seconds = 0;
+        for (const c of take) {
+          if (filled >= we - ws) break;
+          entries.push({ slot_id: slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s });
+          const len = c.source_end_s - c.source_start_s;
+          seconds += len;
+          filled += len;
+        }
+        takes.push({ day_index: day.day_index, slot_id: slot.slot_id, role: slot.role, take: take[0]!.source.video_id, day_group: group, seconds: Math.min(seconds, we - ws) });
+      }
+    }
+  }
+  return { entries, takes };
+}
+
+export type EveningSource = { role: string; source_date_or_take: string; seconds: number };
+
 export type DaySummary = {
   day_index: number;
   day_type: DayType;
@@ -513,6 +641,8 @@ export type DaySummary = {
   last_real: string | null;
   /** Roles of the day's slots with no placement, in slot order. */
   empty_roles: string[];
+  /** B10: what filled the day's evening-activity blocks (exercise, hobby_2): the real date or the take, with placed seconds. */
+  evening: EveningSource[];
 };
 
 export type ComposeSummary = {
@@ -548,15 +678,18 @@ export function composeBlocks(t: Timeline, catalog: ClipCatalog): ComposeResult 
     return planDay(day, date === null || date === undefined ? undefined : dates.get(date), world);
   });
   const filled = homeFill(t.schedule.days, plan, assignments, dates, world);
-  const full = [...plan, ...filled.entries];
+  const evening = eveningFill(t.schedule.days, [...plan, ...filled.entries], catalog, world);
+  const full = [...plan, ...filled.entries, ...evening.entries];
   const placements = layoutBlocks(t, catalog, full);
-  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements), home_fills: filled.fills } };
+  return { assignments, plan: full, placements, summary: { ...summarize(t, assignments, placements, world), home_fills: filled.fills } };
 }
 
-function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[]): Omit<ComposeSummary, "home_fills"> {
+function summarize(t: Timeline, assignments: readonly DateAssignment[], placements: readonly BlockPlacement[], world: World): Omit<ComposeSummary, "home_fills"> {
   const days_by_type: Partial<Record<DayType, number>> = {};
   for (const d of t.schedule.days) days_by_type[d.day_type] = (days_by_type[d.day_type] ?? 0) + 1;
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
+  const person = personSourceOf(world);
+  const eveningRoles = eveningNodes(world);
   const per_day = t.schedule.days.map((day): DaySummary => {
     const ps = placements.filter((p) => p.day_index === day.day_index);
     const filled = new Set(ps.map((p) => p.slot_id));
@@ -572,6 +705,16 @@ function summarize(t: Timeline, assignments: readonly DateAssignment[], placemen
       first_real: real.length > 0 ? formatClock(Math.min(...real.map((r) => r[0])) / 60) : null,
       last_real: real.length > 0 ? formatClock(Math.max(...real.map((r) => r[1])) / 60) : null,
       empty_roles: day.slots.filter((s) => !filled.has(s.slot_id)).map((s) => s.role),
+      evening: day.slots
+        .filter((s) => eveningRoles.has(s.role))
+        .flatMap((s) => {
+          const by = new Map<string, number>();
+          for (const p of ps.filter((x) => x.slot_id === s.slot_id)) {
+            const src = p.clip.person_source === person ? p.clip.day_group : p.clip.source.video_id;
+            by.set(src, (by.get(src) ?? 0) + p.synthetic_end_s - p.synthetic_start_s);
+          }
+          return [...by].map(([source_date_or_take, seconds]) => ({ role: s.role, source_date_or_take, seconds: round3(seconds) }));
+        }),
     };
   });
   return {

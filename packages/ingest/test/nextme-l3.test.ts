@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ClipContractRowSchema, type ClipContractRow } from "@vb/core";
 import { main, makeLocalFetcher, ingestNextme } from "../src/cli.js";
 import { loadLabelRules } from "../src/nextme/draft.js";
-import { loadL3Rules, loadOverrides } from "../src/nextme/l3.js";
+import { labelText, loadL3Rules, loadOverrides } from "../src/nextme/l3.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..", "..", "..");
@@ -154,5 +154,18 @@ describe("L3 labeler", () => {
 
   it("rejects an unknown --clip-level", async () => {
     expect(await main(["nextme", "--days", "2026-05-07", "--clip-level", "L9", "--source-dir", SRC])).toBe(1);
+  });
+});
+
+describe("gym place rule (B9)", () => {
+  const rules = loadL3Rules(L3_RULES);
+  const label = (t: string) => labelText(t, rules, false);
+  it("labels gym words as the gym node, before workplace", () => {
+    for (const t of ["I lift a dumbbell.", "I do a bench press.", "I run on the treadmill.", "I walk from the office to the gym.", "I do pull-up exercises at the fitness center."]) {
+      expect(label(t), t).toMatchObject({ node: "gym", category: "hobby", setting: "venue_indoor", tags: ["gym"] });
+    }
+  });
+  it("leaves plain office text as workplace", () => {
+    expect(label("I sit in the office.")).toMatchObject({ node: "workplace" });
   });
 });

@@ -77,6 +77,7 @@ describe("candidateToClip", () => {
       sport_basketball: ["hobby", "venue_indoor", "hobby"],
       hobby_dance: ["hobby", "venue_indoor", "hobby"],
       hobby_music: ["hobby", "venue_indoor", "hobby"],
+      hobby_guitar: ["hobby", "venue_indoor", "hobby"],
       transit: ["transit", "outdoor", "transit"],
       hobby_lego: null,
       cooking: null,
