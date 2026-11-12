@@ -126,6 +126,8 @@ const donor = {
   case_id: "synthetic",
   backoff_level: "all" as const,
   filled: [],
+  redraws: 0,
+  adjustments: [],
   profile: { wake: 420, sleep: 1380, breakfast: 450, lunch: 720, dinner: 1110, meal_loc: {} },
 };
 

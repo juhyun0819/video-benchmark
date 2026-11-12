@@ -3,8 +3,10 @@ import {
   OCCUPATION_CODES,
   TimelineError,
   atus2025Source,
+  donorBoundViolations,
   parseAtusPool,
   selectDonors,
+  type DayProfile,
   type DonorRow,
 } from "../src/index.js";
 
@@ -171,7 +173,7 @@ describe("selectDonors", () => {
   });
 
   it("early weekend donor is redrawn", () => {
-    const src = atus2025Source([...many(40, { wake: 480 }), ...weekendRows(20, { wake: 300 }), ...weekendRows(20, { wake: 480 })]);
+    const src = atus2025Source([...many(40, { wake: 480, breakfast_time: 510 }), ...weekendRows(20, { wake: 300 }), ...weekendRows(20, { wake: 480, breakfast_time: 510 })]);
     let max = 0;
     for (let seed = 0; seed < 60; seed++) {
       const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
@@ -186,7 +188,7 @@ describe("selectDonors", () => {
   });
 
   it("keeps the last pick with weekend_redraws=5 when every weekend donor is early", () => {
-    const src = atus2025Source([...many(40, { wake: 480 }), ...weekendRows(40, { wake: 300 })]);
+    const src = atus2025Source([...many(40, { wake: 480, breakfast_time: 510 }), ...weekendRows(40, { wake: 300 })]);
     const r = selectDonors(ATTRS, src, OPTS);
     expect(r.weekend_redraws).toBe(5);
   });
@@ -206,6 +208,141 @@ describe("selectDonors", () => {
     } catch (e) {
       expect((e as TimelineError).details).toEqual({ kind: "weekday" });
     }
+  });
+});
+
+describe("rest-day weekend pool", () => {
+  it("excludes worked rows", () => {
+    const src = atus2025Source([
+      ...many(40),
+      ...weekendRows(3, { id: "rest" }),
+      ...weekendRows(3, { id: "worked", worked: true }),
+    ]);
+    const ids = src.pool("weekend").map((r) => r.id);
+    expect(ids).toHaveLength(3);
+    expect(ids.every((id) => id === "rest")).toBe(true);
+  });
+});
+
+describe("donor acceptance redraws", () => {
+  it("redraws a first-draw bed of 1700 into range without adjustments", () => {
+    const src = atus2025Source([
+      ...many(40),
+      ...weekendRows(20, { id: "late", bed: 1700 }),
+      ...weekendRows(20, { id: "ok", bed: 1380 }),
+    ]);
+    let redrawn = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const r = selectDonors(ATTRS, src, { seed, allowCountryFallback: false });
+      expect(r.weekend.profile.sleep).toBe(1380);
+      expect(r.weekend.adjustments).toEqual([]);
+      if (r.weekend.redraws > 0) redrawn++;
+    }
+    expect(redrawn).toBeGreaterThan(0);
+  });
+
+  it("clamps the last pick after 5 failed redraws and records it", () => {
+    const src = atus2025Source([...many(40), ...weekendRows(40, { bed: 1700 })]);
+    const r = selectDonors(ATTRS, src, OPTS);
+    expect(r.weekend.redraws).toBe(5);
+    expect(r.weekend.adjustments).toEqual([{ item: "sleep", from: 1700, to: 1679 }]);
+    expect(r.weekend.profile.sleep).toBe(1679);
+    expect(r.weekday.redraws).toBe(0);
+  });
+
+  it("uses the accept predicate and returns the pick when it never passes", () => {
+    const src = atus2025Source([...many(40), ...weekendRows(40)]);
+    const accept = (kind: "weekday" | "weekend") =>
+      kind === "weekday" ? [{ item: "slots", bound: 0, value: 1 }] : [];
+    const r = selectDonors(ATTRS, src, { ...OPTS, accept });
+    expect(r.weekday.redraws).toBe(5);
+    expect(r.weekday.adjustments).toEqual([]);
+    expect(r.weekend.redraws).toBe(0);
+  });
+
+  it("is deterministic per seed", () => {
+    const src = atus2025Source([...many(40), ...weekendRows(20, { bed: 1700 }), ...weekendRows(20)]);
+    expect(selectDonors(ATTRS, src, OPTS)).toEqual(selectDonors(ATTRS, src, OPTS));
+  });
+});
+
+describe("sport fill", () => {
+  const sportRows = (n: number) => weekendRows(n, { sport_has: true, sport_time: 600 });
+
+  it("fills from the level when it has at least 30 sport rows", () => {
+    const src = atus2025Source([...many(40), ...sportRows(30), ...weekendRows(1, { w: 1e9 })]);
+    const r = selectDonors(ATTRS, src, OPTS);
+    expect(r.weekend.sport_fill).toBe("level");
+    expect(r.weekend.profile.sport).toBe(600);
+    expect(r.weekend.filled).toContain("sport_time");
+  });
+
+  it("falls back to the weekend pool below 30 level sport rows", () => {
+    const other = OCCUPATION_CODES["service"]!;
+    const src = atus2025Source([
+      ...many(40),
+      ...weekendRows(40, { w: 1e9 }),
+      ...sportRows(29),
+      ...weekendRows(40, { occ: other, sport_has: true, sport_time: 900 }),
+    ]);
+    // occupation level: 40 + 29 rows, only 29 with sport -> pool fill.
+    const r = selectDonors(ATTRS, src, { ...OPTS, seed: 3 });
+    expect(r.weekend.backoff_level).toBe("occupation");
+    if (r.weekend.filled.includes("sport_time")) {
+      expect(r.weekend.sport_fill).toBe("pool");
+      expect([600, 900]).toContain(r.weekend.profile.sport);
+    }
+  });
+
+  it("leaves sport undefined when the pool has none", () => {
+    const r = selectDonors(ATTRS, atus2025Source([...many(40), ...weekendRows(40)]), OPTS);
+    expect(r.weekend.profile.sport).toBeUndefined();
+    expect(r.weekend.sport_fill).toBeUndefined();
+    expect(r.weekend.filled).not.toContain("sport_time");
+  });
+
+  it("does not fill weekday picks and keeps own sport", () => {
+    const src = atus2025Source([...many(40), ...sportRows(40)]);
+    const r = selectDonors(ATTRS, src, OPTS);
+    expect(r.weekday.profile.sport).toBeUndefined();
+    expect(r.weekday.sport_fill).toBeUndefined();
+    const own = atus2025Source([...many(40), ...weekendRows(40, { sport_has: true, sport_time: 500 })]);
+    const o = selectDonors(ATTRS, own, OPTS);
+    expect(o.weekend.sport_fill).toBeUndefined();
+    expect(o.weekend.filled).not.toContain("sport_time");
+  });
+});
+
+describe("donorBoundViolations", () => {
+  const ok: DayProfile = {
+    wake: 420, sleep: 1380, work_start: 540, work_end: 1020, breakfast: 450, lunch: 750, dinner: 1110, meal_loc: {},
+  };
+  it("is empty for a sane weekday", () => {
+    expect(donorBoundViolations("weekday", ok, 45, 120)).toEqual([]);
+  });
+  it("reports each bound with item, bound and value", () => {
+    expect(donorBoundViolations("weekday", { ...ok, wake: 200, sleep: 1700 }, 45, 120)).toEqual([
+      { item: "wake", bound: 240, value: 200 },
+      { item: "sleep", bound: 1679, value: 1700 },
+    ]);
+    expect(donorBoundViolations("weekday", { ...ok, breakfast: 425 }, 45, 120)).toEqual([
+      { item: "breakfast", bound: 430, value: 425 },
+    ]);
+    expect(donorBoundViolations("weekday", { ...ok, dinner: 1330 }, 45, 120)).toEqual([
+      { item: "dinner", bound: 1320, value: 1330 },
+    ]);
+    expect(donorBoundViolations("weekday", { ...ok, work_end: 700, lunch: 750 }, 45, 120)).toEqual([
+      { item: "work_end", bound: 780, value: 700 },
+      { item: "lunch", bound: 595, value: 750 },
+    ]);
+    expect(donorBoundViolations("weekday", { ...ok, lunch: 590 }, 45, 120)).toEqual([
+      { item: "lunch", bound: 600, value: 590 },
+    ]);
+  });
+  it("checks sport only on weekends", () => {
+    const p = { ...ok, sport: 1250 };
+    expect(donorBoundViolations("weekday", p, 45, 120)).toEqual([]);
+    expect(donorBoundViolations("weekend", p, 45, 120)).toEqual([{ item: "sport", bound: 1200, value: 1250 }]);
   });
 });
 

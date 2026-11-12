@@ -166,6 +166,8 @@
         "case_id": "synthetic",
         "backoff_level": "all",
         "filled": [],
+        "redraws": 0,
+        "adjustments": [],
         "profile": {
           "wake": 420,
           "sleep": 1380,
@@ -179,6 +181,8 @@
         "case_id": "synthetic",
         "backoff_level": "all",
         "filled": [],
+        "redraws": 0,
+        "adjustments": [],
         "profile": {
           "wake": 420,
           "sleep": 1380,

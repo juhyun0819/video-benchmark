@@ -158,6 +158,9 @@ const DonorPickSchema = z.object({
   case_id: z.string(),
   backoff_level: z.enum(["occupation_sex_age", "occupation_sex", "occupation", "sex_age", "all"]),
   filled: z.array(z.string()),
+  redraws: z.number().int().min(0).max(5),
+  adjustments: z.array(z.object({ item: z.string(), from: z.number(), to: z.number() })),
+  sport_fill: z.enum(["level", "pool"]).optional(),
   profile: z.object({
     wake: z.number(),
     sleep: z.number(),
