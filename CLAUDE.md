@@ -52,27 +52,29 @@
 
 Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 블록의 `video_id`다.
 
-## 진행 중: NextMe 28일 manifest (2026-11-12, 서버 이동으로 중단)
+## 진행 중: NextMe 28일 manifest (2026-11-13, 블록 방식으로 완성)
 
-목표는 NextMe 착용자 한 사람으로 28일 timeline manifest를 만드는 것이다. 집과 직장은 NextMe에 고정하고, 나머지는 파이프라인대로 한다. 렌더링은 아직 없어서 manifest까지만 만든다.
+목표는 NextMe 착용자 한 사람의 28일 manifest 하나를 완성하는 것이다. 슬롯마다 실제 어느 영상이 들어가는지 확정한다. 로직은 따르고, 이 영상을 위한 결정은 world와 입력으로 한다.
 
-- 작업 브랜치는 `feat/nextme-28day`다(main에서 갈라짐). 설계는 `docs/superpowers/specs/2026-11-12-nextme-28day-design.md`이고 사용자가 승인했다. 계획은 `docs/superpowers/plans/2026-11-12-nextme-28day.md`(Task 1~5)이고, 부록 A에 이전 세션에서 정한 입력값과 수치를 모두 적었다.
-- 상태: 설계와 계획만 커밋했다. 코드는 Task 1부터 시작해야 한다(시작한 implementer는 변경 없이 중지했다). superpowers subagent-driven-development로 진행한다. SDD 작업 공간(`.superpowers/`)은 git이 무시하므로 새 서버에서 새로 만든다.
-- 왜 이렇게 하는가:
-  - NextMe 114일 중 아침 집 영상이 있는 날은 24일이고, 그중 15일만 11시 전에 시작한다.
-  - 모든 템플릿은 "집(아침)" 필수로 시작하고, NextMe 날짜 하나는 합성 하루에만 쓴다.
-  - 그래서 세 가지를 더한다(설계 2~3절, 계획 N6):
-    - 늦은 출근일: 주 2일, 4주 8일. 11:30~15:00에 출근한 ATUS donor를 쓴다.
-    - 실제 NextMe 여행 5/7(목)~5/10(일)을 여러 날 예외로 넣는다.
-    - 모자라면 하루만 집(아침)을 비운다(`missing_required_allowance`, 사용자 결정).
-- 새 서버에서 할 일:
-  1. NextMe caption을 다시 받는다(계획 부록 A의 명령).
-     - 공용 서버이므로 `hf auth login`을 하지 않는다.
-     - 사용자가 자기 터미널에서 `read -rs HF_TOKEN && export HF_TOKEN`으로 그 셸에만 토큰을 넣고 실행한다.
-     - Claude 셸에서는 이 환경변수가 보이지 않으므로, 토큰이 필요한 다운로드는 사용자가 직접 실행한다.
-  2. ATUS 산출물(`data/distributions/atus2025/`)은 git에 들어 있어 따로 받을 필요가 없다.
-  3. 계획 Task 1부터 진행한다.
-- NextMe 라벨은 키워드 규칙과 Claude의 caption 검토로 만든 초안이다. manifest에 검수 전으로 표시하고, 사람이 검수해야 한다(D9).
+- 브랜치: `feat/nextme-28day`
+- 설계: `docs/superpowers/specs/2026-11-12-nextme-28day-design.md`(늦은 출근, 여행, 라벨)와 `2026-11-13-nextme-28day-blocks-design.md`(블록 방식, B1~B17)
+- 계획: 같은 이름의 `docs/superpowers/plans/`
+- 결과와 재현 명령: `docs/superpowers/reports/2026-11-13-nextme-28day.md`
+- 블록 방식:
+  - 시각표는 ATUS donor가 정한다.
+  - 각 블록에는 합성 하루마다 고른 실제 NextMe 날짜의 영상을 통째로 넣는다.
+  - 빈 집 블록과 덜 찬 근무·집 블록은 남는 날짜의 영상으로 채운다.
+  - 실행: `npm run compose-blocks -- --world config/worlds/nextme-p00.json --fit-roles hobby`
+- 데이터(커밋하지 않음):
+  - `data/raw/nextme-hf`(caption)
+  - `data/raw/egoexo`(메타데이터)
+  - `data/raw/bank/{nextme800.overrides.json, nextme800.l3.draft.jsonl, youtube.lego.jsonl}`
+  - `data/catalog`
+  - `data/exports`
+- 남은 일:
+  - 라벨 검수(D9)
+  - 렌더링(Plan 2)
+  - 최종 리뷰에서 나온 정리 항목
 
 ## 대기 중인 일
 
@@ -91,4 +93,5 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 서버 환경
 
-- Node 24는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`에 있다(홈은 서버를 옮기면 사라질 수 있어서 여기에 둔다). PATH에 없으면 `export PATH="/NHNHOME/langlab/zzuhyun/.node/current/bin:$PATH"`.
+- 지금 서버(convei-rack3)의 Node 24는 `/convei_nas2/zzuhyun/.node/current/bin`에 있다(NAS라 서버를 옮겨도 남는다). 시스템 node는 18이라 쓸 수 없다. 쓰기 전에 `export PATH="/convei_nas2/zzuhyun/.node/current/bin:$PATH"`를 실행한다. 이전 서버는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`이었다.
+- Lab22 다운로드 스크립트는 `uvx`가 필요하다. `pip install --user uv`로 `~/.local/bin`에 설치하고 PATH에 넣는다.

@@ -1,0 +1,185 @@
+{
+  "person_id": "nextme-p00",
+  "attributes": {
+    "country": "HK",
+    "occupation_group": "professional",
+    "work_pattern": "day_shift"
+  },
+  "distribution_source": "atus_2025",
+  "allow_country_fallback": true,
+  "nodes": {
+    "home": {
+      "kind": "home"
+    },
+    "workplace": {
+      "kind": "workplace",
+      "job": "university researcher"
+    },
+    "frequent_1": {
+      "kind": "frequent_place",
+      "setting": "venue_indoor",
+      "optional": true
+    },
+    "hobby_1": {
+      "kind": "hobby",
+      "activity": "lego building",
+      "setting": "home_indoor",
+      "weekly_freq": 1,
+      "tags": [
+        "lego"
+      ]
+    },
+    "trip_1": {
+      "kind": "trip",
+      "lodging_setting": "venue_indoor",
+      "outing_setting": "outdoor",
+      "meal_setting": "venue_indoor"
+    },
+    "gym_1": {
+      "kind": "hobby",
+      "activity": "gym workout",
+      "setting": "venue_indoor",
+      "weekly_freq": 0,
+      "tags": [
+        "gym"
+      ]
+    },
+    "hobby_2": {
+      "kind": "hobby",
+      "activity": "guitar",
+      "setting": "venue_indoor",
+      "weekly_freq": 0,
+      "tags": [
+        "music_guitar"
+      ]
+    }
+  },
+  "node_binding": {
+    "home": {
+      "dataset": [
+        "nextme800"
+      ],
+      "person_source": "nextme800:wearer",
+      "node": "home"
+    },
+    "workplace": {
+      "dataset": [
+        "nextme800"
+      ],
+      "person_source": "nextme800:wearer",
+      "node": "workplace"
+    },
+    "frequent_1": {
+      "dataset": [
+        "nextme800"
+      ],
+      "person_source": "nextme800:wearer",
+      "node": "frequent_1"
+    },
+    "hobby_1": {
+      "dataset": [
+        "youtube"
+      ],
+      "tags_any": [
+        "lego"
+      ]
+    },
+    "trip_1": {
+      "dataset": [
+        "nextme800"
+      ],
+      "person_source": "nextme800:wearer",
+      "day_group_sequence": [
+        "2026-06-29",
+        "2026-06-30",
+        "2026-07-01"
+      ]
+    },
+    "gym_1": {
+      "dataset": [
+        "nextme800"
+      ],
+      "person_source": "nextme800:wearer",
+      "node": "gym"
+    },
+    "hobby_2": {
+      "dataset": [
+        "egoexo4d"
+      ],
+      "tags_any": [
+        "music_guitar"
+      ]
+    }
+  },
+  "meal_style": {
+    "workday": {
+      "lunch": {
+        "workplace": 0.36,
+        "eat_out": 0.55,
+        "home": 0.09
+      },
+      "dinner": {
+        "eat_out": 0.69,
+        "workplace": 0.19,
+        "home": 0.12
+      }
+    },
+    "rest_day": {
+      "breakfast": {
+        "home": 0.9,
+        "eat_out": 0.1
+      },
+      "lunch": {
+        "eat_out": 0.85,
+        "home": 0.15
+      },
+      "dinner": {
+        "eat_out": 0.85,
+        "home": 0.15
+      }
+    },
+    "breakfast_skip_prob": 0.3,
+    "place_nodes": {
+      "eat_out": "frequent_1"
+    }
+  },
+  "dials": {
+    "length_days": 28,
+    "routine_strength": 0.7,
+    "exception_rate": {
+      "slot": 0.1,
+      "day": 0.05
+    },
+    "wake_sleep": "default_v1",
+    "late_workdays_per_week": 1,
+    "trips": [
+      {
+        "node": "trip_1",
+        "length_days": 3,
+        "start_day": 19
+      }
+    ],
+    "missing_required_allowance": [],
+    "evening_activities": [
+      {
+        "node": "gym_1",
+        "role": "exercise",
+        "position": "before_dinner",
+        "duration_min": 75,
+        "weekdays": [
+          "Tue",
+          "Thu"
+        ]
+      },
+      {
+        "node": "hobby_2",
+        "role": "hobby_2",
+        "position": "after_dinner",
+        "duration_min": 45,
+        "count": 6,
+        "max_per_week": 2
+      }
+    ]
+  },
+  "seed": 1020
+}
