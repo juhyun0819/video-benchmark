@@ -376,6 +376,7 @@ Tests:
   - **Placement:** all catalog clips of that video fully inside [from_s, to_s], in source order, are placed first in that day's slot with that role (B2 layout: back to back from the window start, trimmed at the end).
   - **Exclusivity:** pinned clips are removed from every other candidate pool (primary plans, B6/B6b, B13, B12 scoring). The pinned clips' day_group is owned by the pinned day for day_group_single_day. If that day_group is another synthetic day's assigned real date, error clearly; if it was only a spare, remove it from the spares.
   - **Filling the rest:** the pinned slot is still filled by the normal rules after the pinned clips, up to its window.
+  - **Meal slots:** when the pin targets a meal slot (breakfast, lunch, dinner, trip meals included), the pinned clips are the slot's whole content: no primary meal run, fill or top-up is added, and B12 scoring counts only the pinned seconds for that slot.
   - **Errors:** an unknown day/role, or a span that matches no clips, is an error.
   - **Output:** the summary lists the pins applied.
   - **For nextme-p00:** the pins file is `config/worlds/nextme-p00.pins.json`, containing `[{ "day_index": 17, "role": "home_morning", "video_id": "2026-05-28_1055-1219", "from_s": 690, "to_s": 2475 }]`. The world gains `meal_place_overrides: [{ "day_index": 24, "meal": "lunch", "place": "workplace" }]`.

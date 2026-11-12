@@ -1151,6 +1151,27 @@ describe("pins (B22)", () => {
     expect(r.summary.pins).toEqual([]);
   });
 
+  it("a pinned meal slot holds exactly the pinned clips, even when the assigned date has its own lunch run", () => {
+    const lunchDay = t.schedule.days.find((d) => d.day_type === "workday" && d.slots.some((s) => s.role === "lunch"))!;
+    const lunch = lunchDay.slots.find((s) => s.role === "lunch")!;
+    const meal = [
+      ...rec(PIN_DATE, [
+        { at: "11:10", min: 10, node: "workplace", category: "meal" },
+        { at: "11:25", min: 10, node: "workplace", category: "meal" },
+      ], { video: "pin-lunch", wall: "11:00" }),
+    ];
+    const mealClips = [...clips, ...meal];
+    const p = { day_index: lunchDay.day_index, role: "lunch", video_id: "pin-lunch", from_s: 0, to_s: 3000 };
+    const r = composeBlocks(t, new MemCatalog(mealClips), { pins: [p] });
+    const ids = r.placements.filter((x) => x.slot_id === lunch.slot_id).map((x) => x.clip.clip_id);
+    expect(ids).toEqual(["nextme800:pin-lunch:11:10", "nextme800:pin-lunch:11:25"]);
+    // without the pin that day's assigned date does have a lunch run
+    const plain = composeBlocks(t, new MemCatalog(mealClips));
+    expect(plain.placements.filter((x) => x.slot_id === lunch.slot_id).length).toBeGreaterThan(0);
+    const report = verifyTimeline(t, new MemCatalog(mealClips), { mode: "block", placements: r.placements });
+    expect(report.pass, JSON.stringify(report).slice(0, 1500)).toBe(true);
+  });
+
   it("errors when the pinned day_group is another day's assigned date", () => {
     // the only rest date is the pinned one, so a rest day is assigned it
     const only = [...WORK.flatMap((d) => workDate(d)), ...rec(PIN_DATE, [{ at: "09:10", min: 10, node: "home" }, { at: "09:25", min: 10, node: "home" }, { at: "12:00", min: 10, node: "home" }], { video: "pin-vid", wall: "09:00" }), ...TRIP.flatMap(tripDate)];

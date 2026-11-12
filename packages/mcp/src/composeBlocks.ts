@@ -286,6 +286,9 @@ export function maxWeightAssignment(value: readonly (readonly number[])[]): (num
   return out;
 }
 
+/** B22: pinned entries and the seconds each pinned slot reserves (a pinned meal slot reserves all of it). */
+export type PinReservation = { entries: readonly BlockPlanEntry[]; reserved: ReadonlyMap<string, number> };
+
 /** B12: placed seconds of a block plan: per block the planned footage, cut at the block length as layoutBlocks does. */
 function plannedSeconds(day: ScheduleDay, plan: readonly BlockPlanEntry[]): number {
   const len = new Map<string, number>(day.slots.map((s) => [s.slot_id, windowSeconds(s)[1] - windowSeconds(s)[0]] as const));
@@ -303,9 +306,9 @@ function plannedSeconds(day: ScheduleDay, plan: readonly BlockPlanEntry[]): numb
  * whose first work is at or after 11:00 or a plain workday one whose first work is earlier. A day
  * without slots (or transitions) plans nothing and scores its bonuses only.
  */
-function dateScore(day: DayLike, date: RealDate, world: World, gymNode: string | undefined): number {
+function dateScore(day: DayLike, date: RealDate, world: World, gymNode: string | undefined, pins?: PinReservation): number {
   const full = day.slots !== undefined && "transitions" in day ? (day as ScheduleDay) : undefined;
-  let s = full === undefined ? 0 : Math.round(plannedSeconds(full, planDay(full, date, world)));
+  let s = full === undefined ? 0 : Math.round(plannedSeconds(full, [...(pins?.entries ?? []), ...planDay(full, date, world, pins?.reserved)]));
   if (gymNode !== undefined && date.clips.some((c) => bindingAccepts(world, gymNode, c.clip))) s += GYM_BONUS_S;
   if (poolOf(day) === "work" && date.first_work_s !== null) {
     const late = day.day_type === "workday_late";
@@ -326,7 +329,7 @@ function dateScore(day: DayLike, date: RealDate, world: World, gymNode: string |
  * score. Ties go by row and column order, which is a permutation of days and dates drawn with
  * rngFor(seed, "block_dates"). A day whose pool runs out gets `date: null`.
  */
-export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string, RealDate>, world: World): DateAssignment[] {
+export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string, RealDate>, world: World, pins?: PinReservation): DateAssignment[] {
   const out = new Map<number, DateAssignment>();
   const byIndex = [...days].sort((a, b) => a.day_index - b.day_index);
   const all = [...dates.values()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
@@ -355,7 +358,7 @@ export function assignDates(days: readonly DayLike[], dates: ReadonlyMap<string,
     if (rows.length === 0) continue;
     const scores = rows.map((day) => {
       const gym = exerciseNodeOf(day, world);
-      return cols.map((c) => dateScore(day, c.x, world, gym));
+      return cols.map((c) => dateScore(day, c.x, world, gym, pins));
     });
     const maxScore = Math.max(0, ...scores.flat());
     const P = rows.length * maxScore + 1;
@@ -1039,7 +1042,14 @@ export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit
   const resolved = resolvePins(t, fullCatalog, opts.pins ?? []);
   const catalog = resolved.length === 0 ? fullCatalog : withoutClips(fullCatalog, new Set(resolved.flatMap((r) => r.clips.map((c) => c.clip_id))));
   const dates = collectDates(catalog, world);
-  const assignments = assignDates(t.schedule.days, dates, world);
+  // B22 (meal slots): pinned clips are a meal slot's whole content, so it reserves its whole window.
+  const pinnedEntries: BlockPlanEntry[] = resolved.flatMap((r) =>
+    r.clips.map((c) => ({ slot_id: r.slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s })),
+  );
+  const reserved = new Map<string, number>();
+  for (const e of pinnedEntries) reserved.set(e.slot_id, (reserved.get(e.slot_id) ?? 0) + e.source_end_s - e.source_start_s);
+  for (const r of resolved) if (MEAL_ROLES.has(r.slot.role)) reserved.set(r.slot.slot_id, Infinity);
+  const assignments = assignDates(t.schedule.days, dates, world, resolved.length === 0 ? undefined : { entries: pinnedEntries, reserved });
   const dateOf = new Map(assignments.map((a) => [a.day_index, a.date]));
   // B22: a pinned clip's day_group belongs to the pinned day only.
   const groupOwner = new Map<string, number>();
@@ -1053,11 +1063,6 @@ export function composeBlocks(t: Timeline, fullCatalog: ClipCatalog, opts: { fit
     }
   }
   const spareDates: ReadonlyMap<string, RealDate> = groupOwner.size === 0 ? dates : new Map([...dates].filter(([d]) => !groupOwner.has(d)));
-  const pinnedEntries: BlockPlanEntry[] = resolved.flatMap((r) =>
-    r.clips.map((c) => ({ slot_id: r.slot.slot_id, clip_id: c.clip_id, source_start_s: c.source_start_s, source_end_s: c.source_end_s })),
-  );
-  const reserved = new Map<string, number>();
-  for (const e of pinnedEntries) reserved.set(e.slot_id, (reserved.get(e.slot_id) ?? 0) + e.source_end_s - e.source_start_s);
   const pinApplied: PinApplied[] = resolved.map((r) => ({
     ...r.pin,
     slot_id: r.slot.slot_id,
