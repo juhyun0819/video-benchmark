@@ -221,3 +221,33 @@ Tests:
 - exercise days get gym dates and the gym run;
 - hobby_2 takes egoexo clips, each once;
 - block verify passes.
+
+## Addendum 3 (2026-11-13): fuller blocks
+
+- **B12. Fill-maximizing date assignment.**
+  - **Score:** for each synthetic day d and each candidate date x in d's allowed pool, the score s(d,x) is the planned seconds of planDay(d, x) before any spare-date fills.
+  - **Assignment:** choose the one-to-one assignment that maximizes Σ s plus bonuses:
+    - +10 h when an exercise day gets a gym date;
+    - +1 h when a late day gets a date whose first work is ≥ 11:00, or a plain workday gets one whose first work is < 11:00.
+  - **Method:** Hungarian or min-cost assignment, deterministic. The tiers stay hard: weekday dates before weekend dates for work days; rest, then partial, for rest days; trip dates fixed.
+  - **Tie-breaks:** use `rngFor(seed, "block_dates")`. The old shuffle order is no longer needed.
+- **B13. Top-up fills.**
+  - **When:** after the primary plan, B6 and B6b. A work_am, work_pm or home-place slot whose window still has ≥ 10 min unfilled is topped up.
+  - **Where from:** the same-place clips of a spare date (workplace non-meal for work slots, home for home slots), whose real start is within ±180 min of the unfilled part's start.
+  - **How:** a contiguous run (gap ≤ 15 min), with each clip once.
+  - **Rules:** a spare date serves at most one synthetic day, shared with B6. Placement follows the primary clips back to back. Record in `home_fills`, renamed `fills` with `kind: "home" | "home_fallback" | "topup"`; keep `home_fills` as an alias.
+- **B14. hobby_2 distribution.**
+  - Split the takes evenly across the hobby_2 days (round-robin by day, in day order).
+  - Within a day, prefer takes of the same participant.
+  - Use each take once.
+
+### Task 8: Fuller blocks (B12–B14)
+Files: `packages/mcp/src/composeBlocks.ts`, tests.
+
+Tests:
+- the assignment beats a greedy order on a crafted case;
+- tiers and bonuses are respected;
+- a half-filled work_pm is topped up from a spare date within ±3 h, and not beyond;
+- a spare date never serves two days;
+- hobby_2 takes are spread so that every hobby_2 day gets at least one when takes ≥ days;
+- block verify passes.
