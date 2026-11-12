@@ -361,3 +361,47 @@ Tests:
 - the trip_day breakfast slot starts right after lodging_morning;
 - worlds without trips are byte-identical;
 - block verify passes.
+
+## Addendum 8 (2026-11-13): user edits — pins and meal place overrides
+
+- **B21. Meal place overrides (core).** A new optional dial is `dials.meal_place_overrides: [{ day_index, meal: "breakfast" | "lunch" | "dinner", place: MealPlace }]`. Use zod `.optional()` and no default.
+  - In decisions, the meal place draw still happens exactly as now, so the rng streams are unchanged. The overridden day then uses `place` instead of the drawn value.
+  - **Validation:**
+    - day_index must be in range;
+    - no duplicate (day, meal) pairs;
+    - `place` must be usable for the world (mealPlaceUsable);
+    - an override for a meal the day does not have (for example breakfast on a workday template, or a skipped breakfast) raises WORLD_INVALID at generation, naming day and meal.
+  - Worlds without the dial are byte-identical.
+- **B22. Pins (mcp).** compose-blocks takes `--pins <json>`, a JSON array of `{ day_index, role, video_id, from_s, to_s }`.
+  - **Placement:** all catalog clips of that video fully inside [from_s, to_s], in source order, are placed first in that day's slot with that role (B2 layout: back to back from the window start, trimmed at the end).
+  - **Exclusivity:** pinned clips are removed from every other candidate pool (primary plans, B6/B6b, B13, B12 scoring). The pinned clips' day_group is owned by the pinned day for day_group_single_day. If that day_group is another synthetic day's assigned real date, error clearly; if it was only a spare, remove it from the spares.
+  - **Filling the rest:** the pinned slot is still filled by the normal rules after the pinned clips, up to its window.
+  - **Errors:** an unknown day/role, or a span that matches no clips, is an error.
+  - **Output:** the summary lists the pins applied.
+  - **For nextme-p00:** the pins file is `config/worlds/nextme-p00.pins.json`, containing `[{ "day_index": 17, "role": "home_morning", "video_id": "2026-05-28_1055-1219", "from_s": 690, "to_s": 2475 }]`. The world gains `meal_place_overrides: [{ "day_index": 24, "meal": "lunch", "place": "workplace" }]`.
+
+### Task 14: meal_place_overrides (B21)
+Files:
+- `packages/core/src/world.ts`
+- `packages/core/src/schedule/decisions.ts`
+- tests
+
+Tests:
+- an override changes only that day's meal place and slot node;
+- other days and all rng draws are identical;
+- invalid entries error;
+- the golden test is unchanged.
+
+### Task 15: pins (B22)
+Files:
+- `packages/mcp/src/composeBlocks.ts`
+- `packages/mcp/src/composeBlocksCli.ts`
+- tests
+
+Tests:
+- pinned clips land in the pinned slot in source order;
+- they never appear elsewhere;
+- a spare day_group becomes owned by the pinned day;
+- an assigned-date conflict errors;
+- an empty span errors;
+- block verify passes.
