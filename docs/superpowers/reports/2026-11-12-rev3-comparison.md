@@ -8,13 +8,13 @@ rev3 변경(CR1–CR8)을 적용하기 전 트리(`ea048f5`)와 적용한 뒤 �
 |---|---|---|---|---|
 | 평일 저녁 없는 날 (스케줄) | 0 | 3.0% (323/10766) | 0.0% (0/10767) | 달성 |
 | 평일 저녁 clip 없는 날 (full run) | 0 | 4.3% (47/1083) | 0.0% (0/1083) | 달성 |
-| slot exception rate (E1, 다이얼 0.5) | ≈ 0.5 | 48.4% (7421/15347) | 50.4% (7519/14917), 공통 정의로 50.2% | 달성 |
+| slot exception rate (공통 정의, 다이얼 0.5) | ≈ 0.5 | 48.4% (7421/15347) | 50.2% (7519/14992) | 달성 (new의 기록 E1은 50.4%, §5) |
 | day exception rate (다이얼 0.1) | ≈ 0.1 | 10.3% (1234/12000) | 10.3% (1233/12000) | 변화 없음 (예상대로) |
 | optional slot drop (스케줄, 하루 1개 이상) | 감소 | 10.2% (1719/16800) | 9.5% (1601/16800) | 평일은 달성, 휴일은 악화 |
 | 평일 optional drop 날 | 감소 | 9.7% (1048/10766) | 6.8% (735/10767) | 달성 |
-| hobby_day 저녁 drop | (CR2 범위 밖) | 4.5% (217/4800) | 12.0% (575/4800) | 악화 (알려진 문제) |
+| hobby_day 저녁 drop | (CR2 범위 밖) | 4.5% (217/4800) | 12.0% (575/4800) | 악화 (알려진 문제). ablation에서 CR8 sport 채움을 되돌리면 4.0% (§4) |
 | 조용한 day-level clamp | 0 | 25.6%의 날 (4302/16800) | 0 (clamp 1.8%는 모두 기록) | 달성 |
-| donor 경계 위반을 그대로 쓴 비율 | 0 | 평일 39.0%, 주말 43.0% | 평일 2.5%, 주말 4.5%가 clamp (기록됨) | 달성 |
+| 최종 donor 프로필의 E5 위반 (측정) | 0 | 평일 39.0% (234/600), 주말 43.0% (258/600) | 평일 0.5% (3/600, seed 149의 required_slots), 주말 0 (0/600) | 거의 달성 (§6) |
 | 생성 실패 | 0 | 스케줄 0/600, full 0/60 | 스케줄 0/600, full 0/60 | 동일 |
 | no_video_spans tiling | 실패 0 | 해당 없음 | manifest 60개, 1680일, 실패 0 | 달성 |
 
@@ -58,10 +58,13 @@ E5 경계, 평일 required slot 검사, E2 일관성은 항상 new 트리의 함
 
 ### 실행 명령
 
-저장소 루트에서 실행한다. `$BASE`는 worktree 경로, `$OUT`은 저장소 밖 출력 디렉터리다.
+저장소 루트에서 실행한다. `$BASE`(baseline worktree)와 `$OUT`(출력 디렉터리)은 둘 다 저장소 밖에 둔다. 이번에는 아래 scratchpad 경로를 썼다.
 
 ```bash
 export PATH="/NHNHOME/langlab/zzuhyun/.node/current/bin:$PATH"
+SP=/tmp/claude-3952/-NHNHOME-langlab-zzuhyun-video-benchmark/48bbfc44-42e0-4cc5-8a4f-1622eb5c7396/scratchpad
+BASE="$SP/rev3-baseline"
+OUT="$SP/rev3cmp"
 git worktree add "$BASE" ea048f5
 ln -s "$PWD/node_modules" "$BASE/node_modules"
 npx tsx scripts/compare/rev3_compare.ts run --root "$BASE" --label old --data data --out "$OUT"
@@ -71,8 +74,8 @@ rm "$BASE/node_modules" && git worktree remove "$BASE"
 ```
 
 - 기본값은 `--seeds 200 --full-seeds 20 --rs 0,0.5,1 --slot 0.5 --day 0.1`이다.
-- 실행 시간은 트리마다 스케줄 약 1초, full run 약 4.5초다.
-- new 트리를 두 번 돌리면 sweep 결과, full run 결과, manifest가 바이트까지 같다.
+- 실행 시간: old는 스케줄 약 1초와 full run 약 4초다. new는 ablation(§4) 4종 × 600개 스케줄이 더해져 스케줄 단계가 약 7초, full run이 약 4.5초다.
+- new 트리를 두 번 돌리면 sweep, ablation, full run 결과와 manifest가 바이트까지 같다.
 
 ## 결과
 
@@ -143,12 +146,71 @@ routine_strength별로는 old 3.1% / 3.0% / 2.8%, new는 모두 0이다.
 | new | 12.0% (575/4800). rs별 11.4% / 11.9% / 12.6% | 0 (0/1233) |
 
 - CR2는 평일만 다룬다. hobby_day 저녁 drop은 rev3에서 오히려 늘었다(4.5% → 12.0%).
-- 원인은 CR8(sport 채움)과 주말 pool 변경으로 보인다. 같은 200개 seed로 주말 donor를 따로 뽑아 확인했다.
-  - old: 143/200(72%)이 sport가 없어 기본값 10:45를 썼다.
-  - new: 모두 sport가 있고, 150/200은 pool에서 채웠다.
-  - sport 기록이 있는 donor만 보면 sport 시각 p75는 11:30(old)에서 14:20(new)으로 늦어졌다.
-  - 같은 기준에서 sleep − sport의 p25는 640분에서 476분으로 줄었다.
-- 120분짜리 hobby가 늦게 시작하면 저녁 자리가 줄어든다. 진행 기록의 "취미일의 약 13–18%"와 같은 문제다. 이 설정에서는 12%였다.
+- 이 시기에 주말 donor 쪽은 두 가지가 함께 바뀌었다. 둘 다 원인 후보다.
+  - CR8: sport가 없는 donor에게 같은 backoff 단계의 sport 시각을 채운다(E7).
+  - CR4.5: 주말 pool에서 일한 행을 뺀다. 기상 하한도 수락 조건에 들어갔다(G6).
+- 아래 표는 모두 `rev3_compare.ts`에서 나온다. 스크립트에 커밋된 집계와 ablation이다.
+
+#### hobby slot 시작 시각별 저녁 drop
+
+hobby_day의 hobby slot(필수, sport 앵커)이 시작하는 시각으로 날을 나눴다. 값은 저녁 drop ÷ 저녁 시도다.
+
+| 출처 | <10:00 | 10–12 | 12–14 | 14–16 | ≥16:00 | 전체 |
+|---|---|---|---|---|---|---|
+| old | 0.0% (0/783) | 0.0% (0/3456) | 0.4% (1/232) | 17.6% (15/85) | 82.4% (201/244) | 4.5% (217/4800) |
+| new | 0.0% (0/1642) | 0.0% (0/1638) | 4.5% (7/157) | 7.9% (22/277) | 50.3% (546/1086) | 12.0% (575/4800) |
+
+hobby day가 시각대별로 차지하는 비율:
+
+| 출처 | <10:00 | 10–12 | 12–14 | 14–16 | ≥16:00 |
+|---|---|---|---|---|---|
+| old | 16.3% | 72.0% | 4.8% | 1.8% | 5.1% |
+| new | 34.2% | 34.1% | 3.3% | 5.8% | 22.6% |
+
+저녁 drop은 거의 16시 이후에 시작하는 hobby에서만 생긴다. 이런 날의 비율이 5.1%에서 22.6%로 늘었다. old에서 10–12시가 72%를 차지한 것은 sport 기본값 10:45 때문이다.
+
+#### 주말 donor의 sport 시각 (출처별)
+
+schedule마다 주말 donor는 하나다(200 seed × 3 rs = 600). 출처는 세 가지다.
+
+- own: donor 본인의 일지 값
+- level: CR8 채움
+- default: sport가 없어 템플릿 기본값 10:45를 쓴 경우
+
+| 출처 | sport 출처 | schedule | p25 | p50 | p75 | hobby_day 저녁 drop |
+|---|---|---|---|---|---|---|
+| old | own | 28.5% (171/600) | 08:00 | 10:05 | 11:30 | 15.8% (216/1368) |
+| old | default | 71.5% (429/600) | 10:45 | 10:45 | 10:45 | 0.0% (1/3432) |
+| new | own | 25.0% (150/600) | 08:30 | 10:20 | 17:05 | 16.0% (192/1200) |
+| new | level | 75.0% (450/600) | 09:00 | 10:15 | 14:20 | 10.6% (383/3600) |
+
+- new에서는 채움이 모두 `level`이었다(`pool` 0건).
+- 일지에 sport가 있는 donor는 old와 new 모두 약 16%가 저녁을 잃는다.
+- old의 낮은 비율(4.5%)은 donor 72%가 10:45 기본값을 썼기 때문이다. 이 기본값에서는 저녁 drop이 사실상 없었다.
+
+#### ablation (new 트리, 스케줄 단계, 200 seed × 3 rs)
+
+스크립트 쪽에서 입력만 바꾸고 new 코드로 다시 생성했다.
+
+- **replay**: 고른 donor 그대로 `generateDay` 루프를 다시 돌렸다(attempt 0, 실패하면 1..5). 검증용이다. 600개 schedule의 날이 `generateSchedule` 결과와 모두 같았다(불일치 0일). 그래서 아래 변형들은 같은 경로로 생성된 것이다.
+- **fill_to_default**: CR8로 채운 주말 sport를 기본값 10:45로 되돌리고 날을 replay했다.
+- **old_pool**: 주말 donor를 old pool(일한 행 포함)에서 뽑았다. old pool은 `ea048f5`의 `atus2025Source` 필터를 스크립트에서 재현했다.
+- **old_pool+fill_to_default**: 위 둘을 함께 적용했다.
+
+| 변형 | 실패 | hobby_day 저녁 drop | hobby_day drop 날 | workday drop 날 | home_day drop 날 |
+|---|---|---|---|---|---|
+| new (replay) | 0/600 | 12.0% (575/4800) | 17.1% (821/4800) | 6.8% (735/10767) | 3.6% (45/1233) |
+| fill_to_default | 0/600 | 4.0% (192/4800) | 8.7% (418/4800) | 6.8% (735/10767) | 3.6% (45/1233) |
+| old_pool | 0/600 | 12.6% (604/4800) | 17.4% (833/4800) | 6.8% (735/10767) | 1.4% (17/1233) |
+| old_pool+fill_to_default | 0/600 | 2.9% (141/4800) | 6.8% (327/4800) | 6.8% (735/10767) | 1.4% (17/1233) |
+
+결론:
+
+- 늘어난 저녁 drop은 대부분 CR8의 sport 채움에서 온다. 채움만 되돌려도 12.0%가 4.0%로 내려가 old의 4.5% 수준이 된다.
+- 주말 pool 변경(CR4.5)만 되돌려서는 줄지 않는다(12.6%). 둘을 함께 되돌리면 2.9%다.
+- 기상 하한은 donor 수락 안에 있어 스크립트 쪽에서 끌 수 없었다. 그래서 따로 분리하지 못했다. 남은 차이(2.9% 대 4.5%)에는 이것과 수락 redraw가 섞여 있다.
+- 다만 CR8이 잘못 동작한 것은 아니다. 채운 시각은 실제 응답자의 sport 시각 분포다(p75 14:20). 저녁이 사라지는 직접적인 이유는 늦게 시작하는 120분 hobby와 optional인 휴일 저녁의 조합이다.
+- 진행 기록의 "취미일의 약 13–18%"와 같은 문제다. 이 설정에서는 12%였다.
 
 ### 5. 예외 (CR1, E1, E3)
 
@@ -179,10 +241,10 @@ rs별 수치:
 |---|---|---|---|---|---|
 | old | 평일 | — (기능 없음) | — | — | 39.0% (234/600) |
 | old | 주말 | — | — | — | 43.0% (258/600) |
-| new | 평일 | 39.0% (234/600) | 366:119:41:33:12:29 | 2.5% (15/600) | 0 |
-| new | 주말 | 53.5% (321/600) | 279:126:105:33:24:33 | 4.5% (27/600) | 0 |
+| new | 평일 | 39.0% (234/600) | 366:119:41:33:12:29 | 2.5% (15/600) | 0.5% (3/600) |
+| new | 주말 | 53.5% (321/600) | 279:126:105:33:24:33 | 4.5% (27/600) | 0.0% (0/600) |
 
-old는 redraw 기능이 없다. 그래서 old에서 고른 donor 프로필에 new의 `donorBoundViolations`(lunch 45분, hobby 120분), new의 평일 required slot 검사(p90 gap, sleep − σ), 주말 기상 하한(평일 기상 − 120분)을 적용해 "rev3였다면 다시 뽑았을 donor"를 셌다.
+"E5 위반인 채 사용"은 두 트리 모두 같은 기준 검사로 최종 donor 프로필을 측정한 값이다. old는 redraw 기능이 없다. 그래서 old에서 고른 donor 프로필에 new의 `donorBoundViolations`(lunch 45분, hobby 120분), new의 평일 required slot 검사(p90 gap, sleep − σ), 주말 기상 하한(평일 기상 − 120분)을 적용해 "rev3였다면 다시 뽑았을 donor"를 셌다.
 
 - 위반 항목:
   - old 평일: breakfast 156, required_slots 75, lunch 24, dinner 18, work_end 15
@@ -190,6 +252,11 @@ old는 redraw 기능이 없다. 그래서 old에서 고른 donor 프로필에 ne
 - new의 최종 보정 항목:
   - 평일: breakfast 12, work_end 3(G9 보정 포함)
   - 주말: breakfast 21, sport 9
+- new 평일의 남은 위반 3건은 모두 seed 149다(rs 0, 0.5, 1에서 각 1건).
+  - 이 donor는 redraw 5회 뒤에도 required slot 검사(p90 gap, sleep − σ)를 통과하지 못했다.
+  - G9의 work_end 보정도 맞는 값을 찾지 못해 프로필이 그대로 남았다(adjustments 없음).
+  - 그래도 날은 표본 gap으로 배치되어 스케줄 생성은 실패하지 않았다.
+  - E5의 일반 경계(시각) 위반은 new에서 0건이다.
 - 평일 첫 donor는 두 트리에서 같다(같은 pool, 같은 키). 그래서 old의 위반 비율 39.0%와 new의 redraw 비율 39.0%가 정확히 같다. 검산이 된다.
 - 주말은 new pool이 일한 행을 빼고 기상 하한을 수락 조건에 넣었다. 첫 donor부터 달라서 두 수치를 바로 비교할 수 없다.
 - 평일 수치는 rs별로 조금 다르다(40.5% / 38.5% / 38.0%). required slot 검사가 σ에 의존하기 때문이다.
@@ -245,7 +312,7 @@ routine_strength별 schedule 평균이다. 칸마다 "전체 쌍 / same_referenc
 
 - new 평일의 same_reference는 다이얼을 따라간다. jaccard는 0.859→0.888→0.965, order는 0.953→0.963→0.988이다. 전체 쌍은 0.861→0.886으로 덜 움직인다. 평일 기준이 요일별이기 때문이다(G15).
 - old 평일의 optional 집합에는 저녁이 들어간다(v1에서는 저녁이 optional). 그래서 old와 new의 평일 jaccard를 바로 비교할 수는 없다.
-- hobby_day는 new가 조금 낮다. 저녁 drop이 늘었기 때문이다.
+- hobby_day는 new가 조금 낮다. 저녁 drop이 늘었기 때문이다(§4).
 
 ### 9. no_video_spans tiling (E9)
 
@@ -256,11 +323,15 @@ routine_strength별 schedule 평균이다. 칸마다 "전체 쌍 / same_referenc
 ## 해석
 
 1. **CR2(평일 저녁)는 달성했다.** 스케줄과 full run 모두 0이다. 평일 optional drop 날도 9.7%에서 6.8%로 줄었다(점심 2.6% → 0.7%, home_evening 9.8% → 6.9%).
-2. **slot exception rate가 다이얼과 맞는다.** 50.4%다. old는 R45 때문에 48.4%로 낮았다.
+2. **slot exception rate가 다이얼과 맞는다.** 공통 정의로 old 48.4%, new 50.2%다. new의 기록 E1은 50.4%다. old는 R45가 추첨된 예외의 5.1%를 지워 낮았다.
 3. **조용한 clamp가 없어졌다.**
-   - donor 단계에서는 old가 평일 39%, 주말 43%의 donor를 rev3 경계를 넘는 채로 썼다. new는 redraw 뒤 2.5%와 4.5%만 clamp하고 모두 기록한다.
+   - donor 단계에서는 old가 평일 39%, 주말 43%의 donor를 rev3 경계를 넘는 채로 썼다. new는 redraw 뒤 2.5%와 4.5%만 clamp하고 모두 기록한다. 최종 프로필을 측정하면 new에서 남은 위반은 평일 0.5%(seed 149의 required slot 검사)뿐이다.
    - day 단계에서는 old가 25.6%의 날을 기록 없이 clamp했다. new는 1.8%만 clamp하고 기록한다.
-4. **전체 drop 비율은 거의 그대로다(10.2% → 9.5%).** 평일은 줄었지만 hobby_day 저녁 drop이 4.5%에서 12.0%로 늘었다. CR8이 모든 주말 donor에 실제 sport 시각을 주면서 오후 늦게 시작하는 hobby가 많아진 것이 원인으로 보인다. 휴일 저녁을 지키려면 CR2와 같은 처리(휴일 저녁 required, 또는 hobby_day reduce_order)가 따로 필요하다. 이건 사용자가 정할 일이다.
+4. **전체 drop 비율은 거의 그대로다(10.2% → 9.5%).** 평일은 줄었지만 hobby_day 저녁 drop이 4.5%에서 12.0%로 늘었다.
+   - 시각대별 집계를 보면 drop은 16시 이후에 시작하는 hobby에 몰려 있고, 그런 날이 5.1%에서 22.6%로 늘었다.
+   - ablation에서 CR8 sport 채움만 기본값으로 되돌리면 4.0%가 된다. 주말 pool 변경(CR4.5)만 되돌리면 12.6%로 줄지 않는다.
+   - 그래서 주된 원인은 CR8 채움이다. 정확히는 old에서 donor 72%가 쓰던 10:45 기본값이 사라져 늦은 sport 시각이 드러난 것이다.
+   - 휴일 저녁을 지키려면 CR2와 같은 처리(휴일 저녁 required, 또는 hobby_day reduce_order)가 따로 필요하다. 이건 사용자가 정할 일이다.
 5. **no-op exception은 이 월드에서 9.4%다.** 진행 기록의 약 16%는 다른 설정에서 잰 값으로 보인다. 분석에서 빼려면 `slot_exception_noop_share`를 쓴다.
 
 ## 측정하지 못한 것
@@ -271,4 +342,5 @@ routine_strength별 schedule 평균이다. 칸마다 "전체 쌍 / same_referenc
 - **E4 shrink**: 이 월드에는 평일 hobby가 없어서 두 트리 모두 0이다.
 - **매칭 단계 차이**: 합성 bank가 넉넉해 `dropped_optional`과 재생성이 두 트리 모두 0이다. 실제 bank에서의 차이는 이 비교로 알 수 없다.
 - **old의 tiling**: old에는 `no_video_spans`가 없다.
+- **기상 하한(G6)의 영향**: donor 수락 안에 있어 ablation으로 분리하지 못했다.
 - **old의 E2 평일 값**: 템플릿 v1에서는 저녁이 optional이라 jaccard 정의가 다르다. 참고용으로만 적었다.

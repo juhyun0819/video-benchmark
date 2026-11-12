@@ -39,7 +39,7 @@ const raw = <T>(x: T): any => JSON.parse(JSON.stringify(x));
 // ---------------------------------------------------------------------------------------------
 // Inputs: config, world, bank
 
-type TreeConfig = { templates: any; gaps: any; exceptions: any; defaults: any; source: any; templateFile: string };
+type TreeConfig = { templates: any; gaps: any; exceptions: any; defaults: any; source: any; rows: any[]; templateFile: string };
 
 function loadTreeConfig(core: Core, root: string, dataDir: string): TreeConfig {
   const timeline = join(root, "config", "timeline");
@@ -51,13 +51,15 @@ function loadTreeConfig(core: Core, root: string, dataDir: string): TreeConfig {
     templateFile = "templates.v1.json";
     templatesRaw = readJson(join(timeline, templateFile));
   }
+  const rows = core.parseAtusPool(readFileSync(join(dataDir, POOL_REL), "utf8"));
   return {
     templateFile,
+    rows,
     templates: core.TemplatesSchema.parse(templatesRaw),
     gaps: core.GapTableSchema.parse(readJson(join(timeline, "gaps.v1.json"))),
     exceptions: core.ExceptionCatalogSchema.parse(readJson(join(timeline, "exceptions.v1.json"))),
     defaults: core.ScheduleDefaultsSchema.parse(readJson(join(root, "config", "schedule_defaults_atus2025.json"))),
-    source: core.atus2025Source(core.parseAtusPool(readFileSync(join(dataDir, POOL_REL), "utf8"))),
+    source: core.atus2025Source(rows),
   };
 }
 
@@ -209,6 +211,10 @@ type SweepRow = {
   workdays?: number;
   workdayNoDinner?: Counter;
   restDinner?: Record<string, [number, number]>;
+  /** hobby_day dinner [attempted, dropped] by the hobby slot's start bucket. */
+  hobbyDinnerByStart?: Record<string, [number, number]>;
+  /** The weekend donor's sport: own diary value, CR8 fill (level / pool), or none (template default used). */
+  weekendSport?: { source: "own" | "level" | "pool" | "default"; minutes: number };
   exc?: {
     commonEligible: number;
     commonWithExc: number;
@@ -340,6 +346,48 @@ function consistencyOf(ctx: Ctx, days: any[]): SweepRow["consistency"] {
   return out;
 }
 
+const START_BUCKETS = ["<10:00", "10-12", "12-14", "14-16", ">=16:00"] as const;
+function startBucket(minutes: number): string {
+  if (minutes < 600) return START_BUCKETS[0];
+  if (minutes < 720) return START_BUCKETS[1];
+  if (minutes < 840) return START_BUCKETS[2];
+  if (minutes < 960) return START_BUCKETS[3];
+  return START_BUCKETS[4];
+}
+
+/** hobby_day dinner [attempted, dropped no_time] overall and by hobby slot start bucket, plus no_time drop days per template. */
+function dinnerMetrics(core: Core, days: any[]) {
+  const hobby: [number, number] = [0, 0];
+  const byStart: Record<string, [number, number]> = {};
+  const dropDays: Counter = {};
+  const daysBy: Counter = {};
+  for (const d of days) {
+    const tmpl = templateOf(d.day_type);
+    inc(daysBy, tmpl);
+    const dropped = d.dropped_slots.filter((x: any) => x.reason === "no_time").map((x: any) => x.role as string);
+    if (dropped.length > 0) inc(dropDays, tmpl);
+    if (tmpl !== "hobby_day") continue;
+    const kept = new Set<string>(d.slots.map((s: any) => s.role));
+    if (!kept.has("dinner") && !dropped.includes("dinner")) continue;
+    const start = d.slots.find((s: any) => s.role === "hobby");
+    const c = (byStart[start ? startBucket(core.parseClock(start.window[0])) : "no hobby"] ??= [0, 0]);
+    c[0] += 1;
+    hobby[0] += 1;
+    if (!kept.has("dinner")) {
+      c[1] += 1;
+      hobby[1] += 1;
+    }
+  }
+  return { hobby, byStart, dropDays, daysBy };
+}
+
+function weekendSportOf(cfg: TreeConfig, core: Core, pick: any): NonNullable<SweepRow["weekendSport"]> {
+  const fallback = core.parseClock(cfg.defaults.weekend.sports_start.p50);
+  if (pick.profile.sport === undefined) return { source: "default", minutes: fallback };
+  if ((pick.filled ?? []).includes("sport_time")) return { source: pick.sport_fill ?? "pool", minutes: pick.profile.sport };
+  return { source: "own", minutes: pick.profile.sport };
+}
+
 function scheduleMetrics(ctx: Ctx, refCfg: TreeConfig, schedule: any, row: SweepRow): void {
   const { core, cfg } = ctx;
   const days: any[] = schedule.days;
@@ -453,6 +501,8 @@ function scheduleMetrics(ctx: Ctx, refCfg: TreeConfig, schedule: any, row: Sweep
     }
   }
   row.exc = exc;
+  row.hobbyDinnerByStart = dinnerMetrics(core, days).byStart;
+  row.weekendSport = weekendSportOf(cfg, core, schedule.donors.weekend);
 
   // Donor level.
   const wd = schedule.donors.weekday;
@@ -461,12 +511,12 @@ function scheduleMetrics(ctx: Ctx, refCfg: TreeConfig, schedule: any, row: Sweep
     weekday: {
       recordedRedraws: rev3 ? wd.redraws : null,
       adjustments: (wd.adjustments ?? []).map((a: any) => a.item),
-      violations: rev3 ? [] : donorViolations(ctx, refCfg, "weekday", wd.profile),
+      violations: donorViolations(ctx, refCfg, "weekday", wd.profile),
     },
     weekend: {
       recordedRedraws: rev3 ? we.redraws : null,
       adjustments: (we.adjustments ?? []).map((a: any) => a.item),
-      violations: rev3 ? [] : donorViolations(ctx, refCfg, "weekend", we.profile, wd.profile.wake - 120),
+      violations: donorViolations(ctx, refCfg, "weekend", we.profile, wd.profile.wake - 120),
     },
   };
 
@@ -523,6 +573,97 @@ function scheduleMetrics(ctx: Ctx, refCfg: TreeConfig, schedule: any, row: Sweep
   }
   row.dayLevel = dl;
   row.consistency = consistencyOf(ctx, days);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Ablation (rev3 trees only): which weekend change moves hobby_day dinner drops
+
+type AblationVariant = "replay" | "fill_to_default" | "old_pool" | "old_pool+fill_to_default";
+const ABLATIONS: readonly AblationVariant[] = ["replay", "fill_to_default", "old_pool", "old_pool+fill_to_default"];
+
+type AblationRow = {
+  variant: AblationVariant;
+  seed: number;
+  rs: number;
+  error?: { code: string; message: string };
+  /** replay only: days that differ from generateSchedule's own days (must be 0). */
+  replayMismatch?: number;
+  hobbyDinner?: [number, number];
+  hobbyDinnerByStart?: Record<string, [number, number]>;
+  dropDays?: Counter;
+  daysBy?: Counter;
+  weekendSport?: NonNullable<SweepRow["weekendSport"]>;
+};
+
+/** The baseline weekend pool (ea048f5 atus2025Source): weekend rows with wake and bed, worked rows included. */
+function oldWeekendPoolSource(cfg: TreeConfig): any {
+  const base = (r: any) => r.wake !== null && r.bed !== null;
+  return {
+    id: cfg.source.id,
+    country: cfg.source.country,
+    pool: (kind: string) => (kind === "weekend" ? cfg.rows.filter((r) => r.daytype === "weekend" && base(r)) : cfg.source.pool(kind)),
+  };
+}
+
+/** generateSchedule's day loop (attempt 0, then 1..5 on SCHEDULE_INFEASIBLE) with the given donors. */
+function replayDays(core: Core, input: any, donors: any, length: number): any[] {
+  const days: any[] = [];
+  for (let d = 1; d <= length; d++) {
+    let day: any;
+    let last: any;
+    for (let attempt = 0; attempt <= 5 && day === undefined; attempt++) {
+      try {
+        day = core.generateDay(input, donors, d, attempt);
+      } catch (e: any) {
+        if (e?.code !== "SCHEDULE_INFEASIBLE") throw e;
+        last = e;
+      }
+    }
+    if (day === undefined) throw last;
+    days.push(raw(day));
+  }
+  return days;
+}
+
+/**
+ * Schedule-level ablation on a rev3 tree. "fill_to_default" sets a CR8-filled weekend sport back to
+ * the template default (sports_start p50, what the baseline used for donors without sport) and
+ * replays the days through generateDay; "old_pool" selects donors from the baseline weekend pool
+ * (worked rows included). The weekend wake floor inside donor acceptance stays (it is not script-side).
+ */
+function ablationRow(ctx: Ctx, variant: AblationVariant, seed: number, rs: number): AblationRow {
+  const { core, cfg } = ctx;
+  const row: AblationRow = { variant, seed, rs };
+  try {
+    const source = variant.startsWith("old_pool") ? oldWeekendPoolSource(cfg) : cfg.source;
+    const input = { ...cfg, source, world: ctx.treeWorld, boundNodes: ctx.bound };
+    const schedule = raw(core.generateSchedule(input));
+    const donors = structuredClone(schedule.donors);
+    const selected = weekendSportOf(cfg, core, donors.weekend);
+    let days: any[] = schedule.days;
+    if (variant === "replay") {
+      const again = replayDays(core, input, donors, ctx.treeWorld.dials.length_days);
+      row.replayMismatch = again.filter((d, i) => JSON.stringify(d) !== JSON.stringify(schedule.days[i])).length;
+    } else if (variant.endsWith("fill_to_default")) {
+      if ((donors.weekend.filled ?? []).includes("sport_time")) {
+        donors.weekend.profile.sport = core.parseClock(cfg.defaults.weekend.sports_start.p50);
+        donors.weekend.filled = donors.weekend.filled.filter((f: string) => f !== "sport_time");
+        delete donors.weekend.sport_fill;
+      }
+      days = replayDays(core, input, donors, ctx.treeWorld.dials.length_days);
+    }
+    const m = dinnerMetrics(core, days);
+    row.hobbyDinner = m.hobby;
+    row.hobbyDinnerByStart = m.byStart;
+    row.dropDays = m.dropDays;
+    row.daysBy = m.daysBy;
+    // Source as selected; a filled sport reset to the default is reported as "default".
+    const reset = variant.endsWith("fill_to_default") && (selected.source === "level" || selected.source === "pool");
+    row.weekendSport = reset ? { source: "default", minutes: donors.weekend.profile.sport } : selected;
+  } catch (e) {
+    row.error = errInfo(e);
+  }
+  return row;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -680,6 +821,15 @@ async function run(argv: string[]): Promise<void> {
       sweep.push(row);
     }
   }
+  const ablation: AblationRow[] = [];
+  const rev3Tree = sweep.some((r) => r.dayLevel?.redrawHist !== null && r.dayLevel !== undefined);
+  if (rev3Tree) {
+    for (const variant of ABLATIONS) {
+      for (const rs of rsList) {
+        for (let seed = 1; seed <= seeds; seed++) ablation.push(ablationRow(ctxFor(seed, rs), variant, seed, rs));
+      }
+    }
+  }
   const t1 = Date.now();
   const full: FullRow[] = [];
   for (const rs of rsList) {
@@ -699,6 +849,7 @@ async function run(argv: string[]): Promise<void> {
     full_seeds: fullSeeds,
     seconds: { sweep: (t1 - t0) / 1000, full: (t2 - t1) / 1000 },
     sweep,
+    ablation,
     full,
   };
   writeJson(join(out, `${values.label}.json`), result);
@@ -713,7 +864,7 @@ async function run(argv: string[]): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // report
 
-type Result = { label: string; dials: any; seeds: number; full_seeds: number; sweep: SweepRow[]; full: FullRow[] };
+type Result = { label: string; dials: any; seeds: number; full_seeds: number; sweep: SweepRow[]; ablation?: AblationRow[]; full: FullRow[] };
 
 const pct = (n: number, d: number) => (d === 0 ? "—" : `${((100 * n) / d).toFixed(1)}%`);
 const frac = (n: number, d: number) => `${pct(n, d)} (${n}/${d})`;
@@ -883,7 +1034,9 @@ function report(argv: string[]): void {
         const hist: Counter = {};
         for (const v of d) if (v.recordedRedraws !== null) inc(hist, String(v.recordedRedraws));
         const items: Counter = {};
-        for (const v of d) for (const it of rev3 ? v.adjustments : v.violations) inc(items, it);
+        for (const v of d) for (const it of v.adjustments) inc(items, it);
+        const viol: Counter = {};
+        for (const v of d) for (const it of v.violations) inc(viol, it);
         donorRows.push([
           r.label,
           kind,
@@ -891,15 +1044,16 @@ function report(argv: string[]): void {
           rev3 ? frac(d.filter((v) => v.recordedRedraws! > 0).length, d.length) : "—",
           rev3 ? Object.entries(hist).sort().map(([k, v]) => `${k}:${v}`).join(" ") : "—",
           rev3 ? frac(d.filter((v) => v.adjustments.length > 0).length, d.length) : "—",
-          rev3 ? "—" : frac(d.filter((v) => v.violations.length > 0).length, d.length),
-          Object.entries(items).map(([k, v]) => `${k} ${v}`).join(", ") || "—",
+          rev3 ? Object.entries(items).map(([k, v]) => `${k} ${v}`).join(", ") || "—" : "—",
+          frac(d.filter((v) => v.violations.length > 0).length, d.length),
+          Object.entries(viol).map(([k, v]) => `${k} ${v}`).join(", ") || "—",
         ]);
       }
     }
   }
   out.push(
     table(
-      ["tree", "donor", "group", "redrawn", "redraws 0..5", "adjusted (clamp/repair)", "would violate E5 (baseline)", "items"],
+      ["tree", "donor", "group", "redrawn", "redraws 0..5", "adjusted (clamp/repair)", "adjusted items", "final profile violates E5 (measured)", "violation items"],
       donorRows,
     ),
   );
@@ -976,6 +1130,86 @@ function report(argv: string[]): void {
     }
   }
   out.push(table(["tree", "template", "group", "optional_jaccard all / same_ref", "order_similarity all / same_ref", "start_diff min all / same_ref"], consRows));
+
+  const clock = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.round(m % 60)).padStart(2, "0")}`;
+  const quant = (xs: number[], f: number) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length === 0 ? "—" : clock(s[Math.floor(f * (s.length - 1))]!);
+  };
+  type DinnerSource = { label: string; rows: { hobbyDinnerByStart?: Record<string, [number, number]>; weekendSport?: SweepRow["weekendSport"]; rs: number }[] };
+  const sources: DinnerSource[] = [
+    ...trees.map((r) => ({ label: r.label, rows: ok(r) })),
+    ...ABLATIONS.filter((v) => v !== "replay").map((v) => ({
+      label: `${newR.label} ablation ${v}`,
+      rows: (newR.ablation ?? []).filter((x) => x.variant === v && !x.error),
+    })),
+  ].filter((s) => s.rows.length > 0);
+
+  h("hobby_day dinner drop by hobby slot start");
+  const startRows: string[][] = [];
+  for (const s of sources) {
+    const cells = [s.label];
+    let all: [number, number] = [0, 0];
+    for (const b of START_BUCKETS) {
+      const c = s.rows.map((x): [number, number] => x.hobbyDinnerByStart?.[b] ?? [0, 0]);
+      const att = sum(c.map((v) => v[0]));
+      const drop = sum(c.map((v) => v[1]));
+      all = [all[0] + att, all[1] + drop];
+      cells.push(att === 0 ? "— (0)" : frac(drop, att));
+    }
+    cells.push(frac(all[1], all[0]));
+    startRows.push(cells);
+  }
+  out.push(table(["source", ...START_BUCKETS, "all"], startRows));
+  out.push("\nShare of hobby days per bucket (attempted dinners):\n");
+  out.push(
+    table(
+      ["source", ...START_BUCKETS],
+      sources.map((s) => {
+        const att = START_BUCKETS.map((b) => sum(s.rows.map((x) => x.hobbyDinnerByStart?.[b]?.[0] ?? 0)));
+        return [s.label, ...att.map((n) => pct(n, sum(att)))];
+      }),
+    ),
+  );
+
+  h("Weekend donor sport time by source (one donor per schedule, 200 seeds × 3 rs)");
+  const sportRows: string[][] = [];
+  for (const s of sources) {
+    for (const src of ["own", "level", "pool", "default"] as const) {
+      const rows = s.rows.filter((x) => x.weekendSport?.source === src);
+      if (rows.length === 0) continue;
+      const mins = rows.map((x) => x.weekendSport!.minutes);
+      const c = rows.map((x) => Object.values(x.hobbyDinnerByStart ?? {}));
+      const att = sum(c.flatMap((v) => v.map((p) => p[0])));
+      const drop = sum(c.flatMap((v) => v.map((p) => p[1])));
+      sportRows.push([s.label, src, frac(rows.length, s.rows.length), quant(mins, 0.25), quant(mins, 0.5), quant(mins, 0.75), frac(drop, att)]);
+    }
+  }
+  out.push(table(["source", "sport source", "schedules", "sport p25", "p50", "p75", "hobby_day dinner dropped"], sportRows));
+
+  const abl = newR.ablation ?? [];
+  if (abl.length > 0) {
+    h(`Ablation on ${newR.label} (schedule level)`);
+    const ablRows: string[][] = [];
+    for (const v of ABLATIONS) {
+      const rows = abl.filter((x) => x.variant === v);
+      const okRows = rows.filter((x) => !x.error);
+      const hd = okRows.map((x) => x.hobbyDinner!);
+      const drop = (t: string) => frac(sum(okRows.map((x) => x.dropDays![t] ?? 0)), sum(okRows.map((x) => x.daysBy![t] ?? 0)));
+      ablRows.push([
+        v,
+        frac(rows.length - okRows.length, rows.length),
+        v === "replay" ? `${sum(okRows.map((x) => x.replayMismatch!))} mismatching days` : "—",
+        frac(sum(hd.map((x) => x[1])), sum(hd.map((x) => x[0]))),
+        drop("hobby_day"),
+        drop("workday"),
+        drop("home_day"),
+      ]);
+    }
+    out.push(
+      table(["variant", "failures", "replay check", "hobby_day dinner dropped", "hobby_day days with a drop", "workday days with a drop", "home_day days with a drop"], ablRows),
+    );
+  }
 
   h("no_video_spans tiling (rev3 full runs)");
   const tileRows: string[][] = [];
