@@ -46,7 +46,7 @@ export function loadLabelRules(path: string): LabelRules {
 const hasAny = (text: string, words: string[]): boolean => words.some((w) => containsWord(text, w));
 
 /** HKT minutes of day (floored) at `offsetSec` after the HKT wall-clock string `wallclock`. */
-function hktMinuteOfDay(wallclock: string, offsetSec: number): number {
+export function hktMinuteOfDay(wallclock: string, offsetSec: number): number {
   const epoch = parseHkt(wallclock) + offsetSec + 8 * 3600;
   return Math.floor((((epoch % 86400) + 86400) % 86400) / 60);
 }
