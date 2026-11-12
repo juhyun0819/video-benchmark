@@ -709,6 +709,63 @@ describe("content filters from the L3 text (B18)", () => {
   });
 });
 
+describe("narrative coherence (B19, B20)", () => {
+  const world = makeWorld();
+  const text = (clips: Clip[], at: string, activity: string): Clip[] =>
+    clips.map((c) => (c.clip_id.endsWith(`:${at}`) ? { ...c, activity } : c));
+
+  it("rejects a market walk home clip from home_afternoon", () => {
+    const day = mkDay("home_day", [slot(1, "home_afternoon", "home", "13:00", "16:00")]);
+    let clips = rec("2026-05-09", [{ at: "13:00", min: 20, node: "home" }, { at: "13:30", min: 20, node: "home" }]);
+    clips = text(clips, "13:00", "I walk from the market to my apartment");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["13:30"] });
+  });
+
+  it("rejects a scooter errand workplace clip from work_am", () => {
+    const day = mkDay("workday", [slot(1, "work_am", "workplace", "08:30", "12:00")]);
+    let clips = rec("2026-05-04", [{ at: "09:00", min: 20, node: "workplace" }, { at: "09:30", min: 20, node: "workplace" }]);
+    clips = text(clips, "09:00", "I ride my scooter to McDonald's");
+    expect(byBlock(world, day, clips, "2026-05-04")).toEqual({ "d1-s1": ["09:30"] });
+  });
+
+  it("leaves dinner empty when the run is drive, abandon, drive", () => {
+    const day = mkDay("home_day", [slot(1, "dinner", "home", "18:00", "19:30")]);
+    let clips = rec("2026-05-09", [
+      { at: "18:00", min: 10, node: "home", category: "meal" },
+      { at: "18:15", min: 10, node: "home", category: "meal" },
+      { at: "18:30", min: 10, node: "home", category: "meal" },
+    ]);
+    clips = text(clips, "18:00", "I drive toward a restaurant");
+    clips = text(clips, "18:15", "I abandon the restaurant");
+    clips = text(clips, "18:30", "I drive to another restaurant");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({});
+  });
+
+  it("keeps a cafeteria meal run and trims the clips around the eating", () => {
+    const day = mkDay("home_day", [slot(1, "dinner", "home", "18:00", "19:30")]);
+    let clips = rec("2026-05-09", [
+      { at: "18:00", min: 10, node: "home", category: "meal" },
+      { at: "18:15", min: 10, node: "home", category: "meal" },
+      { at: "18:30", min: 10, node: "home", category: "meal" },
+      { at: "18:45", min: 10, node: "home", category: "meal" },
+      { at: "19:00", min: 10, node: "home", category: "meal" },
+    ]);
+    clips = text(clips, "18:00", "I look for a table in the cafeteria");
+    clips = text(clips, "18:15", "I look around the cafeteria");
+    clips = text(clips, "18:30", "I eat my meal at the cafeteria");
+    clips = text(clips, "18:45", "I return the tray to the cafeteria");
+    clips = text(clips, "19:00", "I chat in the cafeteria");
+    expect(byBlock(world, day, clips, "2026-05-09")).toEqual({ "d1-s1": ["18:15", "18:30", "18:45"] });
+  });
+
+  it("trip_day breakfast follows lodging_morning directly, with no anchor", () => {
+    const t = JSON.parse(readFileSync(new URL("../../../config/timeline/templates.v3.json", import.meta.url), "utf8"));
+    const slots = t.day_types.trip_day as { role: string; anchor?: string }[];
+    expect(slots.slice(0, 3).map((x) => x.role)).toEqual(["lodging_morning", "breakfast", "outing"]);
+    expect(slots[1]!.anchor).toBeUndefined();
+  });
+});
+
 describe("home fill from spare dates", () => {
   const world = makeWorld();
   /** Day `n` with ids d<n>-s<k>; `date` is its assigned real date. */

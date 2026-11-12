@@ -35,21 +35,42 @@ const MEAL_ROLES = new Set(["breakfast", "lunch", "dinner"]);
 
 /** B18: whole-word, case-insensitive word sets matched against a clip's own L3 sentence (`activity`). */
 const EATING = new Set(
-  "eat eats eating ate meal meals breakfast lunch dinner supper snack snacks cook cooks cooking cooked restaurant canteen cafeteria diner eatery noodle noodles dumpling dumplings rice bun buns fry fries frying pancake pancakes".split(" "),
+  "eat eats eating ate meal meals breakfast lunch dinner supper snack snacks cook cooks cooking cooked restaurant canteen cafeteria diner eatery noodle noodles dumpling dumplings rice bun buns fry fries frying pancake pancakes food".split(" "),
 );
 const COMMUTE = new Set("commute commuting travel travels traveling depart departs leave leaves return returns mtr bus train taxi scooter station".split(" "));
+/** B19: extra words a home slot rejects (outdoor, shopping and arrival scenes). */
+const HOME_REJECT = new Set(
+  [...COMMUTE, ..."walk walks walking street streets market campus university library mall store shop shopping supermarket plaza plazas navigate navigates outdoor outdoors tram elevator arrive arrives arrival journey departure".split(" ")],
+);
+/** B19: words a work slot rejects (errands, commutes, food runs). */
+const WORK_REJECT = new Set([...COMMUTE, ..."tram exit exits departure supermarket mall store shopping food".split(" ")]);
+/** B19: a meal run must contain one of these. */
+const EAT_ACT = new Set("eat eats eating ate dine dines dining consume consumes consuming cook cooks cooking cooked buffet".split(" "));
+const DRIVE = new Set("drive drives driving car".split(" "));
 const hasWord = (text: string, set: ReadonlySet<string>): boolean => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).some((w) => set.has(w));
 
 /**
- * B18: the one content predicate per slot role. Meal slots need an EATING word in the clip's activity;
- * every other slot rejects one; home slots (home_*, chores, or a home/kitchen node) also reject COMMUTE words.
+ * B18/B19: the one content predicate per slot role. Meal slots need an EATING word in the clip's activity;
+ * every other slot rejects one; home slots (home_*, chores, or a home/kitchen node) reject HOME_REJECT words
+ * and work slots (work_am, work_pm) reject WORK_REJECT words.
  */
 function contentOk(world: World, slot: Slot, c: Clip): boolean {
   if (MEAL_ROLES.has(slot.role)) return hasWord(c.activity, EATING);
   if (hasWord(c.activity, EATING)) return false;
+  if (slot.role === "work_am" || slot.role === "work_pm") return !hasWord(c.activity, WORK_REJECT);
   const kind = world.nodes[slot.spec.node]?.kind;
   const home = slot.role.startsWith("home_") || slot.role === "chores" || kind === "home" || kind === "kitchen";
-  return !(home && hasWord(c.activity, COMMUTE));
+  return !(home && hasWord(c.activity, HOME_REJECT));
+}
+
+/**
+ * B19: trims a meal run to one clip before the first EAT_ACT clip through one after the last, and drops
+ * drive/car clips. No EAT_ACT clip: empty.
+ */
+function trimMeal<T extends { clip: Clip }>(run: readonly T[]): T[] {
+  const idx = run.flatMap((c, i) => (hasWord(c.clip.activity, EAT_ACT) ? [i] : []));
+  if (idx.length === 0) return [];
+  return run.slice(Math.max(0, idx[0]! - 1), idx[idx.length - 1]! + 2).filter((c) => !hasWord(c.clip.activity, DRIVE));
 }
 
 /** A catalog clip with its real start and end, in seconds since its date's 00:00. */
@@ -510,7 +531,8 @@ export function planDay(day: ScheduleDay, date: RealDate | undefined, world: Wor
     const { cands, run } = phase(slot);
     const free = cands.filter((c) => !used.has(c.clip.clip_id) && contentOk(world, slot, c.clip));
     const [ws, we] = windowSeconds(slot);
-    take(slot.slot_id, run ? firstRun(free) : free, we - ws);
+    const picked = run ? firstRun(free) : free;
+    take(slot.slot_id, MEAL_ROLES.has(slot.role) ? trimMeal(picked) : picked, we - ws);
   }
 
   // B10: the transit right before a gym run fills the transition into its exercise slot.
@@ -621,11 +643,13 @@ export function homeFill(
       pool.forEach((c, i) => {
         const delta = Math.abs(c.start - ws);
         if (delta > FILL_WINDOW_S) return;
-        const run = [c];
+        let run = [c];
         for (const n of pool.slice(i + 1)) {
           if (n.start - run[run.length - 1]!.end > RUN_GAP_S) break;
           run.push(n);
         }
+        if (meal) run = trimMeal(run);
+        if (run.length === 0) return;
         const footage = sum(run);
         if (pick === undefined || delta < pick.delta || (delta === pick.delta && footage > pick.footage)) pick = { run, delta, footage };
       });
