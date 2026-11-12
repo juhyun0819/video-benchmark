@@ -10,6 +10,7 @@
     "ingest": "tsx packages/ingest/src/cli.ts",
     "mcp": "tsx packages/mcp/src/main.ts",
     "generate": "tsx packages/mcp/src/generate.ts",
+    "compose-blocks": "tsx packages/mcp/src/composeBlocksCli.ts",
     "stats": "tsx packages/mcp/src/stats.ts"
   },
   "devDependencies": {
