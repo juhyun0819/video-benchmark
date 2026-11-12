@@ -19,7 +19,7 @@
 
 ## 파이프라인
 
-1. 합성 타임라인 manifest 생성: 합성 사람 × N일 타임라인 파이프라인 (구현 중, Plan 1 완료. 스펙: `2026-11-12-synthetic-timeline-generation-design.md`. 이전 base day 방식과 두 옛 스펙은 대체됐다)
+1. 합성 타임라인 manifest 생성: 합성 사람 × N일 타임라인 파이프라인 (구현 중. Plan 1과 rev3 변경 완료, main에 병합. 스펙: `2026-11-12-synthetic-timeline-generation-design.md`. 이전 base day 방식과 두 옛 스펙은 대체됐다)
 2. manifest로 영상 렌더링 (다음 계획 Plan 2). 이음새 VLM 검사는 Plan 3
 3. 영상을 보고 샘플을 수정한 뒤 5개를 고정한다
 4. 합성으로 생기는 QA를 자동으로 만들기 위한 QA 카테고리를 정한다
@@ -46,14 +46,36 @@
 
 | 데이터셋 | 받는 방법 |
 |---|---|
-| NextMe-800 | `huggingface-cli download mmm8383/NextMe-800 raw/2026-04-15/2026-04-15_1323-1709.tar --repo-type dataset --local-dir data/media/nextme` |
+| NextMe-800 | `hf download mmm8383/NextMe-800 raw/2026-04-15/2026-04-15_1323-1709.tar --repo-type dataset --local-dir data/media/nextme` (`huggingface_hub` 1.x부터 CLI 이름이 `hf`다) |
 | Ego-Exo4D | `lab22 egoexo -o data/media/egoexo --parts takes --views ego --uids <16개 take uid>` |
 
 Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 블록의 `video_id`다.
 
+## 진행 중: NextMe 28일 manifest (2026-11-12, 서버 이동으로 중단)
+
+목표는 NextMe 착용자 한 사람으로 28일 timeline manifest를 만드는 것이다. 집과 직장은 NextMe에 고정하고, 나머지는 파이프라인대로 한다. 렌더링은 아직 없어서 manifest까지만 만든다.
+
+- 작업 브랜치는 `feat/nextme-28day`다(main에서 갈라짐). 설계는 `docs/superpowers/specs/2026-11-12-nextme-28day-design.md`이고 사용자가 승인했다. 계획은 `docs/superpowers/plans/2026-11-12-nextme-28day.md`(Task 1~5)이고, 부록 A에 이전 세션에서 정한 입력값과 수치를 모두 적었다.
+- 상태: 설계와 계획만 커밋했다. 코드는 Task 1부터 시작해야 한다(시작한 implementer는 변경 없이 중지했다). superpowers subagent-driven-development로 진행한다. SDD 작업 공간(`.superpowers/`)은 git이 무시하므로 새 서버에서 새로 만든다.
+- 왜 이렇게 하는가:
+  - NextMe 114일 중 아침 집 영상이 있는 날은 24일이고, 그중 15일만 11시 전에 시작한다.
+  - 모든 템플릿은 "집(아침)" 필수로 시작하고, NextMe 날짜 하나는 합성 하루에만 쓴다.
+  - 그래서 세 가지를 더한다(설계 2~3절, 계획 N6):
+    - 늦은 출근일: 주 2일, 4주 8일. 11:30~15:00에 출근한 ATUS donor를 쓴다.
+    - 실제 NextMe 여행 5/7(목)~5/10(일)을 여러 날 예외로 넣는다.
+    - 모자라면 하루만 집(아침)을 비운다(`missing_required_allowance`, 사용자 결정).
+- 새 서버에서 할 일:
+  1. NextMe caption을 다시 받는다(계획 부록 A의 명령).
+     - 공용 서버이므로 `hf auth login`을 하지 않는다.
+     - 사용자가 자기 터미널에서 `read -rs HF_TOKEN && export HF_TOKEN`으로 그 셸에만 토큰을 넣고 실행한다.
+     - Claude 셸에서는 이 환경변수가 보이지 않으므로, 토큰이 필요한 다운로드는 사용자가 직접 실행한다.
+  2. ATUS 산출물(`data/distributions/atus2025/`)은 `scripts/sync_data.py pull`로 받거나 다시 계산한다.
+  3. 계획 Task 1부터 진행한다.
+- NextMe 라벨은 키워드 규칙과 Claude의 caption 검토로 만든 초안이다. manifest에 검수 전으로 표시하고, 사람이 검수해야 한다(D9).
+
 ## 대기 중인 일
 
-- NextMe-800 날짜를 더 ingest한다. 지금은 1일뿐이고, 28일 타임라인은 쓸 수 있는 날짜가 28개보다 넉넉히 많아야 한다(하루가 원본 날짜 두 개를 쓸 때가 있다, D7). 쓸 수 있는 날짜는 출근 전 `home_morning` 창(대개 1시간 안팎)에 들어갈 만큼 짧은 아침 집 영상과 오전·오후 직장 영상이 있어야 한다. `ingest nextme`로 초안을 만들고 검수한 뒤 `ingest bank --dataset nextme800`을 한다. 순서는 README 2절을 따른다.
+- NextMe-800 ingest는 위의 "진행 중" 절을 따른다.
 - `config/timeline/gaps.v1.json`은 `reviewed: false`다. 통근 외 전환의 공백 시간 표를 사람이 검토한다(스펙 13절 열린 항목 1).
 - YouTube 영상 10+10개(집 10, 직장 10)를 사용자가 내려받고 검수한 뒤 `ingest bank --dataset youtube`로 넣는다.
 - 예전 로컬 파일(`data/catalog/hdepic/`, `data/catalog/{ego4d,egoexo4d}/candidates.jsonl`, `data/catalog/nextme800/days/`, `data/compositions/`)은 사용자가 지운 뒤 push한다.
@@ -64,7 +86,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 - 쉬는 날(hobby_day) 저녁 drop은 G20(hobby 슬롯을 운동 앵커 순서에 맞춰 끼니 사이에 둠) 뒤 hobby day의 1.3%다(rev3 전 4.5%, G20 전 12.0%). 남은 drop은 16시 이후 시작하는 hobby에 몰려 있다(그 시각대의 5.0%). 이 정도면 그대로 둘지, 쉬는 날 저녁을 필수로 하거나 hobby_day에 `reduce_order`를 줄지 사용자가 정한다. G20의 대가로 hobby_day 슬롯 순서가 그날 운동 시각에 따라 달라진다(order_similarity가 조금 낮아짐). 수치는 비교 리포트(`docs/superpowers/reports/2026-11-12-rev3-comparison.md`) 4절과 8절에 있다.
 - G22(donor 경계는 템플릿이 쓰는 앵커만)는 사용자가 승인한 E5의 문구를 바꾼다. 평일 donor는 아침을 검사하지 않는다. 승인이 필요하다.
-- seed 149 건은 해결됐다. 첫 donor가 아침 위반 하나로 거절되고 다시 뽑은 donor가 모두 필수 슬롯 검사를 못 넘던 경우였다. G22 뒤에는 첫 donor가 그대로 수락된다(redraw 0, 위반 없음). seed 0–999 × rs {0, 0.5, 0.7, 1} sweep의 생성 실패도 G21 뒤 0/4000이다(이전 7/4000, seed 242와 747).
+- seed 149 건은 해결됐다. 첫 donor가 아침 위반 하나로 거절되고 다시 뽑은 donor가 모두 필수 슬롯 검사를 못 넘던 경우였다. G22 뒤에는 첫 donor가 그대로 수락된다(redraw 0, 위반 없음). seed 0–999 × rs {0, 0.5, 0.7, 1} sweep의 생성 실패는 0/4000이다(이전 7/4000, seed 242와 747). 최종 재검토 결과 이 0은 G22만으로 나온다. G21은 자기 테스트 fixture로 검증된다.
 
 ## 서버 환경
 
