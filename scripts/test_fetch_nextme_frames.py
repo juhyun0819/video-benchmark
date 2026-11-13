@@ -14,8 +14,10 @@ import pytest
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
-from fetch_nextme_frames import (FetchError, FileSource, HttpSource, Stopped, TarFormatError, TarWalker, fetch_tar,
-                                 needed_frames, parse_days)
+import fetch_nextme_frames
+from concurrent.futures import ThreadPoolExecutor
+from fetch_nextme_frames import (ChunkedSource, FetchError, FileSource, FrameSaver, HttpSource, Stopped, TarFormatError,
+                                 TarWalker, fetch_tar, needed_frames, parse_days, parse_shard, shard_jobs)
 
 ROOT = "4-20_hkt1023-1224_120m_01b3b7f6-aafa-4e21-8145-e6d5a0c4f82a"
 
@@ -314,3 +316,113 @@ def test_http_bad_token_is_a_clear_error(hub):
     with pytest.raises(FetchError, match="refused the token") as e:
         HttpSource(hub.url, "wrong", backoff=0)
     assert "wrong" not in str(e.value)
+
+
+# ---------------------------------------------------------------- read-through
+
+
+@pytest.fixture
+def pool():
+    p = ThreadPoolExecutor(max_workers=8)
+    yield p
+    p.shutdown(wait=True, cancel_futures=True)
+
+
+def test_chunked_reads_match_the_file_across_chunk_edges(tmp_path, pool):
+    data = bytes(random.Random(0).randrange(256) for _ in range(100_000))
+    f = tmp_path / "blob"
+    f.write_bytes(data)
+    src = ChunkedSource(FileSource(f), pool, chunk=4096, ahead=2)
+    off = 777
+    rng = random.Random(1)
+    while off < len(data):
+        n = rng.choice([1, 512, 4095, 4096, 9000])
+        assert src.read(off, n) == data[off:off + n]
+        off += rng.choice([0, n, n + 3000])
+    assert src.read(len(data) - 10, 100) == data[-10:]
+    assert src.read(100, 50) == data[100:150]  # before the chunk grid: read directly
+
+
+@pytest.mark.parametrize("order", ["reverse", "random", "forward"])
+def test_chunked_fetch_with_parallel_saves_matches(tmp_path, pool, order):
+    tar = make_tar(tmp_path / "a.tar", range(60), order=order, seed=3)
+    out = tmp_path / "out"
+    saver = FrameSaver(4)
+    want = {0, 5, 6, 7, 30, 59}
+    r = fetch_tar(job(want), ChunkedSource(FileSource(tar), pool, chunk=8192, ahead=3), out, frame_size=32,
+                  saver=saver)
+    saver.shutdown()
+    assert r["complete"] and saved(out) == sorted(want)
+    assert all(Image.open(p).size == (32, 32) for p in (out / "frames" / "2026-04-20_1023-1224").glob("*.jpg"))
+
+
+def test_chunked_stream_stops_soon_after_the_last_needed_frame(tmp_path, pool):
+    tar = make_tar(tmp_path / "a.tar", range(400), order="reverse")
+    raw = FileSource(tar)
+    src = ChunkedSource(raw, pool, chunk=4096, ahead=2)
+    fetch_tar(job({399, 398}), src, tmp_path / "out", frame_size=32, walker_kw={"small_window": 4096})
+    src.close()
+    with tarfile.open(tar) as t:
+        third = [m for m in t.getmembers() if m.name.endswith(frame_name(397))][0]
+    assert raw.bytes <= third.offset_data + 4 * 4096
+    assert raw.bytes < tar.stat().st_size / 4
+
+
+def test_chunked_resume_after_a_failed_chunk(tmp_path, pool):
+    tar = make_tar(tmp_path / "a.tar", range(80), order="random", seed=7)
+    out = tmp_path / "out"
+    want = set(range(0, 80, 4))
+    with pytest.raises(FetchError):
+        fetch_tar(job(want), ChunkedSource(FailAfter(tar, 6), pool, chunk=4096, ahead=1), out, frame_size=32,
+                  saver=FrameSaver(2))
+    first = saved(out)
+    assert len(first) < len(want)
+    r = fetch_tar(job(want), ChunkedSource(FileSource(tar), pool, chunk=4096, ahead=2), out, frame_size=32,
+                  saver=FrameSaver(2))
+    assert r["complete"] and saved(out) == sorted(want)
+
+
+def test_a_failed_save_fails_the_tar_and_writes_no_done_marker(tmp_path, pool, monkeypatch):
+    real = fetch_nextme_frames.save_frame
+
+    def flaky(jpeg, path, *a):
+        if path.name.endswith("frame_00007.jpg"):
+            raise OSError("disk full")
+        real(jpeg, path, *a)
+
+    monkeypatch.setattr(fetch_nextme_frames, "save_frame", flaky)
+    tar = make_tar(tmp_path / "a.tar", range(20))
+    out = tmp_path / "out"
+    with pytest.raises(OSError, match="disk full"):
+        fetch_tar(job({3, 7, 9}), ChunkedSource(FileSource(tar), pool, chunk=4096), out, frame_size=32,
+                  saver=FrameSaver(2))
+    assert not (out / "frames" / "2026-04-20_1023-1224" / ".fetched.json").exists()
+
+
+def test_chunked_http_fetch_uses_parallel_requests_without_leaking_the_token(tmp_path, hub, pool):
+    src = ChunkedSource(HttpSource(hub.url, "secret", backoff=0), pool, chunk=4096, ahead=4)
+    r = fetch_tar(job(set(range(30))), src, tmp_path / "out", frame_size=32, saver=FrameSaver(4))
+    src.close()
+    assert r["complete"] and saved(tmp_path / "out") == list(range(30))
+    assert not hub.auth_seen_on_cdn and hub.resolves == 1
+
+
+def test_http_cuts_a_body_that_is_too_slow_and_retries(hub):
+    import fetch_nextme_frames as f
+    src = HttpSource(hub.url, "secret", backoff=0, min_rate=1e12, grace=-1)  # every body is "too slow"
+    before = f.RETRIES.get("too slow", 0)
+    with pytest.raises(FetchError, match="too slow"):
+        src.read(0, 512)
+    assert f.RETRIES["too slow"] - before == src.retries + 1
+    ok = HttpSource(hub.url, "secret", backoff=0)
+    assert ok.read(0, 512) == hub.data[:512]
+
+
+def test_shards_split_the_tars_without_overlap():
+    jobs = [{"video_id": f"v{i}"} for i in range(7)]
+    a, b = shard_jobs(jobs, parse_shard("0/2")), shard_jobs(jobs, parse_shard("1/2"))
+    assert {j["video_id"] for j in a} | {j["video_id"] for j in b} == {j["video_id"] for j in jobs}
+    assert not {j["video_id"] for j in a} & {j["video_id"] for j in b}
+    assert shard_jobs(jobs, None) == jobs
+    with pytest.raises(ValueError):
+        parse_shard("2/2")

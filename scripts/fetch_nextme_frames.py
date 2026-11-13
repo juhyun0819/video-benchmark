@@ -1,13 +1,17 @@
 """Fetch only the NextMe-800 frames a manifest uses, by HTTP Range, resized to 1024x1024.
 
-The tars are too large to download whole (204 tars, 4.5TB). This walks each tar's
-headers with small Range requests and downloads only the picture/masked frames the
-manifest's clips need. Design: docs/superpowers/specs/2026-11-13-nextme-frame-fetch-design.md
+The tars are too large to keep (204 tars, 4.5TB). Each tar is streamed in large Range
+chunks (64MB by default) over many parallel connections, its headers are followed in memory,
+and only the picture/masked frames the manifest's clips need are decoded and saved; a tar's
+stream stops as soon as its last needed frame is found. One CDN connection gives about
+20MB/s and a request waits about 0.8s for its first byte, so many large requests in flight
+beat one small request per header. Design: docs/superpowers/specs/2026-11-13-nextme-frame-fetch-design.md
 
 Run in your own shell with HF_TOKEN exported (the token is read from the environment
 only and is never printed or written):
 
     python3 scripts/fetch_nextme_frames.py data/exports/<manifest>.json --days 1
+    python3 scripts/fetch_nextme_frames.py data/exports/<manifest>.json --connections 48 --jobs 16
 
 Rerunning resumes: frames on disk are kept and each tar's walk continues from its index.
 """
@@ -22,7 +26,7 @@ import re
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urljoin
@@ -36,6 +40,21 @@ DATASET = "nextme800"
 
 class FetchError(Exception):
     pass
+
+
+class _TooSlow(Exception):
+    pass
+
+
+RETRIES: dict[str, int] = {}
+_RETRIES_LOCK = threading.Lock()
+
+
+def _retry(reason: str) -> str:
+    """Count one retried request by reason (shown in the per-minute log line)."""
+    with _RETRIES_LOCK:
+        RETRIES[reason] = RETRIES.get(reason, 0) + 1
+    return reason
 
 
 class TarFormatError(Exception):
@@ -87,6 +106,24 @@ def needed_frames(manifest: dict, days: set[int] | None = None) -> list[dict]:
     return sorted(jobs.values(), key=lambda j: (j["first_day"], j["video_id"]))
 
 
+def parse_shard(text: str | None) -> tuple[int, int] | None:
+    """'0/2' -> (0, 2): this process takes every 2nd tar starting at the first."""
+    if not text:
+        return None
+    i, n = (int(x) for x in text.split("/"))
+    if not 0 <= i < n:
+        raise ValueError(f"shard {text!r}: need 0 <= i < n")
+    return i, n
+
+
+def shard_jobs(jobs: list[dict], shard: tuple[int, int] | None) -> list[dict]:
+    """Split tars between processes (e.g. on two servers) so no tar is fetched twice."""
+    if shard is None:
+        return jobs
+    i, n = shard
+    return jobs[i::n]
+
+
 # ---------------------------------------------------------------- byte sources
 
 
@@ -96,7 +133,8 @@ class FileSource:
     def __init__(self, path: Path):
         self.path = Path(path)
         self.size = self.path.stat().st_size
-        self._f = open(self.path, "rb")
+        self._fd = os.open(self.path, os.O_RDONLY)
+        self._lock = threading.Lock()
         self.requests = 0
         self.bytes = 0
 
@@ -104,31 +142,39 @@ class FileSource:
         n = min(n, self.size - off)
         if n <= 0:
             return b""
-        self._f.seek(off)
-        data = self._f.read(n)
-        self.requests += 1
-        self.bytes += len(data)
+        data = os.pread(self._fd, n, off)
+        with self._lock:
+            self.requests += 1
+            self.bytes += len(data)
         return data
 
     def close(self):
-        self._f.close()
+        os.close(self._fd)
 
 
 class HttpSource:
-    """A Hub file read by Range. The token goes only to the resolve URL, never to the CDN."""
+    """A Hub file read by Range. The token goes only to the resolve URL, never to the CDN.
+
+    Safe to read from several threads: each thread gets its own HTTP session unless one is given."""
 
     def __init__(self, url: str, token: str, session=None, retries: int = 8, backoff: float = 1.0,
-                 max_backoff: float = 60.0, timeout: float = 120.0, sleep=time.sleep):
+                 max_backoff: float = 15.0, timeout=(10.0, 30.0), min_rate: float = 1 << 20,
+                 grace: float = 15.0, sleep=time.sleep):
         import requests
 
         self._requests = requests
         self.url = url
         self._token = token
-        self.s = session or requests.Session()
+        self._shared = session
+        self._local = threading.local()
+        self._sessions: list = []
+        self._lock = threading.Lock()
         self.retries = retries
         self.backoff = backoff
         self.max_backoff = max_backoff
         self.timeout = timeout
+        self.min_rate = min_rate  # bytes/s; a body slower than this (after `grace` s) is cut and retried
+        self.grace = grace
         self._sleep = sleep
         self._cdn: str | None = None
         self._cdn_auth = False
@@ -137,6 +183,18 @@ class HttpSource:
         self.requests = 0
         self.bytes = 0
         self._resolve()
+
+    @property
+    def s(self):
+        if self._shared is not None:
+            return self._shared
+        s = getattr(self._local, "s", None)
+        if s is None:
+            s = self._requests.Session()
+            self._local.s = s
+            with self._lock:
+                self._sessions.append(s)
+        return s
 
     def _wait(self, attempt: int):
         self._sleep(min(self.max_backoff, self.backoff * (2 ** attempt)))
@@ -150,7 +208,8 @@ class HttpSource:
                 self._wait(attempt)
                 continue
             with r:
-                self.resolves += 1
+                with self._lock:
+                    self.resolves += 1
                 if r.status_code in (301, 302, 303, 307, 308):
                     self._cdn = urljoin(self.url, r.headers["Location"])
                     self._cdn_auth = False
@@ -197,19 +256,20 @@ class HttpSource:
         last_error = "no attempt"
         for attempt in range(self.retries + 1):
             try:
+                started = time.monotonic()
                 r = self.s.get(self._cdn, headers=self._headers({"Range": f"bytes={off}-{end}"}),
                                stream=True, timeout=self.timeout)
             except self._requests.RequestException as e:
-                last_error = type(e).__name__
+                last_error = _retry(type(e).__name__)
                 self._wait(attempt)
                 continue
             with r:
                 if r.status_code in (401, 403):
-                    last_error = f"HTTP {r.status_code} (expired URL?)"
+                    last_error = _retry(f"HTTP {r.status_code} (expired URL?)")
                     self._resolve()
                     continue
                 if r.status_code == 429 or r.status_code >= 500:
-                    last_error = f"HTTP {r.status_code}"
+                    last_error = _retry(f"HTTP {r.status_code}")
                     self._wait(attempt)
                     continue
                 if r.status_code != 206:
@@ -217,23 +277,126 @@ class HttpSource:
                 cr = r.headers.get("Content-Range", "")
                 if not cr.startswith(f"bytes {off}-{end}/"):
                     raise FetchError(f"Content-Range {cr!r} does not match bytes {off}-{end}")
+                deadline = started + self.grace + n / self.min_rate
                 try:
-                    data = b"".join(r.iter_content(1 << 20))
+                    parts = []
+                    for piece in r.iter_content(1 << 20):
+                        parts.append(piece)
+                        if time.monotonic() > deadline:
+                            raise _TooSlow()
+                    data = b"".join(parts)
+                except _TooSlow:
+                    last_error = _retry("too slow")
+                    continue  # a fresh connection right away
                 except self._requests.RequestException as e:
-                    last_error = type(e).__name__
+                    last_error = _retry(type(e).__name__)
                     self._wait(attempt)
                     continue
-            self.requests += 1
+            with self._lock:
+                self.requests += 1
             if len(data) != n:
-                last_error = f"short body {len(data)}/{n}"
+                last_error = _retry(f"short body")
                 self._wait(attempt)
                 continue
-            self.bytes += n
+            with self._lock:
+                self.bytes += n
             return data
         raise FetchError(f"bytes {off}-{end} failed after {self.retries + 1} attempts: {last_error}")
 
     def close(self):
-        self.s.close()
+        if self._shared is not None:
+            self._shared.close()
+        with self._lock:
+            sessions, self._sessions = self._sessions, []
+        for s in sessions:
+            s.close()
+
+
+class ChunkedSource:
+    """Reads a byte source forward in large chunks fetched ahead on a shared thread pool.
+
+    The chunk grid starts at the first offset read. Reads before that start go straight to
+    the underlying source. `raw` is the underlying source, for scattered direct reads."""
+
+    def __init__(self, raw, pool: ThreadPoolExecutor, chunk: int = 64 << 20, ahead: int = 4):
+        self.raw = raw
+        self.pool = pool
+        self.chunk = chunk
+        self.ahead = ahead
+        self.size = raw.size
+        self._base: int | None = None
+        self._chunks: dict[int, Future] = {}
+
+    @property
+    def requests(self) -> int:
+        return self.raw.requests
+
+    @property
+    def bytes(self) -> int:
+        return self.raw.bytes
+
+    def _start(self, i: int) -> int:
+        return self._base + i * self.chunk
+
+    def _future(self, i: int) -> Future:
+        f = self._chunks.get(i)
+        if f is None:
+            start = self._start(i)
+            f = self.pool.submit(self.raw.read, start, min(self.chunk, self.size - start))
+            self._chunks[i] = f
+        return f
+
+    def read(self, off: int, n: int) -> bytes:
+        n = min(n, self.size - off)
+        if n <= 0:
+            return b""
+        if self._base is None:
+            self._base = off
+        if off < self._base:
+            return self.raw.read(off, n)
+        first = (off - self._base) // self.chunk
+        last = (off + n - 1 - self._base) // self.chunk
+        for i in [k for k in self._chunks if k < first]:
+            self._chunks.pop(i).cancel()
+        final = (self.size - 1 - self._base) // self.chunk
+        for i in range(first, min(last + self.ahead, final) + 1):
+            self._future(i)
+        parts = []
+        for i in range(first, last + 1):
+            data = self._chunks[i].result()
+            lo = max(off, self._start(i)) - self._start(i)
+            hi = min(off + n, self._start(i) + len(data)) - self._start(i)
+            parts.append(data[lo:hi])
+            if self._start(i) + len(data) < min(off + n, self._start(i) + self.chunk):
+                break  # short chunk: the source ends here
+        return parts[0] if len(parts) == 1 else b"".join(parts)
+
+    def close(self):
+        for f in self._chunks.values():
+            f.cancel()
+        self._chunks.clear()
+        self.raw.close()
+
+
+class FrameSaver:
+    """Decodes and saves frames on a thread pool, with a bound on frames waiting in memory."""
+
+    def __init__(self, workers: int, max_pending: int | None = None):
+        self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="save")
+        self._slots = threading.BoundedSemaphore(max_pending or workers * 4)
+
+    def submit(self, fn, *args) -> Future:
+        self._slots.acquire()
+        try:
+            f = self.pool.submit(fn, *args)
+        except BaseException:
+            self._slots.release()
+            raise
+        f.add_done_callback(lambda _: self._slots.release())
+        return f
+
+    def shutdown(self):
+        self.pool.shutdown(wait=True)
 
 
 # ---------------------------------------------------------------- tar walking
@@ -438,7 +601,8 @@ class Progress:
 
 
 def fetch_tar(job: dict, src, out_root: Path, progress: Progress | None = None, stop: threading.Event | None = None,
-              frame_size: int = 1024, quality: int = 95, walker_kw: dict | None = None) -> dict:
+              frame_size: int = 1024, quality: int = 95, walker_kw: dict | None = None,
+              saver: FrameSaver | None = None) -> dict:
     vid = job["video_id"]
     need = set(job["frames"])
     frames_dir = out_root / "frames" / vid
@@ -450,6 +614,7 @@ def fetch_tar(job: dict, src, out_root: Path, progress: Progress | None = None, 
     remaining = need - frames_on_disk(frames_dir)
     walked = 0
     base_bytes = getattr(src, "bytes", 0)
+    pending: list[Future] = []
 
     def report(state):
         if progress:
@@ -461,54 +626,74 @@ def fetch_tar(job: dict, src, out_root: Path, progress: Progress | None = None, 
             raise Stopped()
 
     def store(name: str, jpeg: bytes):
-        save_frame(jpeg, frames_dir / name, frame_size, quality)
+        if saver is None:
+            save_frame(jpeg, frames_dir / name, frame_size, quality)
+        else:
+            pending.append(saver.submit(save_frame, jpeg, frames_dir / name, frame_size, quality))
 
-    report("fetching")
-    # Frames whose place is already indexed: read them directly.
-    for n in sorted(remaining & known.keys()):
-        check_stop()
-        rec = known[n]
-        store(rec["name"], src.read(rec["data"], rec["size"]))
-        remaining.discard(n)
+    def drain():
+        """Wait for this tar's queued saves; raise the first save error."""
+        errors = [f.exception() for f in pending]
+        pending.clear()
+        for e in errors:
+            if e is not None:
+                raise e
+
+    try:
         report("fetching")
+        # Frames whose place is already indexed: read them directly.
+        direct = getattr(src, "raw", src)
+        for n in sorted(remaining & known.keys()):
+            check_stop()
+            rec = known[n]
+            store(rec["name"], direct.read(rec["data"], rec["size"]))
+            remaining.discard(n)
+            report("fetching")
 
-    walker = TarWalker(src, **(walker_kw or {}))
-    if remaining and not ended:
-        with open(index_path, "a") as idx:
-            others = 0
-            last_next = resume
-            for m in walker.members(resume):
-                check_stop()
-                walked += 1
-                last_next = m.next
-                fm = FRAME_RE.search("/" + m.name) if m.type in (b"0", b"\0") else None
-                if fm:
-                    n = int(fm.group(2))
-                    idx.write(json.dumps({"n": n, "name": fm.group(1), "data": m.data, "size": m.size,
-                                          "next": m.next}) + "\n")
-                    idx.flush()
-                    if n in remaining:
-                        blob = src.read(m.data, pad(m.size) + walker.header_window)
-                        if len(blob) < m.size:
-                            break  # truncated source
-                        store(fm.group(1), blob[:m.size])
-                        walker.seed(m.next, blob[pad(m.size):])
-                        remaining.discard(n)
-                        if not remaining:
-                            break
-                else:
-                    others += 1
-                    if others % 500 == 0:
-                        idx.write(json.dumps({"at": m.next}) + "\n")
+        walker = TarWalker(src, **(walker_kw or {}))
+        if remaining and not ended:
+            with open(index_path, "a") as idx:
+                others = 0
+                last_next = resume
+                for m in walker.members(resume):
+                    check_stop()
+                    walked += 1
+                    last_next = m.next
+                    fm = FRAME_RE.search("/" + m.name) if m.type in (b"0", b"\0") else None
+                    if fm:
+                        n = int(fm.group(2))
+                        idx.write(json.dumps({"n": n, "name": fm.group(1), "data": m.data, "size": m.size,
+                                              "next": m.next}) + "\n")
                         idx.flush()
-                if walked % 50 == 0:
-                    report("walking")
-            else:
-                if walker.end_reason == "end":
-                    ended = True
-                    idx.write(json.dumps({"end": True}) + "\n")
-            if remaining or not ended:
-                idx.write(json.dumps({"at": last_next}) + "\n")
+                        if n in remaining:
+                            blob = src.read(m.data, pad(m.size) + walker.header_window)
+                            if len(blob) < m.size:
+                                break  # truncated source
+                            store(fm.group(1), blob[:m.size])
+                            walker.seed(m.next, blob[pad(m.size):])
+                            remaining.discard(n)
+                            if not remaining:
+                                break
+                    else:
+                        others += 1
+                        if others % 500 == 0:
+                            idx.write(json.dumps({"at": m.next}) + "\n")
+                            idx.flush()
+                    if walked % 50 == 0:
+                        report("walking")
+                else:
+                    if walker.end_reason == "end":
+                        ended = True
+                        idx.write(json.dumps({"end": True}) + "\n")
+                if remaining or not ended:
+                    idx.write(json.dumps({"at": last_next}) + "\n")
+    except BaseException:
+        try:
+            drain()
+        except Exception:
+            pass  # the walk's own error is the one to report
+        raise
+    drain()
 
     complete = not remaining
     result = {"tar": job["tar"], "video_id": vid, "tar_size": src.size, "needed": len(need),
@@ -527,6 +712,15 @@ def fetch_tar(job: dict, src, out_root: Path, progress: Progress | None = None, 
 # ---------------------------------------------------------------- main
 
 
+def rss_gb() -> float:
+    """This process's resident memory, from /proc (0 where unavailable)."""
+    try:
+        with open("/proc/self/statm") as f:
+            return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1e9
+    except (OSError, ValueError):
+        return 0.0
+
+
 def hub_url(endpoint: str, repo: str, revision: str, path: str) -> str:
     return f"{endpoint.rstrip('/')}/datasets/{repo}/resolve/{revision}/{path}"
 
@@ -536,8 +730,17 @@ def main(argv=None) -> int:
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--days", help="day indexes to fetch, e.g. 1 or 1-7,10 (default: all)")
     ap.add_argument("--out", type=Path, default=Path("data/media/nextme"))
-    ap.add_argument("--jobs", type=int, default=6, help="tars fetched at the same time")
+    ap.add_argument("--jobs", type=int, default=16, help="tars fetched at the same time")
+    ap.add_argument("--connections", type=int, default=48,
+                    help="HTTP requests in flight across all tars (one CDN connection gives about 20MB/s)")
+    ap.add_argument("--chunk-mb", type=int, default=64,
+                    help="read each tar forward in chunks of this size; 0 = old mode, one small request per header")
+    ap.add_argument("--ahead", type=int, default=4, help="chunks fetched ahead per tar")
+    ap.add_argument("--decoders", type=int, default=min(32, os.cpu_count() or 4),
+                    help="threads that decode, resize and save frames")
     ap.add_argument("--limit", type=int, help="fetch only the first N tars (in day order)")
+    ap.add_argument("--shard", help="i/n: fetch only every n-th tar starting at i (run 0/2 and 1/2 on two servers; "
+                                    "each writes fetch_status.shard<i>of<n>.json)")
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--revision", default="main")
     ap.add_argument("--endpoint", default=os.environ.get("HF_ENDPOINT", "https://huggingface.co"))
@@ -549,6 +752,8 @@ def main(argv=None) -> int:
     jobs = needed_frames(manifest, parse_days(args.days))
     if args.limit:
         jobs = jobs[:args.limit]
+    shard = parse_shard(args.shard)
+    jobs = shard_jobs(jobs, shard)
     total = sum(len(j["frames"]) for j in jobs)
     print(f"{len(jobs)} tars, {total} frames ({total / 3600:.1f} h at 1 fps)", flush=True)
     if args.dry_run:
@@ -564,8 +769,13 @@ def main(argv=None) -> int:
             return 2
 
     args.out.mkdir(parents=True, exist_ok=True)
-    progress = Progress(args.out / "fetch_status.json", jobs)
+    status_name = f"fetch_status.shard{shard[0]}of{shard[1]}.json" if shard else "fetch_status.json"
+    progress = Progress(args.out / status_name, jobs)
     stop = threading.Event()
+    chunk_pool = ThreadPoolExecutor(max_workers=args.connections, thread_name_prefix="chunk") if args.chunk_mb > 0 else None
+    saver = FrameSaver(args.decoders)
+    print(f"read-through: {f'{args.chunk_mb}MB chunks, {args.ahead} ahead per tar, {args.connections} connections' if chunk_pool else 'off'}; "
+          f"{args.jobs} tars at a time; {args.decoders} decoders", flush=True)
     results: list[dict] = []
     errors: list[str] = []
 
@@ -577,7 +787,9 @@ def main(argv=None) -> int:
                 src = FileSource(args.local_root / job["tar"])
             else:
                 src = HttpSource(hub_url(args.endpoint, args.repo, args.revision, job["tar"]), token)
-            r = fetch_tar(job, src, args.out, progress, stop)
+            if chunk_pool is not None:
+                src = ChunkedSource(src, chunk_pool, chunk=args.chunk_mb << 20, ahead=args.ahead)
+            r = fetch_tar(job, src, args.out, progress, stop, saver=saver)
             results.append(r)
             print(f"[{r['present']}/{r['needed']}] {vid} {'done' if r['complete'] else 'NOT complete'}"
                   + (f", {len(r['missing'])} missing" if r["missing"] else ""), flush=True)
@@ -601,7 +813,7 @@ def main(argv=None) -> int:
                 if time.time() - last_line > 60:
                     s = progress.snapshot()
                     print(f"{s['updated']}  frames {s['present']}/{s['needed']}  {s['bytes'] / 1e9:.1f} GB  "
-                          f"{s['mb_per_s']} MB/s  {s['states']}", flush=True)
+                          f"{s['mb_per_s']} MB/s  rss {rss_gb():.1f} GB  {s['states']}  retries {dict(RETRIES)}", flush=True)
                     last_line = time.time()
                 if not pending:
                     break
@@ -610,6 +822,9 @@ def main(argv=None) -> int:
             stop.set()
             for f in futures:
                 f.cancel()
+    if chunk_pool is not None:
+        chunk_pool.shutdown(wait=False, cancel_futures=True)
+    saver.shutdown()
     progress.write()
     s = progress.snapshot()
     print(f"finished: frames {s['present']}/{s['needed']}, missing {s['missing']}, "
