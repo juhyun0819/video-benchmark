@@ -70,6 +70,8 @@ describe("candidateToClip", () => {
     const cats = loadCategories(CATS_PATH).categories;
     const got = Object.fromEntries(cats.map((c) => [c.id, c.clip ? [c.clip.category, c.clip.setting, c.clip.node] : null]));
     expect(got).toEqual({
+      meal_out: ["meal", "venue_indoor", "eat_out"],
+      hobby_guitar_e4d: ["hobby", "home_indoor", "hobby"],
       walking: ["hobby", "outdoor", "hobby"],
       hobby_tent: ["hobby", "outdoor", "hobby"],
       sport_soccer: ["hobby", "outdoor", "hobby"],

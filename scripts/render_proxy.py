@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render a block-mode timeline manifest to proxy videos (one per synthetic day).
 
-Each second of a day, from wake to sleep, shows what the manifest places there:
-the day and clock, the block (slot role), the real source (dataset, date and
-real time) and the clip's caption. Spans without footage show their no-video kind.
+The day's clips play back to back: each second shows the day and its synthetic
+clock, the block (slot role), the real source (dataset, date and real time) and
+the clip's caption. Spans without footage are cut out, so the clock jumps there.
 No source media is read: this is a timing-exact stand-in until the real frames
 (NextMe tars, Ego-Exo4D takes, YouTube, Ego4D) are downloaded.
 
@@ -100,33 +100,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     ev = []
 
     def add(a, b, style, text):
-        a, b = max(a, t0), min(b, t1)
+        # a, b are seconds of output video (before the speed-up)
         if b <= a:
             return
-        ev.append(f"Dialogue: 0,{ass_time((a - t0) / speed)},{ass_time((b - t0) / speed)},{style},,0,0,0,,{text}")
+        ev.append(f"Dialogue: 0,{ass_time(a / speed)},{ass_time(b / speed)},{style},,0,0,0,,{text}")
 
-    title = f"D{day['day_index']}  {day['weekday']}  {day['day_type']}"
-    add(t0, t1, "Head", esc(title))
-    pace = "1 s = 1 s of the day" if speed == 1 else f"{speed:g}x speed: 1 s = {speed:g} s of the day"
-    add(t0, t1, "Foot", f"PROXY render - timing exact ({pace}); source frames not rendered yet")
-    step = 60 if speed < 60 else 600
-    for m in range(t0 - t0 % step, t1, step):
-        add(m, m + step, "Clock", clock(m))
-    covered = []
+    # Spans without footage are cut out: clips play back to back and only the clock jumps.
+    spans, prev_end = [], t0
     for c in sorted(day["clips"], key=lambda c: c["synthetic_start_s"]):
-        a, b = c["synthetic_start_s"] - base, c["synthetic_end_s"] - base
+        a = max(c["synthetic_start_s"] - base, prev_end, t0)
+        b = min(c["synthetic_end_s"] - base, t1)
+        if b > a:
+            spans.append((a, b, c))
+            prev_end = b
+    out = 0.0
+    step = 60 if speed < 60 else 600
+    for a, b, c in spans:
         role = roles.get(c["slot_id"], "commute")
-        col = colour_of(role)
         label = ROLE_LABEL.get(role, role.upper())
-        add(a, b, "Role", f"{{\\pos(40,{int(height * 0.36)})\\c{col}}}{esc(label)}")
-        caption = "\\N".join(textwrap.wrap(esc(c["provenance"]["spec"]["activity"]), 62)[:4])
+        add(out, out + b - a, "Role", f"{{\\pos(40,{int(height * 0.36)})\\c{colour_of(role)}}}{esc(label)}")
+        caption = "\\N".join(textwrap.wrap(esc(c["provenance"]["spec"]["activity"].removeprefix("#Summary ")), 62)[:4])
         body = f"{{\\pos(40,{int(height * 0.46)})}}{esc(real_source(c))}\\N{{\\fs{height // 22}}}{caption}"
-        add(a, b, "Body", body)
-        covered.append((a, b))
-    for s in day.get("no_video_spans", []):
-        a, b = s["start"] - base, s["end"] - base
-        add(a, b, "Role", f"{{\\pos(40,{int(height * 0.36)})\\c&H00606060&}}NO VIDEO ({s['kind']})")
-    return head + "\n".join(ev) + "\n", (t1 - t0)
+        add(out, out + b - a, "Body", body)
+        for m in range(int(a - a % step), int(b), step):
+            s, e = max(m, a), min(m + step, b)
+            add(out + s - a, out + e - a, "Clock", clock(m))
+        out += b - a
+    title = f"D{day['day_index']}  {day['weekday']}  {day['day_type']}"
+    add(0, out, "Head", esc(title))
+    pace = "1 s = 1 s of footage" if speed == 1 else f"{speed:g}x speed: 1 s = {speed:g} s of footage"
+    add(0, out, "Foot", f"PROXY render - spans without footage cut ({pace}); source frames not rendered yet")
+    return head + "\n".join(ev) + "\n", out
 
 
 def render(day, slots, out_dir, width, height, fps, speed):
@@ -165,9 +169,10 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     with ThreadPoolExecutor(a.jobs) as ex:
         done = list(ex.map(lambda d: render(d, slots[d["day_index"]], a.out, width, height, a.fps, a.speed), days))
+    # The playlist lists every day rendered into the folder, so a --days rerun keeps the others.
     with open(os.path.join(a.out, "playlist.txt"), "w") as f:
-        for name, _ in sorted(done):
-            f.write(f"file '{name}.mp4'\n")
+        for name in sorted(p for p in os.listdir(a.out) if p.startswith("D") and p.endswith(".mp4")):
+            f.write(f"file '{name}'\n")
     total = sum(length for _, length in done)
     print(json.dumps({"days": len(done), "video_seconds": round(total), "video_hours": round(total / 3600, 2), "out": a.out}))
 

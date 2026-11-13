@@ -43,8 +43,20 @@ describe("loadCategories", () => {
   it("loads the shipped config with its labels", () => {
     const cats = categories().categories.filter((c) => c.dataset === "ego4d");
     // Most specific first: a summary goes to the first matching category in config order.
-    expect(cats.map((c) => c.id)).toEqual(["hobby_lego", "hobby_tent", "transit", "walking"]);
-    expect(cats.map((c) => c.label)).toEqual(["Hobby: Lego", "Hobby: Tent", "Driving and transit", "Walking"]);
+    expect(cats.map((c) => c.id)).toEqual(["meal_out", "hobby_guitar_e4d", "hobby_lego", "hobby_tent", "transit", "walking"]);
+    expect(cats.map((c) => c.label)).toEqual([
+      "Meal: eating out",
+      "Hobby: Guitar (Ego4D)",
+      "Hobby: Lego",
+      "Hobby: Tent",
+      "Driving and transit",
+      "Walking",
+    ]);
+    expect(cats.shift()?.clip).toEqual({ category: "meal", setting: "venue_indoor", node: "eat_out", tags: ["eat_out"] });
+    const guitar = cats.shift();
+    expect(guitar?.scenarios).toEqual(["Practicing a musical instrument"]);
+    expect(guitar?.merge_runs?.min_seconds).toBe(1620);
+    expect(guitar?.clip).toEqual({ category: "hobby", setting: "home_indoor", node: "hobby", tags: ["music_guitar"] });
     expect(cats[0]).toMatchObject({
       scenarios: ["building lego models / plastic models", "Playing board games", "DEPRECATED : Playing board games"],
       keywords: ["lego", "legos"],
@@ -131,10 +143,106 @@ describe("shipped ego4d categories", () => {
     ).toEqual(["transit"]);
   });
 
+  it("puts only eating-out summaries in meal_out", () => {
+    expect(
+      categoriesOf(
+        ["Eating at a restaurant", "Eating"],
+        [
+          "#Summary C was in a restaurant, he ate noodles with man X.",
+          "#Summary C had a picnic in the park and ate sandwiches.",
+          "#Summary C was in the kitchen of the restaurant and ate.",
+          "#Summary C walked outdoors with woman X.",
+          "#Summary C ate rice at home in the dining room.",
+        ],
+      ),
+    ).toEqual(["meal_out", "meal_out", null, null, null]);
+  });
+
   it("puts a tent summary of a video that is also a walking video in hobby_tent", () => {
     expect(
       categoriesOf(["Walking on street", "Camp setup/pack-up/chores"], ["#Summary C walked to the tent and folded the tents."]),
     ).toEqual(["hobby_tent"]);
+  });
+});
+
+describe("merge_runs", () => {
+  const meal: Category = {
+    id: "m",
+    label: "M",
+    dataset: "ego4d",
+    scenarios: ["Eating"],
+    keywords: ["restaurant"],
+    require_keywords: ["ate"],
+    exclude_keywords: ["home"],
+    merge_runs: { continue_keywords: ["ate", "restaurant"] },
+    clip: { category: "meal", setting: "venue_indoor", node: "eat_out", tags: [] },
+  };
+  const walk: Category = { id: "w", label: "W", dataset: "ego4d", scenarios: ["Eating"], keywords: ["walked"] };
+  function build(spans: Array<[number, number, string]>, redacted: Array<[number, number]> = []) {
+    const m = parseEgo4dMeta(
+      { videos: [{ video_uid: "v", scenarios: ["Eating"], redacted_intervals: redacted.map(([a, b]) => ({ start_sec: a, end_sec: b })) }] },
+      "m.json",
+    );
+    const n = parseEgo4dNarrations(
+      { v: { narration_pass_1: { narrations: [], summaries: spans.map(([start_sec, end_sec, summary_text]) => ({ start_sec, end_sec, summary_text })) } } },
+      "n.json",
+    );
+    return buildEgo4dCatalog(m, n, [meal, walk], newReport()).candidates.map((c) => [c.category, c.src_start, c.src_end, c.summary]);
+  }
+
+  it("joins overlapping summaries that continue the run into one candidate with the first text", () => {
+    expect(
+      build([
+        [0, 300, "C was in a restaurant and ate."],
+        [270, 570, "C was in a restaurant, talked with X."],
+        [540, 840, "C ate noodles."],
+        [810, 1110, "C walked on the road."],
+      ]),
+    ).toEqual([
+      ["m", 0, 840, "C was in a restaurant and ate."],
+      ["w", 810, 1110, "C walked on the road."],
+    ]);
+  });
+
+  it("drops runs shorter than min_seconds, counting short_run", () => {
+    const m = parseEgo4dMeta({ videos: [{ video_uid: "v", scenarios: ["Eating"] }] }, "m.json");
+    const n = parseEgo4dNarrations(
+      {
+        v: {
+          narration_pass_1: {
+            narrations: [],
+            summaries: [
+              [0, 300, "C was in a restaurant and ate."],
+              [270, 570, "C ate."],
+              [900, 1200, "C was in a restaurant and ate."],
+            ].map(([start_sec, end_sec, summary_text]) => ({ start_sec, end_sec, summary_text })),
+          },
+        },
+      },
+      "n.json",
+    );
+    const report = newReport();
+    const long = { ...meal, merge_runs: { continue_keywords: ["ate"], min_seconds: 500 } };
+    const got = buildEgo4dCatalog(m, n, [long], report).candidates.map((c) => [c.src_start, c.src_end]);
+    expect(got).toEqual([[0, 570]]);
+    expect(report.skipped["short_run"]).toBe(1);
+  });
+
+  it("ends a run at a gap, an excluded word or a redacted summary", () => {
+    expect(
+      build([
+        [0, 300, "C was in a restaurant and ate."],
+        [400, 700, "C ate cake."],
+        [400, 700, "C was in a restaurant and ate."],
+        [670, 970, "C ate at home."],
+        [1000, 1300, "C was in a restaurant and ate."],
+        [1270, 1570, "C ate."],
+      ], [[1400, 1450]]),
+    ).toEqual([
+      ["m", 0, 300, "C was in a restaurant and ate."],
+      ["m", 400, 700, "C was in a restaurant and ate."],
+      ["m", 1000, 1300, "C was in a restaurant and ate."],
+    ]);
   });
 });
 

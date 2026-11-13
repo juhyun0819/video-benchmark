@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "node:fs";
 import { z } from "zod";
 import { AnnotationSchema, type Annotation } from "@vb/core";
 import { BlockCandidateSchema, type BlockCandidate } from "../blocks.js";
-import { keywordMatches, type Categories, type Category } from "../categories.js";
+import { continuesRun, keywordMatches, type Categories, type Category } from "../categories.js";
 import { bump, type IngestReport } from "../jsonl.js";
 
 /** Files larger than this are refused before reading (exit 1, naming the file). */
@@ -104,12 +104,14 @@ export function listScenarios(meta: Ego4dMeta): Array<{ scenario: string; videos
  * Build Ego4D event candidates and per-video annotations.
  * - A video matches a category when its scenarios intersect the category's scenarios.
  * - Each narration_pass_1 summary of a matching video becomes one candidate in the FIRST category
- *   (config order) whose keywords are empty or appear in summary_text as whole words (case-insensitive).
+ *   (config order) that keywordMatches its summary_text (whole words, case-insensitive).
+ * - A category with merge_runs instead opens a run that the following summaries may continue; the run
+ *   becomes one candidate (see CategorySchema.merge_runs).
  * - Annotations (all pass-1 narrations as points, all valid summaries as intervals) are produced only
  *   for videos that yield at least one candidate; remap filters by span later.
  * - Candidate media fps is the video's video_metadata.fps (DEFAULT_FPS when absent). A candidate end past
  *   duration_sec is clipped to it; a candidate overlapping a redacted interval is dropped.
- * Skip reasons: no_narration (a category-matching video without narration_pass_1), end_before_start,
+ * Skip reasons: no_narration (a category-matching video without narration_pass_1), end_before_start, short_run,
  * beyond_duration (starts at or after duration_sec), redacted and duplicate_span (candidate summaries),
  * invalid_time (narrations of candidate videos).
  */
@@ -145,27 +147,29 @@ export function buildEgo4dCatalog(
 
     const seen = new Set<string>();
     let built = 0;
-    pass1.summaries.forEach((s) => {
-      const cat = matched.find((c) => keywordMatches(c, s.summary_text));
-      if (!cat) return;
+    // The usable span of a summary, or undefined after counting why it is skipped.
+    const spanOf = (s: Ego4dSummary): { start: number; end: number } | undefined => {
       if (!Number.isFinite(s.start_sec) || !Number.isFinite(s.end_sec)) {
         bump(report.skipped, "invalid_time");
-        return;
+        return undefined;
       }
       if (s.end_sec <= s.start_sec) {
         bump(report.skipped, "end_before_start");
-        return;
+        return undefined;
       }
       if (hasDuration && s.start_sec >= duration) {
         bump(report.skipped, "beyond_duration");
-        return;
+        return undefined;
       }
       const start = s.start_sec;
       const end = hasDuration ? Math.min(s.end_sec, duration) : s.end_sec;
       if (redacted.some((r) => start < r.end_sec && end > r.start_sec)) {
         bump(report.skipped, "redacted");
-        return;
+        return undefined;
       }
+      return { start, end };
+    };
+    const emit = (cat: Category, start: number, end: number, summary: string): void => {
       const id = `ego4d:${uid}:${start.toFixed(3)}-${end.toFixed(3)}`;
       if (seen.has(id)) {
         bump(report.skipped, "duplicate_span");
@@ -180,11 +184,37 @@ export function buildEgo4dCatalog(
           source: { dataset: "ego4d", video_id: uid, media: { kind: "video", fps } },
           src_start: start,
           src_end: end,
-          summary: s.summary_text,
+          summary,
         }),
       );
       built++;
+    };
+    // An open merge_runs run (see CategorySchema.merge_runs).
+    let run: { cat: Category; start: number; end: number; summary: string } | undefined;
+    const closeRun = (): void => {
+      if (run !== undefined) {
+        if (run.end - run.start >= (run.cat.merge_runs?.min_seconds ?? 0)) emit(run.cat, run.start, run.end, run.summary);
+        else bump(report.skipped, "short_run");
+      }
+      run = undefined;
+    };
+    pass1.summaries.forEach((s) => {
+      if (run !== undefined && s.start_sec <= run.end && continuesRun(run.cat, s.summary_text)) {
+        const span = spanOf(s);
+        if (span !== undefined) {
+          run.end = Math.max(run.end, span.end);
+          return;
+        }
+      }
+      closeRun();
+      const cat = matched.find((c) => keywordMatches(c, s.summary_text));
+      if (!cat) return;
+      const span = spanOf(s);
+      if (span === undefined) return;
+      if (cat.merge_runs !== undefined) run = { cat, start: span.start, end: span.end, summary: s.summary_text };
+      else emit(cat, span.start, span.end, s.summary_text);
     });
+    closeRun();
     if (built === 0) continue;
 
     const anns: Annotation[] = [];

@@ -444,3 +444,54 @@ Tests:
 - a trip lunch at 15:30 is found;
 - non-trip days are unchanged without the flag;
 - block verify passes.
+
+## Addendum 10 (2026-11-13): Ego4D eat-out runs
+
+Ego4D narration summaries are 5-minute windows that overlap by 30 s, so no single summary reaches B24's 20-minute floor. B23 is refined:
+- `CategorySchema` gains three optional fields. Categories without them behave as before.
+  - `require_keywords`: the text must also contain one of these.
+  - `exclude_keywords`: the text never matches and never continues a run.
+  - `merge_runs: { continue_keywords }` (ego4d): a matching summary opens a run. The next summaries of the video that start at or before the run end and contain a continue word (and no exclude word) extend it. The run is one candidate spanning them, with the first summary's text. A gap, an invalid or redacted summary, or a non-continuing summary closes the run.
+- `meal_out`:
+  - **Scenarios:**
+    - Eating at a restaurant
+    - Eating in hawker center
+    - BBQ'ing/picnics
+    - Eating
+    - Eating at the cafeteria
+    - Eating in a canteen
+  - **Keywords:** eating-out places (the B23 list, plus hawker, garden and beach).
+  - **require_keywords:** eating words (eat/ate/meal/food/dine/lunch/dinner/snack…).
+  - **exclude_keywords:**
+    - home
+    - house
+    - kitchen
+    - apartment
+    - bedroom
+    - "dining room"
+    - "living room"
+  - **continue_keywords:** eating words plus restaurant-type venues. Generic outdoor/street words are not included, so walking out ends the run.
+- **Result:**
+  - 75 eat_out clips, 27 of them at least 20 min, from 23 videos.
+  - All 14 non-trip empty meals are filled with 37–60 min restaurant meals, and verify passes.
+  - Total footage is 183.0 h.
+
+## Addendum 11 (2026-11-13): guitar from Ego4D, one video per day (user decision)
+
+Each Ego-Exo4D guitar take is a short recording: 74 takes from 18 players. Under B14, every 45-min block was 4–5 takes, so the player changed within a block. Ego4D has 97 videos of practicing guitar at home, some with half an hour of unbroken playing.
+- `merge_runs` gains an optional `min_seconds`: shorter runs are dropped and counted as `short_run`.
+- New ego4d category `hobby_guitar_e4d`, second after `meal_out`:
+  - **Scenario:** Practicing a musical instrument.
+  - **Keywords:** guitar, guitars.
+  - **Excludes:** other instruments.
+  - **Continue words:** guitar and playing words.
+  - **Run filter:** `min_seconds` 1620. This keeps the 6 runs of 27.5–38.6 min.
+  - **Clip fields:** clip hobby/home_indoor/node hobby, tags ["music_guitar"].
+- World `nextme-p00`:
+  - `node_binding.hobby_2.dataset` becomes ["ego4d"].
+  - The hobby_2 `duration_min` goes from 45 to 27, so one run fills a block in the first B14 round and no second video is added. B14 itself is unchanged.
+- **Result:**
+  - D4, D5, D9, D15, D23 and D25 each take one Ego4D video. D4's block is 20 min, limited by bedtime.
+  - All placed summaries are continuous guitar playing in a room.
+  - No Ego-Exo4D clip is used.
+  - Verify passes. Total footage is 184.6 h.

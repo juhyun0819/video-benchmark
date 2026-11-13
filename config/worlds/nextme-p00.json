@@ -109,7 +109,7 @@
     },
     "hobby_2": {
       "dataset": [
-        "egoexo4d"
+        "ego4d"
       ],
       "tags_any": [
         "music_guitar"
@@ -188,7 +188,7 @@
         "node": "hobby_2",
         "role": "hobby_2",
         "position": "after_dinner",
-        "duration_min": 45,
+        "duration_min": 27,
         "count": 6,
         "max_per_week": 2
       }
