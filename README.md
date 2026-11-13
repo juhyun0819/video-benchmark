@@ -1,6 +1,6 @@
 # video-benchmark
 
-NextMe-800, Ego4D, Ego-Exo4D 같은 데이터셋과 직접 모은 YouTube 영상의 주석(caption)을 클립 bank로 정규화하고, "합성 사람 × N일" 타임라인(고정 루틴 + 변동 + 예외)을 만들어 manifest(JSON)로 내보내는 도구다. 영상 자체는 다루지 않고, 합성된 구간 구조와 시간 재매핑된 caption만 만든다. 영상 렌더링은 다음 계획(Plan 2)이다.
+NextMe-800, Ego4D, Ego-Exo4D 같은 데이터셋과 직접 모은 YouTube 영상의 주석(caption)을 클립 bank로 정규화하고, "합성 사람 × N일" 타임라인(고정 루틴 + 변동 + 예외)을 만들어 manifest(JSON)로 내보내는 도구다. 주 파이프라인은 합성된 구간 구조와 시간 재매핑된 caption을 만든다. 확보한 1fps 영상에 시간표의 날짜·시각을 표시하는 [타임스탬프 CLI](docs/timestamp-overlay.md), carpenter caption-pipeline manifest를 받아 실제 일별 영상과 캡션 대응표를 만드는 [일별 영상 합성 CLI](docs/daily-video-render.md)도 제공한다.
 
 구성은 npm workspaces 세 패키지다.
 

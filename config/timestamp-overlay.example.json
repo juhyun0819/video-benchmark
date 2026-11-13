@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "base_date": "2025-07-07",
+  "timezone": "Asia/Seoul",
+  "style": {
+    "reference_height_px": 1024,
+    "original_mask_xyxy": [0, 995, 200, 1024],
+    "text_height_px": 20,
+    "text_x_px": 10,
+    "bottom_margin_px": 10,
+    "box_padding_px": 7
+  },
+  "clips": [
+    {
+      "id": "day01-work",
+      "day": 1,
+      "start_seconds": 28980,
+      "input": "../data/media/work-1fps.mp4",
+      "expected_duration_s": 765
+    },
+    {
+      "id": "day01-lunch",
+      "day": 1,
+      "start_seconds": 46200,
+      "input": "../data/media/lunch-1fps.mp4",
+      "expected_duration_s": 300
+    }
+  ]
+}
