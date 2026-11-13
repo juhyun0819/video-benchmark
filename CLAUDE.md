@@ -27,7 +27,7 @@
 5. 샘플 QA를 생성하고 사용자가 직접 검증한다
 6. 시나리오를 짜고 대량 생성한다
 
-벤치마크 영상은 전 구간 1 fps이고 오디오와 화면 글자가 없다. 영상에 오디오가 없으므로, QA에서는 음성에만 근거한 caption을 걸러야 한다.
+벤치마크 영상은 전 구간 1 fps이고 오디오가 없다. 화면 글자는 우리 타임스탬프 한 줄(왼쪽 아래, `2025-04-07 07:48:12` 형식)만 넣는다(2026-11-13 렌더러 설계). 영상에 오디오가 없으므로, QA에서는 음성에만 근거한 caption을 걸러야 한다.
 
 ## 샘플
 
@@ -47,7 +47,7 @@
 
 | 데이터셋 | 받는 방법 |
 |---|---|
-| NextMe-800 | `hf download mmm8383/NextMe-800 raw/2026-04-15/2026-04-15_1323-1709.tar --repo-type dataset --local-dir data/media/nextme` (`huggingface_hub` 1.x부터 CLI 이름이 `hf`다) |
+| NextMe-800 | 28일 manifest는 tar 전체(4.5TB)를 받지 않는다. `python3 scripts/fetch_nextme_frames.py <manifest> [--days 1]`로 필요한 프레임만 Range로 받아 `data/media/nextme/frames/<video_id>/`에 1024×1024로 둔다(`HF_TOKEN`이 있는 사용자 셸에서 실행, 다시 실행하면 이어 받음). 설계: `2026-11-13-nextme-frame-fetch-design.md` |
 | Ego-Exo4D | `lab22 egoexo -o data/media/egoexo --parts takes --views ego --uids <16개 take uid>` |
 
 Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 블록의 `video_id`다.
@@ -57,7 +57,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 목표는 NextMe 착용자 한 사람의 28일 manifest 하나를 완성하는 것이다. 슬롯마다 실제 어느 영상이 들어가는지 확정한다. 로직은 따르고, 이 영상을 위한 결정은 world와 입력으로 한다.
 
 - 브랜치: `feat/nextme-28day`
-- 설계: `docs/superpowers/specs/2026-11-12-nextme-28day-design.md`(늦은 출근, 여행, 라벨)와 `2026-11-13-nextme-28day-blocks-design.md`(블록 방식, B1~B17)
+- 설계: `docs/superpowers/specs/2026-11-12-nextme-28day-design.md`(늦은 출근, 여행, 라벨)와 `2026-11-13-nextme-28day-blocks-design.md`(블록 방식, B1~B25, 계획 Addendum 1~10)
 - 계획: 같은 이름의 `docs/superpowers/plans/`
 - 결과와 재현 명령: `docs/superpowers/reports/2026-11-13-nextme-28day.md`
 - 블록 방식:
@@ -68,14 +68,15 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 - 데이터(커밋하지 않음):
   - `data/raw/nextme-hf`(caption)
   - `data/raw/egoexo`(메타데이터)
+  - `data/raw/ego4d`(메타데이터, 주석, `narration_selected.json`)
   - `data/raw/bank/{nextme800.overrides.json, nextme800.l3.draft.jsonl, youtube.lego.jsonl}`
   - `data/catalog`
   - `data/exports`
 - 남은 일:
-  - Ego4D 메타데이터를 받아 외식 카테고리(B23)를 정하고 ingest한 뒤 다시 실행한다. 빈 식사 14개를 채운다.
-  - 원본 미디어를 받고 실제 프레임으로 렌더링한다(Plan 2).
+  - **B200 서버로 옮겨 다운로드와 렌더링을 한다.** 순서와 명령은 `docs/superpowers/reports/2026-11-13-b200-handoff.md`를 먼저 읽는다.
+  - 원본 미디어를 받고 실제 프레임으로 렌더링한다(Plan 2). NextMe 프레임은 `scripts/fetch_nextme_frames.py`로 받는다(하루치 시험 후 전체).
+  - 렌더러 스펙 초안 `2026-11-13-nextme-frame-render-design.md`은 사용자 검토 전이다. 승인 뒤 writing-plans로 계획을 쓴다.
   - 라벨 검수(D9)
-  - 렌더링(Plan 2)
   - 최종 리뷰에서 나온 정리 항목
 
 ## 대기 중인 일
@@ -95,5 +96,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 서버 환경
 
+- 2026-11-13부터 다운로드와 렌더링은 B200 서버에서 한다(convei-rack3는 인터넷 대역폭이 약 12MB/s라 병목). B200의 경로를 정하면 이 절에 적는다. 아래는 convei-rack3 기준이다.
 - 지금 서버(convei-rack3)의 Node 24는 `/convei_nas2/zzuhyun/.node/current/bin`에 있다(NAS라 서버를 옮겨도 남는다). 시스템 node는 18이라 쓸 수 없다. 쓰기 전에 `export PATH="/convei_nas2/zzuhyun/.node/current/bin:$PATH"`를 실행한다. 이전 서버는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`이었다.
+- 원본 미디어와 렌더 영상은 이 서버의 로컬 디스크 `/data/zzuhyun/video-benchmark/{media,renders}`(권한 700)에 두고, `data/media`와 `data/renders`는 그쪽을 가리키는 심볼릭 링크다. NAS 용량을 아끼기 위해서다. 로컬 디스크라 서버를 옮기면 따라오지 않는다.
 - Lab22 다운로드 스크립트는 `uvx`가 필요하다. `pip install --user uv`로 `~/.local/bin`에 설치하고 PATH에 넣는다.
