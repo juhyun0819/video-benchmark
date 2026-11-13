@@ -75,7 +75,7 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 - 남은 일:
   - **B200 서버로 옮겨 다운로드와 렌더링을 한다.** 순서와 명령은 `docs/superpowers/reports/2026-11-13-b200-handoff.md`를 먼저 읽는다.
   - 원본 미디어를 받고 실제 프레임으로 렌더링한다(Plan 2). NextMe 프레임은 `scripts/fetch_nextme_frames.py`로 받는다(하루치 시험 후 전체).
-  - 렌더러 스펙 초안 `2026-11-13-nextme-frame-render-design.md`은 사용자 검토 전이다. 승인 뒤 writing-plans로 계획을 쓴다.
+  - 렌더러: 스펙 `2026-11-13-nextme-frame-render-design.md`(2026-11-14 승인), 계획 `docs/superpowers/plans/2026-11-13-nextme-frame-render.md`. 실행은 `python3 scripts/render_frames.py data/exports/nextme-p00-e274ee8b-r0.manifest.json --days 1`이고, 결과는 `data/renders/nextme-p00/benchmark/D01.{mp4,frames.jsonl,render.json}`다. warp 비교 이미지는 `--warp-preview 0,0.1,0.2,0.3`로 만든다.
   - 라벨 검수(D9)
   - 최종 리뷰에서 나온 정리 항목
 
@@ -96,7 +96,10 @@ Ego-Exo4D take uid는 샘플 manifest에서 `source.dataset`이 `egoexo4d`인 �
 
 ## 서버 환경
 
-- 2026-11-13부터 다운로드와 렌더링은 B200 서버에서 한다(convei-rack3는 인터넷 대역폭이 약 12MB/s라 병목). B200의 경로를 정하면 이 절에 적는다. 아래는 convei-rack3 기준이다.
+- 2026-11-13부터 다운로드와 렌더링은 B200 서버에서 한다(convei-rack3는 인터넷 대역폭이 약 12MB/s라 병목).
+- B200: 저장소는 `/NHNHOME/langlab/zzuhyun/video-benchmark/video-benchmark`다(바깥 `video-benchmark`는 예전 checkout). 원본 미디어와 렌더 영상은 `/NHNHOME/langlab/zzuhyun/data/video-benchmark/{media,renders}`(Lustre, 권한 700)에 두고, `data/media`와 `data/renders`는 그쪽을 가리키는 심볼릭 링크다. 로컬 NVMe(`/NHNHOME` 바로 아래)는 컨테이너가 끝나면 지워질 수 있어서 쓰지 않는다. Lustre는 공용이고 거의 차 있으니(2026-11-13 99%, 3.6TB 남음) 필요 없는 원본은 렌더 뒤 지운다.
+- B200에는 Python 3.12, ffmpeg(libx264), DejaVu Sans Mono Bold, `hf`, `uvx`가 있다. 시스템 `yt-dlp`는 2024.04.09로 오래돼 `uvx yt-dlp`를 쓴다.
+- 아래는 convei-rack3 기준이다.
 - 지금 서버(convei-rack3)의 Node 24는 `/convei_nas2/zzuhyun/.node/current/bin`에 있다(NAS라 서버를 옮겨도 남는다). 시스템 node는 18이라 쓸 수 없다. 쓰기 전에 `export PATH="/convei_nas2/zzuhyun/.node/current/bin:$PATH"`를 실행한다. 이전 서버는 `/NHNHOME/langlab/zzuhyun/.node/current/bin`이었다.
 - 원본 미디어와 렌더 영상은 이 서버의 로컬 디스크 `/data/zzuhyun/video-benchmark/{media,renders}`(권한 700)에 두고, `data/media`와 `data/renders`는 그쪽을 가리키는 심볼릭 링크다. NAS 용량을 아끼기 위해서다. 로컬 디스크라 서버를 옮기면 따라오지 않는다.
 - Lab22 다운로드 스크립트는 `uvx`가 필요하다. `pip install --user uv`로 `~/.local/bin`에 설치하고 PATH에 넣는다.
