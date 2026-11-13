@@ -1,0 +1,17 @@
+{
+  "manifest": "inputs/manifest.json",
+  "questions": "inputs/questions.json",
+  "model": "/path/to/Qwen3-VL-8B-Instruct",
+  "verification": "/path/to/verification.json",
+  "gpu": 4,
+  "fps": 1,
+  "max_side": 512,
+  "max_pixels": 262144,
+  "short_frames": 8,
+  "medium_frames": 64,
+  "long_frames": 8,
+  "trigger_threshold": 0.5,
+  "tas_policy": "upstream",
+  "max_new_tokens": 192,
+  "proactive": "on"
+}

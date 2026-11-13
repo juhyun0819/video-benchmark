@@ -1,0 +1,12 @@
+{
+  "manifest": "/absolute/path/manifest.json",
+  "questions": "/absolute/path/questions.json",
+  "output_dir": "/absolute/path/new_streamforest_run",
+  "model_path": "/absolute/path/StreamForest-Qwen2-7B",
+  "verification_file": "/absolute/path/verification.json",
+  "memory_config": null,
+  "gpu": null,
+  "fps": 1.0,
+  "max_new_tokens": 192,
+  "max_side": null
+}

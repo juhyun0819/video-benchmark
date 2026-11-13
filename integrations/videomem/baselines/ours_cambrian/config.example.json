@@ -1,0 +1,15 @@
+{
+  "method": "cambrian_s",
+  "model_path": "/absolute/local/Cambrian-S-7B-LFP",
+  "model_revision": "d04f69849c1ddbf7e62a7790f2461ef549d4df8e",
+  "upstream_source": "/absolute/local/cambrian-s",
+  "memory_budget_bytes": 17179869184,
+  "sensory_window_size": 32,
+  "surprise_threshold": 0.35,
+  "compression_downsample_ratio": 2,
+  "consolidation_method": "drop",
+  "consolidation_mem_budget": 16384,
+  "retrieval_topk": 32,
+  "max_new_tokens": 16,
+  "local_files_only": true
+}

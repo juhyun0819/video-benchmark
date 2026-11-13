@@ -1,0 +1,9 @@
+{
+  "method": "streamforest",
+  "memory_budget_bytes": 268435456,
+  "model_path": "/absolute/path/StreamForest-Qwen2-7B",
+  "verification_file": "/absolute/path/streamforest-verification.json",
+  "device": "cuda:0",
+  "dtype": "bfloat16",
+  "max_new_tokens": 192
+}

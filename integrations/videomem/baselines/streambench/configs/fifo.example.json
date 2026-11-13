@@ -1,0 +1,9 @@
+{
+  "method": "fifo",
+  "memory_budget_bytes": 268435456,
+  "model_path": "/absolute/path/Qwen3-VL-8B-Instruct",
+  "device": "cuda:0",
+  "dtype": "bfloat16",
+  "max_pixels": 262144,
+  "max_new_tokens": 192
+}

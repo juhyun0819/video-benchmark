@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-11",
+  "tests": {
+    "passed": 40,
+    "command": "USE_TF=0 QWEN3_MODEL=<local checkpoint> python -m pytest baselines/qwen3_offline/tests -q",
+    "native_comparison": [
+      "single source raw prefix",
+      "two source virtual prefix vs same raw prefix"
+    ],
+    "equality": "torch.equal for all processor tensors; numpy.array_equal for RGB samples"
+  },
+  "gpu_smoke": {
+    "fixture": "synthetic testsrc2 96x64 25fps, inclusive cutoff 1.2s",
+    "prefix_raw_frames": 31,
+    "sampled_indices": [
+      0,
+      10,
+      20,
+      30
+    ],
+    "answer": "Red",
+    "generated_token_ids": [
+      6033,
+      151645
+    ],
+    "status": "complete",
+    "gpu": "NVIDIA RTX A5000",
+    "torch": "2.8.0+cu128",
+    "transformers": "4.57.3",
+    "dtype": "bfloat16",
+    "attention": "sdpa"
+  },
+  "dataset_inventory": {
+    "raw_frames": 5543123,
+    "fps": 25,
+    "duration_fraction": "5543123/25",
+    "existing_archive_timeline_match": "7/7 paths, exact video durations and global start offsets"
+  },
+  "model": {
+    "id": "Qwen/Qwen3-VL-8B-Instruct",
+    "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+    "files_verified": 16,
+    "bytes_verified": 17545915883
+  },
+  "benchmark_qa_run": false,
+  "archive_extraction": false,
+  "review": "Independent review: no blocking findings",
+  "limitations": [
+    "CFR metadata and accessed PTS checked, not all corpus frames",
+    "Synthetic GPU smoke is not benchmark QA",
+    "Current QA lacks reviewed query_time"
+  ]
+}

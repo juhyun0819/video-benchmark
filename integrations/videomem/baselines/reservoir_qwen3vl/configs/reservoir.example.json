@@ -1,0 +1,15 @@
+{
+  "manifest": "/absolute/path/manifest.json",
+  "questions": "/absolute/path/questions.json",
+  "output": "/absolute/path/new_reservoir_run",
+  "model": "/absolute/path/Qwen3-VL-8B-Instruct",
+  "verification": "/absolute/path/verification.json",
+  "gpu": null,
+  "memory_frames": null,
+  "memory_tokens": null,
+  "fps": 1.0,
+  "max_side": 512,
+  "max_pixels": 262144,
+  "max_new_tokens": 192,
+  "seed": null
+}

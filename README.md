@@ -4,6 +4,11 @@ NextMe-800, Ego4D, Ego-Exo4D 같은 데이터셋과 직접 모은 YouTube 영상
 
 구성은 npm workspaces 세 패키지다.
 
+영상 특징 추출과 메모리 베이스라인은 별도 Python 패키지인
+[integrations/videomem](integrations/videomem/README.md)에 있다.
+Qwen2.5-VL 1fps visual token 추출, 여러 GPU 병렬 실행과 각 베이스라인의
+입력·설치 방법은 해당 문서를 따른다.
+
 | 패키지 | 역할 |
 |---|---|
 | `@vb/core` | 스키마, world/schedule 생성, 클립 매칭, 규칙 검사, manifest 생성 |

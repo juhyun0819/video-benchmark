@@ -1,0 +1,16 @@
+# Minimal native inference environment; Python 3.10/3.11 recommended.
+# Keep this separate from the Qwen3-based FIFO/Reservoir/FluxMem environments.
+torch==2.1.2
+torchvision==0.16.2
+transformers==4.46.0
+av==14.2.0
+numpy==1.26.4
+psutil==6.1.1
+pillow==11.1.0
+einops==0.8.1
+sentencepiece==0.2.0
+accelerate==1.4.0
+safetensors==0.5.3
+huggingface-hub==0.36.2
+# CPU validation only; no training, FlashAttention, or TensorFlow dependency.
+pytest>=8,<9

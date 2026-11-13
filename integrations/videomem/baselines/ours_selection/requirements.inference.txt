@@ -1,0 +1,9 @@
+# Shared target-backbone implementation explicitly checks this Transformers version.
+transformers==4.57.6
+accelerate>=1.10,<2
+numpy>=1.26,<3
+scipy>=1.11,<2
+Pillow>=10
+av>=14
+# torch/torchvision must be installed as a matching CUDA pair for the target host.
+# EVA-CLIP's verified local implementation may require additional upstream dependencies.

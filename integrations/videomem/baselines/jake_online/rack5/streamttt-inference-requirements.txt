@@ -1,0 +1,15 @@
+# Official pinned inference dependencies. Torch/torchvision installed separately from cu126.
+# DeepSpeed/PEFT training dependencies excluded: no training or Trainer launch.
+transformers==4.57.1
+accelerate==1.10.1
+huggingface-hub==0.35.3
+safetensors==0.6.2
+liger-kernel==0.6.4
+torchcodec==0.7.0
+qwen-vl-utils==0.0.14
+pillow==11.3.0
+einops==0.8.1
+numpy==2.3.3
+pandas==2.3.3
+tqdm==4.67.1
+av==16.1.0

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ours canonical QA (populate only when reviewed QA is available)",
+  "type": "object",
+  "required": ["scorer_sha256", "questions"],
+  "properties": {
+    "status": {"enum": ["awaiting_QA", "ready"]},
+    "scorer_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "sources_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["qa_id", "query_time", "question", "choices"],
+        "anyOf": [{"required": ["answer"]}, {"required": ["correct_idx"]}],
+        "properties": {
+          "qa_id": {"type": "string", "minLength": 1},
+          "query_time": {"type": "number", "minimum": 0, "description": "Global seconds on the prepared source timeline; never inferred from GT evidence"},
+          "day": {"type": "integer", "minimum": 1, "description": "Optional grouping label, not an absolute-clock formula"},
+          "question": {"type": "string", "minLength": 1},
+          "choices": {"type": "array", "minItems": 2, "maxItems": 26, "items": {"type": "string", "minLength": 1}},
+          "answer": {"type": "string", "description": "Uppercase choice letter or exact unique choice text"},
+          "correct_idx": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Tested versions. Install the torch/torchvision CUDA builds appropriate for
+# the host separately; the verified server used 2.5.1+cu121 / 0.20.1+cu121.
+# Do not modify an environment that is being used by another running baseline.
+torch==2.5.1
+torchvision==0.20.1
+transformers==4.57.3
+accelerate==1.4.0
+numpy==1.26.4
+Pillow==11.1.0
+safetensors==0.5.3
+av==14.2.0
+psutil==6.1.1

@@ -1,0 +1,67 @@
+{
+  "repository": "https://github.com/Becomebright/ReKV",
+  "revision": "5a17285d5e1a7488228eb0098b5e586d72a73e3a",
+  "license_note": "Upstream pyproject.toml declares Apache Software License; upstream has no standalone LICENSE file.",
+  "files": [
+    {
+      "path": "model/abstract_rekv.py",
+      "git_blob": "f23daf5b875ad5598a6c929470b1ff0c77fff4da",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/llava_onevision_rekv.py",
+      "git_blob": "691b24e24441d532dd37a52bb102047b33a52223",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/patch.py",
+      "git_blob": "9131d44dd67f22bfdacf776108629bec7d478531",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/kv_cache_manager.py",
+      "git_blob": "f98912b64d412b432302f6c5169838ea48b8381a",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/rope.py",
+      "git_blob": "34e013c3da8e91de86bce24257d490f6933ffe0d",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/rekv_attention.py",
+      "git_blob": "6d38855aa937cb7f2800f3c5b8d6c9d5999318de",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/__init__.py",
+      "git_blob": "006c3d06b257735cd9f4dc981ba003a488395296",
+      "trailing_newline_added": true
+    },
+    {
+      "path": "model/attention/dot_production_attention/__init__.py",
+      "git_blob": "1b170a627aac8c7593768f56accc1c57e2867c1f",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/dot_production_attention/base.py",
+      "git_blob": "dcd9c60697ddb40b95622db108d6a68629a54fc6",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/dot_production_attention/torch_impl.py",
+      "git_blob": "ef2e41bcc345493fa2f0180e3fe61ca69d765dea",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "model/attention/dot_production_attention/triton_impl.py",
+      "git_blob": "27d29a3fed76704b1d3cbd35cb27a815adc9db2c",
+      "trailing_newline_added": false
+    },
+    {
+      "path": "pyproject.toml",
+      "git_blob": "ba532f9966690b838fb49690652bccfca3bddd11",
+      "trailing_newline_added": false
+    }
+  ]
+}

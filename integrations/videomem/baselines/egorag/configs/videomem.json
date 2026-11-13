@@ -1,0 +1,20 @@
+{
+  "protocol": "videomem-egorag-v1",
+  "test_only": false,
+  "index_engine": "chroma",
+  "clip_seconds": 30,
+  "frames": {"fps": 1, "max_frames": 30, "max_side": 512},
+  "top_k": 3,
+  "embedding": {"backend": "openclip", "model_name": "ViT-B-32", "checkpoint": "laion2b_s34b_b79k", "device": "cpu"},
+  "models": {
+    "captioner": {"backend": "openai_compatible", "model": null, "revision": null, "api_key_env": "EGORAG_VISION_API_KEY", "base_url_env": "EGORAG_VISION_BASE_URL", "temperature": 0, "max_tokens": 2048},
+    "summary_10min": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0.7, "max_tokens": 2048},
+    "summary_hour": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0, "max_tokens": 2048},
+    "summary_day": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0, "max_tokens": 4096},
+    "range_selector": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0.8, "max_tokens": 512},
+    "query_rewriter": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0.1, "max_tokens": 512},
+    "recency_selector": {"backend": "openai_compatible", "model": null, "revision": null, "temperature": 0.1, "max_tokens": 512},
+    "evidence": {"backend": "openai_compatible", "model": null, "revision": null, "api_key_env": "EGORAG_VISION_API_KEY", "base_url_env": "EGORAG_VISION_BASE_URL", "temperature": 0, "max_tokens": 1024},
+    "answerer": {"backend": "openai_compatible", "model": null, "revision": null, "api_key_env": "EGORAG_VISION_API_KEY", "base_url_env": "EGORAG_VISION_BASE_URL", "temperature": 0.1, "max_tokens": 512}
+  }
+}

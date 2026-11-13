@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "purpose": "Source-only export of historical daywise annotation and QA preparation tools",
+  "data_included": false,
+  "original_sources_modified": false,
+  "original_scripts_executed": false,
+  "validation": "Exported Python source parsed with ast.parse; original bytes rechecked unchanged. No input data processed.",
+  "files": [
+    {
+      "source": "video_timetable/videomem_20261107/daywise_annotations_qa_v2_20261108/scripts/build_annotations.py",
+      "source_sha256": "f778d242102abfbce088f89d97ec909d9d4c8fcd55c608b85528f3c71632ecc7",
+      "exported": "data_tools/daywise/scripts/build_annotations.py",
+      "exported_sha256": "4095a6f95ea3a529cdc338983f5195c8d93453388b8ba310c04545db9c14f6e0",
+      "changes": [
+        {
+          "old": "import json\n",
+          "new": "import json\nimport os\n"
+        },
+        {
+          "old": "OUT = Path(__file__).resolve().parents[1]\nROOT = OUT.parent",
+          "new": "OUT = Path(os.environ.get('VIDEOMEM_PACKAGE_OUTPUT', 'work/daywise_package')).resolve()\nROOT = Path(os.environ.get('VIDEOMEM_WORK_ROOT', 'work/daywise_inputs')).resolve()"
+        },
+        {
+          "old": "MEDIA = Path('<local-root>/lifelong_mem/routine_7days')",
+          "new": "MEDIA = Path(os.environ.get('VIDEOMEM_MEDIA_ROOT', 'work/media')).resolve()\nCONVERSION = Path(os.environ.get('HD_EPIC_CONVERSION_ROOT', 'work/hd_epic/conversion')).resolve()"
+        },
+        {
+          "old": "Path('<local-root>/HD_EPIC/P08/one_frame_per_second_v1/conversion_manifest.json')",
+          "new": "CONVERSION / 'conversion_manifest.json'"
+        },
+        {
+          "old": "Path('<local-root>/HD_EPIC/P08/one_frame_per_second_v1/summary.json')",
+          "new": "CONVERSION / 'summary.json'"
+        }
+      ]
+    },
+    {
+      "source": "video_timetable/videomem_20261107/daywise_annotations_qa_v2_20261108/scripts/build_qa.py",
+      "source_sha256": "36dfb6fe912b75f93eba0eb5e693663c14b87dc32e35cfce014c4eac24797c8b",
+      "exported": "data_tools/daywise/scripts/build_qa.py",
+      "exported_sha256": "2a3292e25f830658e788ec2a808f702da9c1262a06515a6004c370fb3d909638",
+      "changes": [
+        {
+          "old": "import json\n",
+          "new": "import json\nimport os\n"
+        },
+        {
+          "old": "OUT = Path(__file__).resolve().parents[1]\nROOT = OUT.parent",
+          "new": "OUT = Path(os.environ.get('VIDEOMEM_PACKAGE_OUTPUT', 'work/daywise_package')).resolve()\nROOT = Path(os.environ.get('VIDEOMEM_WORK_ROOT', 'work/daywise_inputs')).resolve()"
+        },
+        {
+          "old": "SOURCE_ROOT = Path('<local-root>/HD_EPIC/P08/original_mp4')",
+          "new": "SOURCE_ROOT = Path(os.environ.get('HD_EPIC_ORIGINAL_ROOT', 'work/hd_epic/original_mp4')).resolve()"
+        }
+      ]
+    },
+    {
+      "source": "video_timetable/videomem_20261107/daywise_annotations_qa_v2_20261108/scripts/package_bundle.py",
+      "source_sha256": "c3a815b1ea5e0ebb39db840309c29a4f16d481b6b1bb19bf67b499d674dd772b",
+      "exported": "data_tools/daywise/scripts/package_bundle.py",
+      "exported_sha256": "5319059922b612cc3d81422d95345ff908540cf7423fc6e1eecf00e71e1590c1",
+      "changes": [
+        {
+          "old": "import json\n",
+          "new": "import json\nimport os\n"
+        },
+        {
+          "old": "ROOT = Path(__file__).resolve().parents[1]",
+          "new": "ROOT = Path(os.environ.get('VIDEOMEM_PACKAGE_OUTPUT', 'work/daywise_package')).resolve()"
+        }
+      ]
+    }
+  ],
+  "excluded_sources": [
+    {
+      "source": "lifelong_mem/_management/download_Day2_verified.sh",
+      "reason": "One-off media transfer with private host, media filename and expected media hash"
+    },
+    {
+      "source": "lifelong_mem/_management/download_Day2_verified_v2.sh",
+      "reason": "Duplicate one-off media transfer with private host and media metadata"
+    }
+  ],
+  "excluded_data": "Actual QA, annotations, timeline and media manifests, clip inventories, logs, archives, videos, images, models and credentials were not exported."
+}

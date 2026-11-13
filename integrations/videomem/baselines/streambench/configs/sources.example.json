@@ -1,0 +1,12 @@
+{
+  "stream_id": "subject_01",
+  "days": [
+    {"day": 1, "path": "/absolute/path/videomem/day1.mp4"},
+    {"day": 2, "path": "/absolute/path/videomem/day2.mp4"},
+    {"day": 3, "path": "/absolute/path/videomem/day3.mp4"},
+    {"day": 4, "path": "/absolute/path/videomem/day4.mp4"},
+    {"day": 5, "path": "/absolute/path/videomem/day5.mp4"},
+    {"day": 6, "path": "/absolute/path/videomem/day6.mp4"},
+    {"day": 7, "path": "/absolute/path/videomem/day7.mp4"}
+  ]
+}

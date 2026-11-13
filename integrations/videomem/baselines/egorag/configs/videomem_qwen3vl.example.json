@@ -1,0 +1,140 @@
+{
+  "protocol": "videomem-egorag-qwen3vl-local-v1",
+  "test_only": false,
+  "index_engine": "chroma",
+  "clip_seconds": 30,
+  "frames": {
+    "fps": 1,
+    "max_frames": 30,
+    "max_side": 512
+  },
+  "top_k": 3,
+  "embedding": {
+    "backend": "openclip",
+    "model_name": "ViT-B-32",
+    "checkpoint": "/absolute/path/to/models/CLIP-ViT-B-32-laion2B-s34B-b79K/open_clip_model.safetensors",
+    "device": "cpu",
+    "source_model_id": "laion/CLIP-ViT-B-32-laion2B-s34B-b79K",
+    "revision": "1a25a446712ba5ee05982a381eed697ef9b435cf",
+    "sha256": "ac4f8c4b88af6d963118cbf40ad93176d092abbedfcb752601ae1866352656e6"
+  },
+  "models": {
+    "captioner": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:0",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0,
+      "max_tokens": 2048,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "summary_10min": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0.7,
+      "max_tokens": 2048,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "summary_hour": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0,
+      "max_tokens": 2048,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "summary_day": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0,
+      "max_tokens": 4096,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "range_selector": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0.8,
+      "max_tokens": 512,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "query_rewriter": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0.1,
+      "max_tokens": 512,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "recency_selector": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0.1,
+      "max_tokens": 512,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "evidence": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:0",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0,
+      "max_tokens": 1024,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    },
+    "answerer": {
+      "backend": "hf_local",
+      "model": "/absolute/path/to/models/Qwen3-VL-8B-Instruct",
+      "revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+      "device": "cuda:1",
+      "dtype": "bfloat16",
+      "attn_implementation": "sdpa",
+      "min_pixels": 65536,
+      "max_pixels": 262144,
+      "temperature": 0.1,
+      "max_tokens": 512,
+      "verified_manifest": "/absolute/path/to/models/.downloads/qwen3_vl_8b_instruct/verification.json"
+    }
+  }
+}

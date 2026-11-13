@@ -1,0 +1,9 @@
+[
+  {
+    "question_id": "schema_example_only",
+    "source_day": 1,
+    "question": "Replace this with a reviewed Day1 question, with any public source/day/time context explicitly resolved.",
+    "choices": ["Replace with option A", "Replace with option B"],
+    "correct_idx": 0
+  }
+]

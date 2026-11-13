@@ -1,0 +1,31 @@
+{
+  "method": "videotree",
+  "candidate_encoder": {
+    "checkpoint": "/absolute/models/EVA-CLIP-8B",
+    "processor_checkpoint": "/absolute/models/clip-vit-large-patch14",
+    "revision": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "processor_revision": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "device": "cuda:1",
+    "dtype": "float16"
+  },
+  "relevance": {
+    "model_path": "/absolute/models/explicit-local-text-instruct-model",
+    "model_revision": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "device": "cuda:2",
+    "dtype": "bfloat16",
+    "max_new_tokens": 512
+  },
+  "answerer": {
+    "backbone": "llava_onevision",
+    "model_path": "/absolute/models/llava-onevision-qwen2-7b-ov-hf",
+    "model_revision": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "ledger_path": "/absolute/verification/llava-onevision-qwen2-7b-ov-hf.json",
+    "device": "cuda:0",
+    "dtype": "bfloat16",
+    "attn_implementation": "sdpa",
+    "transformers_version": "4.57.6",
+    "max_new_tokens": 256
+  },
+  "max_answer_frames": 64,
+  "selector_parameters": {"initial_clusters": 8, "maximum_clusters": 32, "high_relevance_threshold": 4, "branch_width": 4, "seed": 0}
+}

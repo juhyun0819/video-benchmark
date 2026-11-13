@@ -1,0 +1,1274 @@
+{
+  "upstream": {
+    "repository": "https://github.com/ShareLab-SII/FluxMem",
+    "commit": "6fdbf65b6f2af1a94ca41d542be5be86a565d338",
+    "license": "Apache-2.0"
+  },
+  "variants": {
+    "fluxmem_reference": "FluxMem",
+    "fluxmem_streaming": "FluxMem_streaming",
+    "fluxmem_qwen3vl": "FluxMem_qwen3vl",
+    "fluxmem_day1": "FluxMem_day1_compare"
+  },
+  "source_only": true,
+  "python_files_compiled": 112,
+  "files": [
+    {
+      "original": "/home/kai/FluxMem/LICENSE",
+      "export": "baselines/fluxmem_reference/LICENSE",
+      "kind": "upstream_license",
+      "original_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "export_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/.gitignore",
+      "export": "baselines/fluxmem_reference/.gitignore",
+      "kind": "local_configuration",
+      "original_sha256": "c568d181eadfa27cfe701561c28644ba11ca982cebeb81c375ed0d0c6969cf96",
+      "export_sha256": "c568d181eadfa27cfe701561c28644ba11ca982cebeb81c375ed0d0c6969cf96",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/pyproject.toml",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "export_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "export_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "export_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "export_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "export_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "export_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "export": "baselines/fluxmem_reference/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "export_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen-vl-utils/pyproject.toml",
+      "export": "baselines/fluxmem_reference/models/qwen-vl-utils/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "export_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_reference/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "export_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "export": "baselines/fluxmem_reference/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "export_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/README.md",
+      "export": "baselines/fluxmem_reference/local_videomem/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "075a7ef8dd466da10f285952c6ae7b9e4e61adc418d5ef509a24886a5db8b8d7",
+      "export_sha256": "e18a52f646533de590f9c50155a4f5f8c67d31a2e1acaaa5bb666bd184e438e0",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/check_smoke.py",
+      "export": "baselines/fluxmem_reference/local_videomem/check_smoke.py",
+      "kind": "local_source",
+      "original_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "export_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/data.py",
+      "export": "baselines/fluxmem_reference/local_videomem/data.py",
+      "kind": "local_source",
+      "original_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "export_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/launch_when_ready.py",
+      "export": "baselines/fluxmem_reference/local_videomem/launch_when_ready.py",
+      "kind": "local_source",
+      "original_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "export_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/run.py",
+      "export": "baselines/fluxmem_reference/local_videomem/run.py",
+      "kind": "local_source",
+      "original_sha256": "5de39e3bb8358ea26c406cd865f05ccd54dbbe023b7ca7421d94a7680b7d2d06",
+      "export_sha256": "7017f117b8ec0746a6230de5970c6c8cc7179994675ec12df9b8dd828f65aaf8",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem/local_videomem/watch.py",
+      "export": "baselines/fluxmem_reference/local_videomem/watch.py",
+      "kind": "local_source",
+      "original_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "export_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/tests/test_fluxmem_runtime.py",
+      "export": "baselines/fluxmem_reference/tests/test_fluxmem_runtime.py",
+      "kind": "local_source",
+      "original_sha256": "b9bfc18f7dc0686c89c4c05595a010dc2fe4131e404b78cfa7d32a8c295bc47d",
+      "export_sha256": "b3b77e9ee99513eb804f921088945d468d44732423dd988c8e3737638d004a53",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem/tests/test_local_videomem_data.py",
+      "export": "baselines/fluxmem_reference/tests/test_local_videomem_data.py",
+      "kind": "local_source",
+      "original_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "export_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/tests/test_local_videomem_runner.py",
+      "export": "baselines/fluxmem_reference/tests/test_local_videomem_runner.py",
+      "kind": "local_source",
+      "original_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "export_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_reference/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_reference_wrapper",
+      "original_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "export_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_reference/requirements.inference.txt",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "3246146bc1b4c345e8a3e3de9eeac813fb058fb8457069c9ae2b3c78e2848434",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_reference/README.md",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "d3dc099cac654a7d7a9b22735dcbca1ebc2ff20c1fd9fdcba5e8dda6d364e718",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/LICENSE",
+      "export": "baselines/fluxmem_streaming/LICENSE",
+      "kind": "upstream_license",
+      "original_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "export_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/.gitignore",
+      "export": "baselines/fluxmem_streaming/.gitignore",
+      "kind": "local_configuration",
+      "original_sha256": "9ac9c87e4cbb0bebf0b3d3dfc3a6fed5ca5a19726c4198ffca7a91b3a79451fb",
+      "export_sha256": "9ac9c87e4cbb0bebf0b3d3dfc3a6fed5ca5a19726c4198ffca7a91b3a79451fb",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/pyproject.toml",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "export_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "export_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "export_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "export_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "export_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "export_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "export": "baselines/fluxmem_streaming/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "export_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen-vl-utils/pyproject.toml",
+      "export": "baselines/fluxmem_streaming/models/qwen-vl-utils/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "export_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_streaming/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "export_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "export": "baselines/fluxmem_streaming/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "export_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/README.md",
+      "export": "baselines/fluxmem_streaming/local_videomem/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "075a7ef8dd466da10f285952c6ae7b9e4e61adc418d5ef509a24886a5db8b8d7",
+      "export_sha256": "e18a52f646533de590f9c50155a4f5f8c67d31a2e1acaaa5bb666bd184e438e0",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/check_smoke.py",
+      "export": "baselines/fluxmem_streaming/local_videomem/check_smoke.py",
+      "kind": "local_source",
+      "original_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "export_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/data.py",
+      "export": "baselines/fluxmem_streaming/local_videomem/data.py",
+      "kind": "local_source",
+      "original_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "export_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/launch_when_ready.py",
+      "export": "baselines/fluxmem_streaming/local_videomem/launch_when_ready.py",
+      "kind": "local_source",
+      "original_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "export_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/run.py",
+      "export": "baselines/fluxmem_streaming/local_videomem/run.py",
+      "kind": "local_source",
+      "original_sha256": "5de39e3bb8358ea26c406cd865f05ccd54dbbe023b7ca7421d94a7680b7d2d06",
+      "export_sha256": "7017f117b8ec0746a6230de5970c6c8cc7179994675ec12df9b8dd828f65aaf8",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/local_videomem/watch.py",
+      "export": "baselines/fluxmem_streaming/local_videomem/watch.py",
+      "kind": "local_source",
+      "original_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "export_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/README.md",
+      "export": "baselines/fluxmem_streaming/streaming/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "dabb0042ab1e9fa86dfff386f6bfd936fd748d9b144fc8f82730a0999bdc46cd",
+      "export_sha256": "499267641b4b80dc1c239279a72287e58ea81cd8272c5c98bb5321fbbc5878fb",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/__init__.py",
+      "export": "baselines/fluxmem_streaming/streaming/__init__.py",
+      "kind": "local_source",
+      "original_sha256": "36889579e75f2cd8f68be4b1fb78213e88b250fd2d58d6f59ac6e95e6bf8f80f",
+      "export_sha256": "36889579e75f2cd8f68be4b1fb78213e88b250fd2d58d6f59ac6e95e6bf8f80f",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/check_result.py",
+      "export": "baselines/fluxmem_streaming/streaming/check_result.py",
+      "kind": "local_source",
+      "original_sha256": "4a92e29e4babca41196cd7813527d4020c1050283d407e76461f0e7bb968b952",
+      "export_sha256": "4a92e29e4babca41196cd7813527d4020c1050283d407e76461f0e7bb968b952",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/memory.py",
+      "export": "baselines/fluxmem_streaming/streaming/memory.py",
+      "kind": "local_source",
+      "original_sha256": "2d02a93ef07d0644ad235708ed2e6e51ab1590c38b16fc59073fe6d2d00d3373",
+      "export_sha256": "2d02a93ef07d0644ad235708ed2e6e51ab1590c38b16fc59073fe6d2d00d3373",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/model_bridge.py",
+      "export": "baselines/fluxmem_streaming/streaming/model_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "77c149af5c9bc872c478d486a02e4c3d8c26380dfb49c1b446148e66576a74df",
+      "export_sha256": "77c149af5c9bc872c478d486a02e4c3d8c26380dfb49c1b446148e66576a74df",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/run.py",
+      "export": "baselines/fluxmem_streaming/streaming/run.py",
+      "kind": "local_source",
+      "original_sha256": "ef512c74b7aa7f71c3f1221d4fe8496aeb68b0a2cfe40a2fdf469474e4c2378f",
+      "export_sha256": "399214b0ddb39ff52bbf4062c49d293a20bcca167887071a3d5d8cc620aed1af",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/session.py",
+      "export": "baselines/fluxmem_streaming/streaming/session.py",
+      "kind": "local_source",
+      "original_sha256": "3a0a0b479550a1b4bff8411fd2344078580ffb983a77d98761398d74acf28479",
+      "export_sha256": "3a0a0b479550a1b4bff8411fd2344078580ffb983a77d98761398d74acf28479",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/streaming/video.py",
+      "export": "baselines/fluxmem_streaming/streaming/video.py",
+      "kind": "local_source",
+      "original_sha256": "a5fe3766078ddc0948ca203dbaf3429ce206634bbb60c3a1c1f38eff242e9d88",
+      "export_sha256": "a5fe3766078ddc0948ca203dbaf3429ce206634bbb60c3a1c1f38eff242e9d88",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_fluxmem_runtime.py",
+      "export": "baselines/fluxmem_streaming/tests/test_fluxmem_runtime.py",
+      "kind": "local_source",
+      "original_sha256": "b9bfc18f7dc0686c89c4c05595a010dc2fe4131e404b78cfa7d32a8c295bc47d",
+      "export_sha256": "b3b77e9ee99513eb804f921088945d468d44732423dd988c8e3737638d004a53",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_local_videomem_data.py",
+      "export": "baselines/fluxmem_streaming/tests/test_local_videomem_data.py",
+      "kind": "local_source",
+      "original_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "export_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_local_videomem_runner.py",
+      "export": "baselines/fluxmem_streaming/tests/test_local_videomem_runner.py",
+      "kind": "local_source",
+      "original_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "export_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_streaming_memory.py",
+      "export": "baselines/fluxmem_streaming/tests/test_streaming_memory.py",
+      "kind": "local_source",
+      "original_sha256": "36545bb17f8155dc466c7910003e3bec56a06e14406e8ee4b6355fa721d15971",
+      "export_sha256": "36545bb17f8155dc466c7910003e3bec56a06e14406e8ee4b6355fa721d15971",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_streaming_model_bridge.py",
+      "export": "baselines/fluxmem_streaming/tests/test_streaming_model_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "5632ac6a26fee4ac88ca57e98e7aeabf6abc9bd3f85793f3fc3382b498c614db",
+      "export_sha256": "5632ac6a26fee4ac88ca57e98e7aeabf6abc9bd3f85793f3fc3382b498c614db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_streaming_session.py",
+      "export": "baselines/fluxmem_streaming/tests/test_streaming_session.py",
+      "kind": "local_source",
+      "original_sha256": "9772b31a4fab38949a4818c669c67cd76ce6c2531bfb1f23a53cd0177470845f",
+      "export_sha256": "9772b31a4fab38949a4818c669c67cd76ce6c2531bfb1f23a53cd0177470845f",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/tests/test_streaming_video.py",
+      "export": "baselines/fluxmem_streaming/tests/test_streaming_video.py",
+      "kind": "local_source",
+      "original_sha256": "5dc7b2b2256c9ae9b3e4353fa755c3a289ad79eb4626c1b19e2ef5d8bcc07fbc",
+      "export_sha256": "5dc7b2b2256c9ae9b3e4353fa755c3a289ad79eb4626c1b19e2ef5d8bcc07fbc",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_streaming/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_streaming/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_reference_wrapper",
+      "original_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "export_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_streaming/requirements.inference.txt",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "3246146bc1b4c345e8a3e3de9eeac813fb058fb8457069c9ae2b3c78e2848434",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_streaming/README.md",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "99134bcd99bfccf3e3de957b03779b39dea2bb18b24615ae777050490cc2fde1",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/LICENSE",
+      "export": "baselines/fluxmem_qwen3vl/LICENSE",
+      "kind": "upstream_license",
+      "original_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "export_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/.gitignore",
+      "export": "baselines/fluxmem_qwen3vl/.gitignore",
+      "kind": "local_configuration",
+      "original_sha256": "a91f2f1b1bc7a191f32ee7489a0dcae59f1eb8169c16ce29baabd0eb2e9971d0",
+      "export_sha256": "a91f2f1b1bc7a191f32ee7489a0dcae59f1eb8169c16ce29baabd0eb2e9971d0",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/pyproject.toml",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "export_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "export_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "export_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "export_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "export_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "export_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "export_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen-vl-utils/pyproject.toml",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen-vl-utils/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "export_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "export_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "export": "baselines/fluxmem_qwen3vl/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "export_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/README.md",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "075a7ef8dd466da10f285952c6ae7b9e4e61adc418d5ef509a24886a5db8b8d7",
+      "export_sha256": "e18a52f646533de590f9c50155a4f5f8c67d31a2e1acaaa5bb666bd184e438e0",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/check_smoke.py",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/check_smoke.py",
+      "kind": "local_source",
+      "original_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "export_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/data.py",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/data.py",
+      "kind": "local_source",
+      "original_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "export_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/launch_when_ready.py",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/launch_when_ready.py",
+      "kind": "local_source",
+      "original_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "export_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/run.py",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/run.py",
+      "kind": "local_source",
+      "original_sha256": "5de39e3bb8358ea26c406cd865f05ccd54dbbe023b7ca7421d94a7680b7d2d06",
+      "export_sha256": "7017f117b8ec0746a6230de5970c6c8cc7179994675ec12df9b8dd828f65aaf8",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/local_videomem/watch.py",
+      "export": "baselines/fluxmem_qwen3vl/local_videomem/watch.py",
+      "kind": "local_source",
+      "original_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "export_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/README.md",
+      "export": "baselines/fluxmem_qwen3vl/streaming/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "ede473e2f8cffbc6471172f606ae9d6c0f110d87322b204677260de5330121e3",
+      "export_sha256": "f2f4f5ccb260dc5b0bc8073e2b512e93f5be871dc5f3bd997e05b9d59ac5f6ab",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/__init__.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/__init__.py",
+      "kind": "local_source",
+      "original_sha256": "36889579e75f2cd8f68be4b1fb78213e88b250fd2d58d6f59ac6e95e6bf8f80f",
+      "export_sha256": "36889579e75f2cd8f68be4b1fb78213e88b250fd2d58d6f59ac6e95e6bf8f80f",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/check_result.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/check_result.py",
+      "kind": "local_source",
+      "original_sha256": "42b63c09ee7146c94cb835f9a891dd7040eff07fd283d1c11bcff3d59b478cba",
+      "export_sha256": "42b63c09ee7146c94cb835f9a891dd7040eff07fd283d1c11bcff3d59b478cba",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/checkpoint.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/checkpoint.py",
+      "kind": "local_source",
+      "original_sha256": "ce436abecb7c320aa96799a7dcdf36a41a940b74ef419d8e1a7826a3723ac3d6",
+      "export_sha256": "ce436abecb7c320aa96799a7dcdf36a41a940b74ef419d8e1a7826a3723ac3d6",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/memory.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/memory.py",
+      "kind": "local_source",
+      "original_sha256": "43891041dbfff4ab66d7827bbc99f79fa1d3f0b389cb76b08cca8c7a569d7dd1",
+      "export_sha256": "43891041dbfff4ab66d7827bbc99f79fa1d3f0b389cb76b08cca8c7a569d7dd1",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/model_bridge.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/model_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "77c149af5c9bc872c478d486a02e4c3d8c26380dfb49c1b446148e66576a74df",
+      "export_sha256": "77c149af5c9bc872c478d486a02e4c3d8c26380dfb49c1b446148e66576a74df",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/qwen3_bridge.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/qwen3_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "6ee3d32c8c2b514a9ca4925a14407920480790ea6f5869795bc143dd7ef49de6",
+      "export_sha256": "6ee3d32c8c2b514a9ca4925a14407920480790ea6f5869795bc143dd7ef49de6",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/qwen3_memory.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/qwen3_memory.py",
+      "kind": "local_source",
+      "original_sha256": "3d475552ce6b4f28e2a068d60a79497e6bb4bd4416ede2a0a1798688633b8b64",
+      "export_sha256": "3d475552ce6b4f28e2a068d60a79497e6bb4bd4416ede2a0a1798688633b8b64",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/requirements_qwen3.txt",
+      "export": "baselines/fluxmem_qwen3vl/streaming/requirements_qwen3.txt",
+      "kind": "local_documentation",
+      "original_sha256": "6c47c7d0b96e9b50ddafa5308f9a863d88de732447b5be06c553e91e51133441",
+      "export_sha256": "6c47c7d0b96e9b50ddafa5308f9a863d88de732447b5be06c553e91e51133441",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/run.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/run.py",
+      "kind": "local_source",
+      "original_sha256": "c3c536b34ea4a152f848aca8e37af65a3ba788f8f37c343996fc33e0bd7eb859",
+      "export_sha256": "7b9da4f521c083f13eebdccd7663ecd0bb90369db0a511da51a877bc4e21fc69",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/session.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/session.py",
+      "kind": "local_source",
+      "original_sha256": "bc0219c5aaf9ffbde6005193b453f15bca95b10bf08eabd12133719b8f2759b2",
+      "export_sha256": "bc0219c5aaf9ffbde6005193b453f15bca95b10bf08eabd12133719b8f2759b2",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/upstream_kernel.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/upstream_kernel.py",
+      "kind": "local_source",
+      "original_sha256": "b90125f1a08bdf9de81f158457cb3a04425a52bb03006ab80687702f29b7543e",
+      "export_sha256": "b90125f1a08bdf9de81f158457cb3a04425a52bb03006ab80687702f29b7543e",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/streaming/video.py",
+      "export": "baselines/fluxmem_qwen3vl/streaming/video.py",
+      "kind": "local_source",
+      "original_sha256": "a5fe3766078ddc0948ca203dbaf3429ce206634bbb60c3a1c1f38eff242e9d88",
+      "export_sha256": "a5fe3766078ddc0948ca203dbaf3429ce206634bbb60c3a1c1f38eff242e9d88",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_fluxmem_runtime.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_fluxmem_runtime.py",
+      "kind": "local_source",
+      "original_sha256": "b9bfc18f7dc0686c89c4c05595a010dc2fe4131e404b78cfa7d32a8c295bc47d",
+      "export_sha256": "b3b77e9ee99513eb804f921088945d468d44732423dd988c8e3737638d004a53",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_local_videomem_data.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_local_videomem_data.py",
+      "kind": "local_source",
+      "original_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "export_sha256": "4700a32ebb7abe239b71173a63241e04aa7bb9a386c31ba9ac9e567f8e9ba50a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_local_videomem_runner.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_local_videomem_runner.py",
+      "kind": "local_source",
+      "original_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "export_sha256": "7ee0b6c7a0e705fb1303f9b3123515e8f0150543cc4932334ae89505d449d586",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_qwen3_bridge.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_qwen3_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "7ffc4ebe8c038884ff6d9240af8624bac840fd3d925ecc5be87492a42dcc6a46",
+      "export_sha256": "7ffc4ebe8c038884ff6d9240af8624bac840fd3d925ecc5be87492a42dcc6a46",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_qwen3_memory.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_qwen3_memory.py",
+      "kind": "local_source",
+      "original_sha256": "54459e79d0fc28058d7b5fe94e81161d63c74701000092ac477b5597fd085cf4",
+      "export_sha256": "54459e79d0fc28058d7b5fe94e81161d63c74701000092ac477b5597fd085cf4",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_streaming_memory.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_streaming_memory.py",
+      "kind": "local_source",
+      "original_sha256": "fcc27f6b41e37f6a1325edb8f5907b823343e8bf891ac4b9330b8f2b8c6fcf77",
+      "export_sha256": "fcc27f6b41e37f6a1325edb8f5907b823343e8bf891ac4b9330b8f2b8c6fcf77",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_streaming_model_bridge.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_streaming_model_bridge.py",
+      "kind": "local_source",
+      "original_sha256": "5632ac6a26fee4ac88ca57e98e7aeabf6abc9bd3f85793f3fc3382b498c614db",
+      "export_sha256": "5632ac6a26fee4ac88ca57e98e7aeabf6abc9bd3f85793f3fc3382b498c614db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_streaming_session.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_streaming_session.py",
+      "kind": "local_source",
+      "original_sha256": "9772b31a4fab38949a4818c669c67cd76ce6c2531bfb1f23a53cd0177470845f",
+      "export_sha256": "9772b31a4fab38949a4818c669c67cd76ce6c2531bfb1f23a53cd0177470845f",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/tests/test_streaming_video.py",
+      "export": "baselines/fluxmem_qwen3vl/tests/test_streaming_video.py",
+      "kind": "local_source",
+      "original_sha256": "5dc7b2b2256c9ae9b3e4353fa755c3a289ad79eb4626c1b19e2ef5d8bcc07fbc",
+      "export_sha256": "5dc7b2b2256c9ae9b3e4353fa755c3a289ad79eb4626c1b19e2ef5d8bcc07fbc",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/README_QWEN3.md",
+      "export": "baselines/fluxmem_qwen3vl/README_QWEN3.md",
+      "kind": "local_documentation",
+      "original_sha256": "44303264b4e2c2ee8709abc417ab0779e073f2b4893810d640d44fc2bea8aabe",
+      "export_sha256": "e9efb66e1e9434966f28be4218aa878bc47dad8332e1343886c3b20af345e433",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_qwen3vl/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_reference_wrapper",
+      "original_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "export_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_qwen3vl/configs/qwen3vl8b_streaming_pilot.json",
+      "export": "baselines/fluxmem_qwen3vl/configs/qwen3vl8b_streaming_pilot.json",
+      "kind": "local_example_configuration",
+      "original_sha256": "e2fb2bd306e1581c50bf5e3eda0c04971d7deb4c8cc36f4d23a67782f9bd0cb2",
+      "export_sha256": "ad1aa685e2255fa891b42484b0350cb242e0b02113abaee7e67a170be8343dec",
+      "modified_for_export": true
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_qwen3vl/requirements.inference.txt",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "cba8c251985eb2997c11916c3335b70d50ee1abe9e084e9a14b6c1dfb48da347",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_qwen3vl/README.md",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "a5d3b53c0b88db504b24ef7ae4675cb3625c09db603e070fc1feb6970feadb52",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/LICENSE",
+      "export": "baselines/fluxmem_day1/LICENSE",
+      "kind": "upstream_license",
+      "original_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "export_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/.gitignore",
+      "export": "baselines/fluxmem_day1/.gitignore",
+      "kind": "local_configuration",
+      "original_sha256": "a2fe1cf960328120b07c48e0f1dc1262846e6e23d036b47c5df5f4614273c774",
+      "export_sha256": "a2fe1cf960328120b07c48e0f1dc1262846e6e23d036b47c5df5f4614273c774",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/pyproject.toml",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "export_sha256": "f97d7c2b63566af428d6f8f20e72d7572dd820699c774bc11a961cc3484161cf",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "export_sha256": "be8d77e4d15cf9622240eeba1dc632f67828c2def0d86bf2c22550369a5dda38",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/configuration_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "export_sha256": "c64d22f64d3edd05842a93b82d4849cc50daec46d31de9c457438401c70638ff",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "export_sha256": "3358ef383ce2e5d3acf5f23ce44153fc30401b99c4c7ccc3c2af8eb9594f9e53",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/modeling_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "export_sha256": "5ef3c934c26f413605c7fd0b981c218f0a8686d8f5932f13af2fb7443c34ea02",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/processing_qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "export_sha256": "4db38ac20cc50d64d33516d5a9fcfcdf16552a74a40869fa41e2c846a486fabe",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "export": "baselines/fluxmem_day1/models/qwen2-5-vl/src/qwen2_5_vl_fluxmem/utils.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "export_sha256": "20f58271a4daa23d745ffba2a124e21250bd21d8a77df4eafa82071d791512db",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen-vl-utils/pyproject.toml",
+      "export": "baselines/fluxmem_day1/models/qwen-vl-utils/pyproject.toml",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "export_sha256": "554b4208de7d1b801f7c6f463175a9b97ab2ab4f9fcef8133bb35cb704cc1fe3",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "export": "baselines/fluxmem_day1/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/__init__.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "export_sha256": "a0c454a56f2ba478731013afe1ba5d5d9caff652fe0ce51be1c315476e5c7905",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "export": "baselines/fluxmem_day1/models/qwen-vl-utils/src/qwen_vl_utils_fluxmem/vision_process.py",
+      "kind": "unchanged_upstream_source",
+      "original_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "export_sha256": "24d8248ef46ddb5842ebb472de4133f3ef503f46afe815856e4ae3e3de57b7b5",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/README.md",
+      "export": "baselines/fluxmem_day1/local_videomem/README.md",
+      "kind": "local_documentation",
+      "original_sha256": "075a7ef8dd466da10f285952c6ae7b9e4e61adc418d5ef509a24886a5db8b8d7",
+      "export_sha256": "e18a52f646533de590f9c50155a4f5f8c67d31a2e1acaaa5bb666bd184e438e0",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/check_smoke.py",
+      "export": "baselines/fluxmem_day1/local_videomem/check_smoke.py",
+      "kind": "local_source",
+      "original_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "export_sha256": "3b01ac99634e4815678d835c5055130190cbf222fe0daa562dd110e1c9c11944",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/data.py",
+      "export": "baselines/fluxmem_day1/local_videomem/data.py",
+      "kind": "local_source",
+      "original_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "export_sha256": "a20516298bc4d1709f2764f615dbf880b8a0717272ad2160bc91ebbae7c59b7c",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/launch_when_ready.py",
+      "export": "baselines/fluxmem_day1/local_videomem/launch_when_ready.py",
+      "kind": "local_source",
+      "original_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "export_sha256": "4e3bec417fe7ad9fcc7afe00e4b61e442c8e4ddb2101cbc6320ff7e293c8f0fd",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/run.py",
+      "export": "baselines/fluxmem_day1/local_videomem/run.py",
+      "kind": "local_source",
+      "original_sha256": "5de39e3bb8358ea26c406cd865f05ccd54dbbe023b7ca7421d94a7680b7d2d06",
+      "export_sha256": "7017f117b8ec0746a6230de5970c6c8cc7179994675ec12df9b8dd828f65aaf8",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/local_videomem/watch.py",
+      "export": "baselines/fluxmem_day1/local_videomem/watch.py",
+      "kind": "local_source",
+      "original_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "export_sha256": "86c921fb6cbc76fab48c57ef2979e2244094e843800996ab8fb24e068b4ab51a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/aggregate_full.py",
+      "export": "baselines/fluxmem_day1/day1_compare/aggregate_full.py",
+      "kind": "local_source",
+      "original_sha256": "735388219808e0d262da7b1b6de274a6f9e2c986cc7d296a6f3aae8a1308f735",
+      "export_sha256": "735388219808e0d262da7b1b6de274a6f9e2c986cc7d296a6f3aae8a1308f735",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/check_pair.py",
+      "export": "baselines/fluxmem_day1/day1_compare/check_pair.py",
+      "kind": "local_source",
+      "original_sha256": "b29431efa486123d144224adaed3becd3b2551b69f92ae89f0419d33e3ad283e",
+      "export_sha256": "b29431efa486123d144224adaed3becd3b2551b69f92ae89f0419d33e3ad283e",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/evaluate.py",
+      "export": "baselines/fluxmem_day1/day1_compare/evaluate.py",
+      "kind": "local_source",
+      "original_sha256": "f89d79534546e70d195d51ac6c081bf8771b478c68fefd7885c1d2ef4ef27bdc",
+      "export_sha256": "f89d79534546e70d195d51ac6c081bf8771b478c68fefd7885c1d2ef4ef27bdc",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/launch_full.py",
+      "export": "baselines/fluxmem_day1/day1_compare/launch_full.py",
+      "kind": "local_source",
+      "original_sha256": "55273691edbfb4fa1bf841d857de5caa5bc56c5c2e3c7bffe1ef6869c4b7ba23",
+      "export_sha256": "55273691edbfb4fa1bf841d857de5caa5bc56c5c2e3c7bffe1ef6869c4b7ba23",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/prepare.py",
+      "export": "baselines/fluxmem_day1/day1_compare/prepare.py",
+      "kind": "local_source",
+      "original_sha256": "cb081956ad9f9493dea38184042ca72d51ad07eaba0fa4bed6176f7c93e6fd45",
+      "export_sha256": "cb081956ad9f9493dea38184042ca72d51ad07eaba0fa4bed6176f7c93e6fd45",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/prepare_full.py",
+      "export": "baselines/fluxmem_day1/day1_compare/prepare_full.py",
+      "kind": "local_source",
+      "original_sha256": "132fcd71acd30cfdeff4b5ef6b0c8bcbc79e98711915ca6651d387c0e88ad65e",
+      "export_sha256": "132fcd71acd30cfdeff4b5ef6b0c8bcbc79e98711915ca6651d387c0e88ad65e",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/progress_full.py",
+      "export": "baselines/fluxmem_day1/day1_compare/progress_full.py",
+      "kind": "local_source",
+      "original_sha256": "b2f17ba261007d251d1248fc679afb07a127543262288c40e2e807a7bbbf7c77",
+      "export_sha256": "b2f17ba261007d251d1248fc679afb07a127543262288c40e2e807a7bbbf7c77",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/run.py",
+      "export": "baselines/fluxmem_day1/day1_compare/run.py",
+      "kind": "local_source",
+      "original_sha256": "84509fe1cb2759de3a68f63c463db59a9009edd8ba79c705f320288a5d8c7dcf",
+      "export_sha256": "4ad00ddee039b727c1330cef461912b9507ddffb718f5fab2e803cec9785efae",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/run_multi_gpu.py",
+      "export": "baselines/fluxmem_day1/day1_compare/run_multi_gpu.py",
+      "kind": "local_source",
+      "original_sha256": "d8af55ae074d7201b80ab92d80969edf61e9983aa675c4334d21d5a4c729f475",
+      "export_sha256": "d8af55ae074d7201b80ab92d80969edf61e9983aa675c4334d21d5a4c729f475",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/day1_compare/run_v2.py",
+      "export": "baselines/fluxmem_day1/day1_compare/run_v2.py",
+      "kind": "local_source",
+      "original_sha256": "5ae8f441fab26f34b1b467aba950898895f79afe022dd8eabf431e6bb2e14561",
+      "export_sha256": "5ae8f441fab26f34b1b467aba950898895f79afe022dd8eabf431e6bb2e14561",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_aggregate_full.py",
+      "export": "baselines/fluxmem_day1/tests/test_aggregate_full.py",
+      "kind": "local_source",
+      "original_sha256": "75b152d4834bd19dbed58851ec8991bdc88e1eb0c26b92f93fd446f3de2315c1",
+      "export_sha256": "75b152d4834bd19dbed58851ec8991bdc88e1eb0c26b92f93fd446f3de2315c1",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_day1_evaluate.py",
+      "export": "baselines/fluxmem_day1/tests/test_day1_evaluate.py",
+      "kind": "local_source",
+      "original_sha256": "27ffe6f6557aa787595f6e850a3094eafae054baf5b1db9e3b44b7187b147700",
+      "export_sha256": "27ffe6f6557aa787595f6e850a3094eafae054baf5b1db9e3b44b7187b147700",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_day1_run.py",
+      "export": "baselines/fluxmem_day1/tests/test_day1_run.py",
+      "kind": "local_source",
+      "original_sha256": "65cc9f6dbc801473fab59a3701e011a956098e822a74734dd8354a6e9f6f2e5c",
+      "export_sha256": "65cc9f6dbc801473fab59a3701e011a956098e822a74734dd8354a6e9f6f2e5c",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_full_launch.py",
+      "export": "baselines/fluxmem_day1/tests/test_full_launch.py",
+      "kind": "local_source",
+      "original_sha256": "3ba183d6f31c76d9ff76de0c245e81da46a16daeba7f89226c23a4eb85bf294e",
+      "export_sha256": "3ba183d6f31c76d9ff76de0c245e81da46a16daeba7f89226c23a4eb85bf294e",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_multi_gpu.py",
+      "export": "baselines/fluxmem_day1/tests/test_multi_gpu.py",
+      "kind": "local_source",
+      "original_sha256": "9f5c22dcd1555ee7ffe0a5f9f16bb66fdee72bebe701d4c54725116aa35fb914",
+      "export_sha256": "9f5c22dcd1555ee7ffe0a5f9f16bb66fdee72bebe701d4c54725116aa35fb914",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_pair.py",
+      "export": "baselines/fluxmem_day1/tests/test_pair.py",
+      "kind": "local_source",
+      "original_sha256": "eaa2823517ef2b097d059b9983c945a0f84487f3905f0e794b2d77e465e25810",
+      "export_sha256": "eaa2823517ef2b097d059b9983c945a0f84487f3905f0e794b2d77e465e25810",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_prepare.py",
+      "export": "baselines/fluxmem_day1/tests/test_prepare.py",
+      "kind": "local_source",
+      "original_sha256": "ee3a48be35c20a0b7bd506a55ed55bbaafb3545975b3201e03855adec950d8c3",
+      "export_sha256": "ee3a48be35c20a0b7bd506a55ed55bbaafb3545975b3201e03855adec950d8c3",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_prepare_full.py",
+      "export": "baselines/fluxmem_day1/tests/test_prepare_full.py",
+      "kind": "local_source",
+      "original_sha256": "45ca4d4a202e5cb288dc97632e6b2c2d89f743fff29c2358dd2c80a152c36831",
+      "export_sha256": "45ca4d4a202e5cb288dc97632e6b2c2d89f743fff29c2358dd2c80a152c36831",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/tests/test_run_v2.py",
+      "export": "baselines/fluxmem_day1/tests/test_run_v2.py",
+      "kind": "local_source",
+      "original_sha256": "4ca65c06dc8e5abd569eee361584be9efaf7f29bbef4f6ba070dfef6f29ac08a",
+      "export_sha256": "4ca65c06dc8e5abd569eee361584be9efaf7f29bbef4f6ba070dfef6f29ac08a",
+      "modified_for_export": false
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/README_DAY1.md",
+      "export": "baselines/fluxmem_day1/README_DAY1.md",
+      "kind": "local_documentation",
+      "original_sha256": "3616742d7fd61c4f45c68da9177bc18250e80709e2b8a27033b3a838363415f2",
+      "export_sha256": "e391ab51c031610f1cd157d9173b87d37f5cf90dc973a7bc9ea59e6c00bf55da",
+      "modified_for_export": true
+    },
+    {
+      "original": "/home/kai/FluxMem_day1_compare/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "export": "baselines/fluxmem_day1/evaluation/lmms-eval/lmms_eval/models/qwen2_5_vl_fluxmem.py",
+      "kind": "unchanged_upstream_reference_wrapper",
+      "original_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "export_sha256": "6fd29a8f31ab174a5fa754f47f566b4612f206a3de7e69be1ca9f17f17081586",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_day1/requirements.inference.txt",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "3246146bc1b4c345e8a3e3de9eeac813fb058fb8457069c9ae2b3c78e2848434",
+      "modified_for_export": false
+    },
+    {
+      "original": null,
+      "export": "baselines/fluxmem_day1/README.md",
+      "kind": "export_documentation",
+      "original_sha256": null,
+      "export_sha256": "ad12d1146e7b2a7206d9534c6939051e08012c44b8ad3b2f31306fcaf9a5acbd",
+      "modified_for_export": false
+    }
+  ],
+  "validation": {
+    "syntax": "passed",
+    "tests": {
+      "fluxmem_streaming": {
+        "passed": 92,
+        "selection": "test_streaming_memory.py test_streaming_model_bridge.py test_streaming_video.py test_streaming_session.py"
+      },
+      "fluxmem_qwen3vl": {
+        "passed": 141,
+        "selection": "test_local_videomem_data.py test_streaming_memory.py test_streaming_video.py test_streaming_session.py test_qwen3_memory.py test_qwen3_bridge.py"
+      },
+      "fluxmem_day1": {
+        "passed": 54,
+        "selection": "test_prepare.py test_prepare_full.py test_day1_evaluate.py test_pair.py test_multi_gpu.py test_full_launch.py test_aggregate_full.py"
+      },
+      "fluxmem_reference": {
+        "passed": 21,
+        "selection": "test_local_videomem_data.py test_local_videomem_runner.py test_fluxmem_runtime.py"
+      }
+    },
+    "metadata_portability": "Pinned upstream commit; export Git metadata is null when absent or unborn.",
+    "execution_conditions": {
+      "cuda_visible_devices": "",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "pytest_cache_provider": "disabled",
+      "new_environment_or_packages": false,
+      "model_weights_loaded": false,
+      "original_source_edited": false
+    },
+    "total_passed": 308,
+    "resolved_export_issues": [
+      "Provenance originally required an existing Git HEAD; metadata is now nullable for source archives and unborn checkouts.",
+      "Metadata helper placement initially displaced a contextmanager decorator in historical runtime tests; decorator placement corrected and reference suite passed."
+    ]
+  },
+  "source_repositories": {
+    "fluxmem_reference": {
+      "path": "/home/kai/FluxMem",
+      "branch": "videomem-inference-only",
+      "head": "6fdbf65b6f2af1a94ca41d542be5be86a565d338",
+      "status": [
+        " M .gitignore",
+        "?? local_videomem/",
+        "?? report/",
+        "?? tests/"
+      ]
+    },
+    "fluxmem_streaming": {
+      "path": "/home/kai/FluxMem_streaming",
+      "branch": "videomem-streaming-extension",
+      "head": "6fdbf65b6f2af1a94ca41d542be5be86a565d338",
+      "status": [
+        " M .gitignore",
+        "?? local_videomem/",
+        "?? report/",
+        "?? streaming/",
+        "?? tests/"
+      ]
+    },
+    "fluxmem_qwen3vl": {
+      "path": "/home/kai/FluxMem_qwen3vl",
+      "branch": "videomem-qwen3vl8b-streaming",
+      "head": "6fdbf65b6f2af1a94ca41d542be5be86a565d338",
+      "status": [
+        " M .gitignore",
+        "?? README_QWEN3.md",
+        "?? configs/",
+        "?? local_videomem/",
+        "?? report/",
+        "?? streaming/",
+        "?? tests/"
+      ]
+    },
+    "fluxmem_day1": {
+      "path": "/home/kai/FluxMem_day1_compare",
+      "branch": "videomem-day1-paired",
+      "head": "6fdbf65b6f2af1a94ca41d542be5be86a565d338",
+      "status": [
+        " M .gitignore",
+        "?? README_DAY1.md",
+        "?? day1_compare/",
+        "?? local_videomem/",
+        "?? reports/",
+        "?? tests/"
+      ]
+    }
+  }
+}

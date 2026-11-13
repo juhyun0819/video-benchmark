@@ -1,0 +1,2 @@
+# Same native model/processor runtime as the Qwen3 FluxMem comparison.
+-r ../fluxmem_qwen3vl/requirements.inference.txt

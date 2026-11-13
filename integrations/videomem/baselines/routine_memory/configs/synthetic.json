@@ -1,0 +1,9 @@
+{
+  "budget_bytes": 16000000000,
+  "short_term_frames": 4,
+  "spatial_bins": 4,
+  "temporal_bins": 4,
+  "evidence_tokens": 16,
+  "stability_frames": 3,
+  "occurrence_gap_seconds": 20.0
+}

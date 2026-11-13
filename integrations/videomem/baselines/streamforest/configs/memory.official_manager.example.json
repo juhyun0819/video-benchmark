@@ -1,0 +1,10 @@
+{
+  "st_memory_windows": [1, 18],
+  "st_memory_tokens": [729, 128],
+  "event_split_window": 8,
+  "long_memory_tokens_per_frame": 64,
+  "long_memory_tokens_quota": 5120,
+  "sim_weight_g": 0.4,
+  "time_weight_a": 0.2,
+  "merge_weight_b": 0.4
+}

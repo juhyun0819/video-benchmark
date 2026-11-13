@@ -1,0 +1,59 @@
+{
+  "repository": "https://github.com/Ziyang412/VideoTree",
+  "revision": "605ec8e917f9a0f95d37a73a0b50bf0e8cfe076e",
+  "license": "MIT",
+  "files": {
+    "kmeans_pytorch/__init__.py": {
+      "sha256": "91d5f93d603e3d693961df4c705386cf7757c1c95b7ef8d78016c389ce588184"
+    },
+    "adaptive_breath_expansion.py": {
+      "sha256": "c7fe1b2e94b8e4e908f098d8291970c405403ed349523f315cb14c8dbbcd1326"
+    },
+    "depth_expansion.py": {
+      "sha256": "1fdb6000d221bc1457647f60e1d0d41eccea41c851730113342d11bc38556966"
+    }
+  },
+  "functions": {
+    "initialize": {
+      "source": "kmeans_pytorch/__init__.py",
+      "line": 10,
+      "sha256": "7e5b671523cb62e5fba23b8fb0af34846d5ff214399e57705cf294451480e7f7"
+    },
+    "kmeans": {
+      "source": "kmeans_pytorch/__init__.py",
+      "line": 27,
+      "sha256": "5de965928a6a41e6d49418a092b92fa4ae8cef2e0119fb8002b0a01fef48dd84"
+    },
+    "pairwise_distance": {
+      "source": "kmeans_pytorch/__init__.py",
+      "line": 172,
+      "sha256": "1377e7f2b40fb10e5c4a0873b9c415650eccf85d9a37f23dc7f87c9fec5ef143"
+    },
+    "pairwise_cosine": {
+      "source": "kmeans_pytorch/__init__.py",
+      "line": 191,
+      "sha256": "a9e4dc6f89442b8dc62fb1ff41de81929fe808d97516d8315b2b12bd9d2e08de"
+    },
+    "find_closest_points_per_cluster": {
+      "source": "adaptive_breath_expansion.py",
+      "line": 28,
+      "sha256": "3bb6af679b0c6fc5fae47f266d284f40897fb905fec5d301ec2a4613e6226669"
+    },
+    "hierarchical_clustering_with_external_primary": {
+      "source": "depth_expansion.py",
+      "line": 39,
+      "sha256": "2fff48c7207337b5a2c67efe2e4ae6db9f41b5bffed08ed462889201d90c2cd2"
+    },
+    "cosine_similarity": {
+      "source": "depth_expansion.py",
+      "line": 87,
+      "sha256": "849fd95adaeef52971e28184a84a083ad4877bccfe87807334e570407c012dbe"
+    },
+    "find_closest_points_in_temporal_order_subsub": {
+      "source": "depth_expansion.py",
+      "line": 96,
+      "sha256": "44d4fea430923553531cb58c291553b0e80abda2ba9b803d434f93a5ef7a3117"
+    }
+  },
+  "vendored_sha256": "8b7e881a7381083bee16cada063a34ae3f33d8b7eba27ab5efb0ec3c556bc723"
+}

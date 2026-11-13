@@ -1,0 +1,179 @@
+{
+  "repo_id": "H-oliday/TeleEgo-Source",
+  "revision": "a953afe7840126c799a8eabcb1bc704294919aaf",
+  "order": [
+    "D1-P4-am-learning",
+    "D2-P4-am-shopping&cooking",
+    "D1-P4-pm-1-meeting-1",
+    "D1-P4-pm-2-meeting-2",
+    "D2-P4-pm-1-fitness",
+    "D2-P4-pm-2-billiards",
+    "D2-P4-pm-3-uno",
+    "D3-P4-pm-1-majiang",
+    "D3-P4-pm-3-dinner"
+  ],
+  "files": [
+    {
+      "type": "file",
+      "oid": "cc335ab20718ae6692f823217a2750feb5d2b2f4",
+      "size": 8346053812,
+      "lfs": {
+        "oid": "e5b895d14035e2fef1eaa99c8e3dc6dbe8678b4b566165ccfe1fd461728c1dfc",
+        "size": 8346053812,
+        "pointerSize": 135
+      },
+      "xetHash": "a28ffd123ab3cf00a5beac05dd27116e90257124121b7da4a7097fa0b4aa29f2",
+      "path": "source_videos/P4/D1-P4-am-learning_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "fd2acff09fee5121766c2a757d17e2f28c6a5fbd",
+      "size": 6684365898,
+      "lfs": {
+        "oid": "505bafc95b5edcad96fab2fd2638ce2e76b4c4564fbfbb939174d4117735c996",
+        "size": 6684365898,
+        "pointerSize": 135
+      },
+      "xetHash": "642a7732ee68a95ac3db08cf81ad6aaba77c3bb40d052ece454976b30658c7ef",
+      "path": "source_videos/P4/D1-P4-pm-1-meeting-1_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "33f335420393bff134bc2c259c9e26d5b2e85089",
+      "size": 5227114416,
+      "lfs": {
+        "oid": "c179f26ec7b7b08202f542b270dafa1eeaff5270d9a2b7a4f6e5fc68e79bfaf4",
+        "size": 5227114416,
+        "pointerSize": 135
+      },
+      "xetHash": "ac88adf2946edebfb7a56e1f0fc6a754045e27f5541a611f1d6b256fbd98f495",
+      "path": "source_videos/P4/D1-P4-pm-2-meeting-2_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "a82ec1275ed95670e53fb3f22053a37930e8c243",
+      "size": 7388904408,
+      "lfs": {
+        "oid": "03349b6b10fda55926a13f955ac8840695c703f2171255f4fb02913b21e64622",
+        "size": 7388904408,
+        "pointerSize": 135
+      },
+      "xetHash": "1c460d103e78129b37d32d6335341d1c6e954e429b11a00b664f8ad4b091ab98",
+      "path": "source_videos/P4/D2-P4-am-shopping&cooking_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "551fb5c099ac46ffcae23f084e797d078ce91320",
+      "size": 10815817003,
+      "lfs": {
+        "oid": "7f0f1cf4b844bb28d3365df43a121f2b4913d47d4bf27056d22fd0344fc2341a",
+        "size": 10815817003,
+        "pointerSize": 136
+      },
+      "xetHash": "9e8072b5062549337c3e4f5b60930e6da0a9df8a4a948e06e605b259221ae44b",
+      "path": "source_videos/P4/D2-P4-pm-1-fitness_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "ff803b93a1643cb91ed97852cb069b00f611ec21",
+      "size": 4510959416,
+      "lfs": {
+        "oid": "d5748bf349226fc325c5363166015bf5c86c56557cd94f4f6c51500eea0ec08b",
+        "size": 4510959416,
+        "pointerSize": 135
+      },
+      "xetHash": "457c95dd6c6795c508b035b671b19d3de50f1d0f4ea1bcbbcbbeb73c0a85d661",
+      "path": "source_videos/P4/D2-P4-pm-2-billiards_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "44f135c023ed75d8c78532fb90f59a7a8a11339a",
+      "size": 10166017410,
+      "lfs": {
+        "oid": "fb98869daa614bdf3ff8f40776f2243e484bf3b76f6182f577693ba5dc3e93f7",
+        "size": 10166017410,
+        "pointerSize": 136
+      },
+      "xetHash": "9fd6932d04eb78542cfd229fb116a1512b2d6531eb7fa22b4d3052800208da71",
+      "path": "source_videos/P4/D2-P4-pm-3-uno_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "511a4f9de3cbb294e6ef990f119fef61c9eb379b",
+      "size": 10646402436,
+      "lfs": {
+        "oid": "4aabb5e73da5194a6e8d84ae825e62c9192e800a7670150bd27f904846b7d351",
+        "size": 10646402436,
+        "pointerSize": 136
+      },
+      "xetHash": "77cad2791458b426ca32837699c5b13f76bb7b488ffa41b0cfc6f0625a2a6751",
+      "path": "source_videos/P4/D3-P4-pm-1-majiang_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "4ed038f3dc2f261bc9459a4558f548a3156f405d",
+      "size": 8531015446,
+      "lfs": {
+        "oid": "ee4cb25bbcee439f715f95437cab491aedfed72ecdc31686bb3bfcffb86224d9",
+        "size": 8531015446,
+        "pointerSize": 135
+      },
+      "xetHash": "34cd3ae44b468f89a0e5b1e178fc916cbbccdcc5d5dba5119eab4a8de912d417",
+      "path": "source_videos/P4/D3-P4-pm-3-dinner_video.mp4"
+    },
+    {
+      "type": "file",
+      "oid": "11d25b5e2beb658a8f3d8664b117e809ef8a6523",
+      "size": 25894,
+      "path": "teleego_srts/P4/D1-P4-am-learning/D1-P4-am-learning_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "57e68d79144b3ca7af7445b234cb35f06e89c7aa",
+      "size": 25727,
+      "path": "teleego_srts/P4/D1-P4-pm-1-meeting-1/D1-P4-pm-1-meeting-1_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "00219a5d897f5b9b2e1aac3cf7a62fbf3c2de0be",
+      "size": 17945,
+      "path": "teleego_srts/P4/D1-P4-pm-2-meeting-2/D1-P4-pm-2-meeting-2_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "33a3510614f1f4037f4fde314b651812b1c30761",
+      "size": 36963,
+      "path": "teleego_srts/P4/D2-P4-am-shopping&cooking/D2-P4-am-shopping&cooking_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "c3f6f88afe686ce246d545d9ad9978dd3f305675",
+      "size": 46397,
+      "path": "teleego_srts/P4/D2-P4-pm-1-fitness/D2-P4-pm-1-fitness_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "4b93987436f93ffd2e895a0db201336a3106bd0b",
+      "size": 72320,
+      "path": "teleego_srts/P4/D2-P4-pm-2-billiards/D2-P4-pm-2-billiards_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "73c8730210e88042824d79ddd4daf313e0823f38",
+      "size": 113872,
+      "path": "teleego_srts/P4/D2-P4-pm-3-uno/D2-P4-pm-3-uno_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "6143b5c4b2f8067a9713a133be5ea60f5103b0d2",
+      "size": 89205,
+      "path": "teleego_srts/P4/D3-P4-pm-1-majiang/D3-P4-pm-1-majiang_narration.srt"
+    },
+    {
+      "type": "file",
+      "oid": "5d54b555e90998379938ab5770824350571cc1b6",
+      "size": 45256,
+      "path": "teleego_srts/P4/D3-P4-pm-3-dinner/D3-P4-pm-3-dinner_narration.srt"
+    }
+  ]
+}

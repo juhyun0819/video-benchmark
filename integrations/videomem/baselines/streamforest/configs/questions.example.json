@@ -1,0 +1,8 @@
+[
+  {
+    "question_id": "schema-example-not-benchmark",
+    "question": "Describe the visible setting and activities.",
+    "choices": [],
+    "query_time": {"day_id": "Day1", "day_order": 1, "seconds": 30}
+  }
+]

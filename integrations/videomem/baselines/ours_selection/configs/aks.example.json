@@ -1,0 +1,22 @@
+{
+  "method": "aks",
+  "candidate_encoder": {
+    "checkpoint": "/absolute/models/clip-vit-base-patch32",
+    "revision": "REPLACE_WITH_40_CHARACTER_COMMIT",
+    "device": "cuda:1",
+    "dtype": "float32"
+  },
+  "answerer": {
+    "backbone": "qwen3_vl",
+    "model_path": "/absolute/models/Qwen3-VL-8B-Instruct",
+    "model_revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+    "ledger_path": "/absolute/verification/Qwen3-VL-8B-Instruct.json",
+    "device": "cuda:0",
+    "dtype": "bfloat16",
+    "attn_implementation": "sdpa",
+    "transformers_version": "4.57.6",
+    "max_new_tokens": 256
+  },
+  "max_answer_frames": 64,
+  "selector_parameters": {"max_num_frames": 64, "ratio": 1, "t1": 0.8, "t2": -100.0, "all_depth": 5}
+}

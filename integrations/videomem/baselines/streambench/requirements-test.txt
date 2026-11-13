@@ -1,0 +1,6 @@
+# Install alongside one method's compatible Torch/Transformers environment.
+pytest>=8
+numpy
+Pillow
+av>=14
+# torch is required; use the wheel matching your CUDA and method environment.

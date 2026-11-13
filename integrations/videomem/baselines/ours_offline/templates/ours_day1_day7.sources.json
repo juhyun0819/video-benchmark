@@ -1,0 +1,12 @@
+{
+  "timeline": "concatenate",
+  "sources": [
+    {"path": "day1.mp4", "day": 1},
+    {"path": "day2.mp4", "day": 2},
+    {"path": "day3.mp4", "day": 3},
+    {"path": "day4.mp4", "day": 4},
+    {"path": "day5.mp4", "day": 5},
+    {"path": "day6.mp4", "day": 6},
+    {"path": "day7.mp4", "day": 7}
+  ]
+}

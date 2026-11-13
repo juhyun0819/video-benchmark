@@ -1,0 +1,8 @@
+# Isolated Python 3.11 environment; ffmpeg/ffprobe are system executables.
+# Model checkpoints and serving endpoint are configured separately.
+numpy==1.26.4
+chromadb==0.5.20
+posthog==3.25.0
+open_clip_torch==2.29.0
+Pillow>=10,<12
+pytest>=8,<9

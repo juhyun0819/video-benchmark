@@ -1,0 +1,6 @@
+{
+  "videos": [
+    {"day_id": "Day1", "day_order": 1, "path": "/absolute/path/Day1.mp4", "day_start_seconds": 0, "timeline_status": "direct_mp4", "virtual_start": null, "recording_start": null},
+    {"day_id": "Day2", "day_order": 2, "path": "/absolute/path/Day2.mp4", "day_start_seconds": 0, "timeline_status": "direct_mp4", "virtual_start": null, "recording_start": null}
+  ]
+}

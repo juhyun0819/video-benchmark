@@ -1,0 +1,523 @@
+{
+  "schema_version": 1,
+  "scope": "Source-only EgoRAG adapter and benchmark prototype export",
+  "upstream": {
+    "repository": "https://github.com/EvolvingLMMs-Lab/EgoLife",
+    "commit": "7a97157908757cc898c26835b718653055ecc5f5",
+    "license": "S-Lab License 1.0",
+    "retained_upstream_paths": [
+      "main.py",
+      "create_database.py",
+      "egorag/agents/RagAgent.py",
+      "egorag/database/Chroma.py",
+      "egorag/utils/gen_event.py",
+      "egorag/utils/prompts.py",
+      "egorag/utils/agent_fun.py"
+    ]
+  },
+  "entries": [
+    {
+      "source_project": "EgoLife",
+      "source_path": "LICENSE",
+      "export_path": "baselines/egorag/LICENSE",
+      "source_sha256": "9214fbf1fe98a2dfd49ead7e5dd98c17238bbf935000b82f71b6a1d7deffab32",
+      "export_sha256": "9214fbf1fe98a2dfd49ead7e5dd98c17238bbf935000b82f71b6a1d7deffab32",
+      "bytes": 1718,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/configs/videomem.json",
+      "export_path": "baselines/egorag/configs/videomem.json",
+      "source_sha256": "19fdb3955e03d0ddb1ab7e5ae115cc575c59fccfe802ac4dcb0635fdf0f9e5a0",
+      "export_sha256": "19fdb3955e03d0ddb1ab7e5ae115cc575c59fccfe802ac4dcb0635fdf0f9e5a0",
+      "bytes": 1694,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/configs/videomem_questions.example.json",
+      "export_path": "baselines/egorag/configs/videomem_questions.example.json",
+      "source_sha256": "5aa8b54709a2e15b4fc32f42aa22733ac365cd49c299aa558ca0771f58279b9c",
+      "export_sha256": "5aa8b54709a2e15b4fc32f42aa22733ac365cd49c299aa558ca0771f58279b9c",
+      "bytes": 224,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/configs/videomem_qwen3vl.local.json",
+      "export_path": "baselines/egorag/configs/videomem_qwen3vl.example.json",
+      "source_sha256": "07079c60b4cf1d202eccc36fc0c501938f5d2ea87abc7da2bca7b6709aab8e11",
+      "export_sha256": "65e45ac1f79da2b045d0d997046ea82c0a6cb80accfb48e3e00748fb19dd5373",
+      "bytes": 4993,
+      "unchanged": false
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/configs/videomem_sources.example.json",
+      "export_path": "baselines/egorag/configs/videomem_sources.example.json",
+      "source_sha256": "ee264036250368e0ed7ce13f4acf463d7a8c8bb440270bcf9d58e7c7334b0772",
+      "export_sha256": "ee264036250368e0ed7ce13f4acf463d7a8c8bb440270bcf9d58e7c7334b0772",
+      "bytes": 381,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/create_database.py",
+      "export_path": "baselines/egorag/create_database.py",
+      "source_sha256": "5c12a5a97b48f754dae23c62ce981841a5def182d2d7f1bf2ae66ee7dcad4435",
+      "export_sha256": "5c12a5a97b48f754dae23c62ce981841a5def182d2d7f1bf2ae66ee7dcad4435",
+      "bytes": 1320,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/egorag/agents/RagAgent.py",
+      "export_path": "baselines/egorag/egorag/agents/RagAgent.py",
+      "source_sha256": "3171db120c276e94d471e14b31216bcec94bbd8051d28b515f81fec156409a40",
+      "export_sha256": "3171db120c276e94d471e14b31216bcec94bbd8051d28b515f81fec156409a40",
+      "bytes": 24276,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/egorag/database/Chroma.py",
+      "export_path": "baselines/egorag/egorag/database/Chroma.py",
+      "source_sha256": "78ce8e51e7781db8b6a998b8c3e15734a29672169416f03e8a501346fda6b5b6",
+      "export_sha256": "78ce8e51e7781db8b6a998b8c3e15734a29672169416f03e8a501346fda6b5b6",
+      "bytes": 13373,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/egorag/utils/agent_fun.py",
+      "export_path": "baselines/egorag/egorag/utils/agent_fun.py",
+      "source_sha256": "8ddcf6d60606366206e9847089ad663b626cf54403c31ad0936844c9c67dab18",
+      "export_sha256": "8ddcf6d60606366206e9847089ad663b626cf54403c31ad0936844c9c67dab18",
+      "bytes": 8200,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/egorag/utils/gen_event.py",
+      "export_path": "baselines/egorag/egorag/utils/gen_event.py",
+      "source_sha256": "669bf29efdfa1db6a1672d992b6b942f9ee4f38d7d0f14cb6c3abe62a2b215d7",
+      "export_sha256": "669bf29efdfa1db6a1672d992b6b942f9ee4f38d7d0f14cb6c3abe62a2b215d7",
+      "bytes": 23393,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/egorag/utils/prompts.py",
+      "export_path": "baselines/egorag/egorag/utils/prompts.py",
+      "source_sha256": "4d2c361a0e752eb2ba9bb9f354df5dd4673393ce8bd5aa83669b926d8bfe06dc",
+      "export_sha256": "4d2c361a0e752eb2ba9bb9f354df5dd4673393ce8bd5aa83669b926d8bfe06dc",
+      "bytes": 12847,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/main.py",
+      "export_path": "baselines/egorag/main.py",
+      "source_sha256": "14aadddbb42a118876a402cca038b1d0591566e8318c94065e816a3d970cd36f",
+      "export_sha256": "14aadddbb42a118876a402cca038b1d0591566e8318c94065e816a3d970cd36f",
+      "bytes": 9143,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/requirements-videomem.in",
+      "export_path": "baselines/egorag/requirements-videomem.in",
+      "source_sha256": "aab7075c5307a7cd50cd98f2b87fc202da23ff0d3e877581601bb16151fc0d5b",
+      "export_sha256": "aab7075c5307a7cd50cd98f2b87fc202da23ff0d3e877581601bb16151fc0d5b",
+      "bytes": 242,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_backends.py",
+      "export_path": "baselines/egorag/tests/test_videomem_backends.py",
+      "source_sha256": "1e10b97e41bccc2627ad7d0b92d80c9420bec8bbf4a92e2243b7c00954a85a99",
+      "export_sha256": "1e10b97e41bccc2627ad7d0b92d80c9420bec8bbf4a92e2243b7c00954a85a99",
+      "bytes": 13234,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_local_hf.py",
+      "export_path": "baselines/egorag/tests/test_videomem_local_hf.py",
+      "source_sha256": "2057a59e6058a4d666e80ecc3acc6baca2dbb669d3fc60e8abf56f8f595569e9",
+      "export_sha256": "2057a59e6058a4d666e80ecc3acc6baca2dbb669d3fc60e8abf56f8f595569e9",
+      "bytes": 16780,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_local_integrity.py",
+      "export_path": "baselines/egorag/tests/test_videomem_local_integrity.py",
+      "source_sha256": "6a3a3ae9f0f57b35322c5c164324e1b4010fbb2ff43c7a404030dfe6d7552661",
+      "export_sha256": "6a3a3ae9f0f57b35322c5c164324e1b4010fbb2ff43c7a404030dfe6d7552661",
+      "bytes": 14460,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_media.py",
+      "export_path": "baselines/egorag/tests/test_videomem_media.py",
+      "source_sha256": "dc0e78ac57d3e6a00c7c0e7bb9a0d78da7e0594aaa4972e2d7b5301e3dfe88b8",
+      "export_sha256": "dc0e78ac57d3e6a00c7c0e7bb9a0d78da7e0594aaa4972e2d7b5301e3dfe88b8",
+      "bytes": 6125,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_pipeline.py",
+      "export_path": "baselines/egorag/tests/test_videomem_pipeline.py",
+      "source_sha256": "b608505bb3c35603658cda1bfb8126379ff416818073a2efa3ba6dc9d096b3aa",
+      "export_sha256": "b608505bb3c35603658cda1bfb8126379ff416818073a2efa3ba6dc9d096b3aa",
+      "bytes": 4878,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/tests/test_videomem_temporal_extra.py",
+      "export_path": "baselines/egorag/tests/test_videomem_temporal_extra.py",
+      "source_sha256": "25ef7e53f1d216194ac95e5309a47d3316157b35144571c5326dbb8f331d08e3",
+      "export_sha256": "25ef7e53f1d216194ac95e5309a47d3316157b35144571c5326dbb8f331d08e3",
+      "bytes": 8147,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/__init__.py",
+      "export_path": "baselines/egorag/videomem_adapter/__init__.py",
+      "source_sha256": "ab36879fcb3cb31ad63f13aa5acec76b25d09f9ec54b2242af59f88c1e712e01",
+      "export_sha256": "ab36879fcb3cb31ad63f13aa5acec76b25d09f9ec54b2242af59f88c1e712e01",
+      "bytes": 109,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/backends.py",
+      "export_path": "baselines/egorag/videomem_adapter/backends.py",
+      "source_sha256": "6254e0d129bc8ea7488bab013a469200eee4a8a5909c382bf6a1fd0a6a5e43c8",
+      "export_sha256": "6254e0d129bc8ea7488bab013a469200eee4a8a5909c382bf6a1fd0a6a5e43c8",
+      "bytes": 21272,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/cli.py",
+      "export_path": "baselines/egorag/videomem_adapter/cli.py",
+      "source_sha256": "80d3f0ffb61e78134e60626bafa6cc3e34faf32d55d16918364d6a13ad29c30b",
+      "export_sha256": "80d3f0ffb61e78134e60626bafa6cc3e34faf32d55d16918364d6a13ad29c30b",
+      "bytes": 8917,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/common.py",
+      "export_path": "baselines/egorag/videomem_adapter/common.py",
+      "source_sha256": "9967a5e88230e64f97cc95e82bc684370f9ee56ad518ea89d99e3583fe6a85f7",
+      "export_sha256": "9967a5e88230e64f97cc95e82bc684370f9ee56ad518ea89d99e3583fe6a85f7",
+      "bytes": 2779,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/local_hf.py",
+      "export_path": "baselines/egorag/videomem_adapter/local_hf.py",
+      "source_sha256": "50b7ab545e2c6e1695b6466b301c708c8f389bf6b12f9cf952430710c3682886",
+      "export_sha256": "50b7ab545e2c6e1695b6466b301c708c8f389bf6b12f9cf952430710c3682886",
+      "bytes": 11052,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/local_integrity.py",
+      "export_path": "baselines/egorag/videomem_adapter/local_integrity.py",
+      "source_sha256": "19a52505a87979231204b85793ef84accf79ddf4953d0d5a63a64c206c5e1a4a",
+      "export_sha256": "19a52505a87979231204b85793ef84accf79ddf4953d0d5a63a64c206c5e1a4a",
+      "bytes": 12008,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/media.py",
+      "export_path": "baselines/egorag/videomem_adapter/media.py",
+      "source_sha256": "c774e75374b435754a61529e5d5542123ec3cc9fcbff886a2028db487aba6afd",
+      "export_sha256": "c774e75374b435754a61529e5d5542123ec3cc9fcbff886a2028db487aba6afd",
+      "bytes": 14268,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/pipeline.py",
+      "export_path": "baselines/egorag/videomem_adapter/pipeline.py",
+      "source_sha256": "a2ba12d6150fe72a36ba176e10fb20e35cf98a2c1080ff7cb29153c534f594ed",
+      "export_sha256": "a2ba12d6150fe72a36ba176e10fb20e35cf98a2c1080ff7cb29153c534f594ed",
+      "bytes": 21461,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/store.py",
+      "export_path": "baselines/egorag/videomem_adapter/store.py",
+      "source_sha256": "fbeed97e5272620173fed2ccdae0e3918ec74297167b18ef0d4fce9cbe4960b5",
+      "export_sha256": "fbeed97e5272620173fed2ccdae0e3918ec74297167b18ef0d4fce9cbe4960b5",
+      "bytes": 5326,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_adapter/upstream.py",
+      "export_path": "baselines/egorag/videomem_adapter/upstream.py",
+      "source_sha256": "e95375e8d6e3a632a7850b18184116e03245029a7e44898968ff0c9765f5c958",
+      "export_sha256": "e95375e8d6e3a632a7850b18184116e03245029a7e44898968ff0c9765f5c958",
+      "bytes": 2400,
+      "unchanged": true
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_docs/README.md",
+      "export_path": "baselines/egorag/videomem_docs/README.md",
+      "source_sha256": "ea6f062e55306626e7402a7313e9d9c8c42e9115d5a4ef54234a312d39cfd927",
+      "export_sha256": "be4dc86ab72892ddabcc9af35ed2c40a91380a080f852942c2827afc5cb04ccd",
+      "bytes": 12402,
+      "unchanged": false
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_docs/local_qwen3vl.md",
+      "export_path": "baselines/egorag/videomem_docs/local_qwen3vl.md",
+      "source_sha256": "97e9b11493390e36b98f9e1885ada5e1e5dd484efc8196b81f88bfc401fe3acb",
+      "export_sha256": "0c830c7f10712448a060f82edbfdfd82947ebc3758dbe6732303248e40648ed6",
+      "bytes": 7491,
+      "unchanged": false
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_docs/upstream_audit.md",
+      "export_path": "baselines/egorag/videomem_docs/upstream_audit.md",
+      "source_sha256": "f57037c1541c70e17589be7a3b223439df31fe15de0b6f2d9f9b1fc475d21ac2",
+      "export_sha256": "ef39d39cc99c802b26f5fd09762058b72fa229d3a833f5fbf3b9b11d0615802e",
+      "bytes": 23518,
+      "unchanged": false
+    },
+    {
+      "source_project": "EgoLife",
+      "source_path": "EgoRAG/videomem_tools/local_qwen_smoke.py",
+      "export_path": "baselines/egorag/videomem_tools/local_qwen_smoke.py",
+      "source_sha256": "7ff703e5618ee42685692e27bb78c8ff0436b9bfdd3663d710a0c4fd205a6429",
+      "export_sha256": "7ff703e5618ee42685692e27bb78c8ff0436b9bfdd3663d710a0c4fd205a6429",
+      "bytes": 5422,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": ".gitignore",
+      "export_path": "benchmark/.gitignore",
+      "source_sha256": "fb93f2fee59c900e628645eecba0901a9c6fed30c8a3c93029acc8b50f1ffa09",
+      "export_sha256": "fb93f2fee59c900e628645eecba0901a9c6fed30c8a3c93029acc8b50f1ffa09",
+      "bytes": 80,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "README.md",
+      "export_path": "benchmark/README.md",
+      "source_sha256": "619f39a2a9447d57c4d5ed88308450f58dd31ceb9ec5348ad033c9c5f0035d03",
+      "export_sha256": "4bc01d0f76e9975e24353ae479c0a2bd5270396e5c5095a9d9b9fcbc366e983d",
+      "bytes": 9100,
+      "unchanged": false
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "app.py",
+      "export_path": "benchmark/app.py",
+      "source_sha256": "edbe4db516502af955498a47607dcccd83cdd98a0d887515bd9f42108c58fd25",
+      "export_sha256": "edbe4db516502af955498a47607dcccd83cdd98a0d887515bd9f42108c58fd25",
+      "bytes": 9203,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "config/datasets.json",
+      "export_path": "benchmark/config/datasets.json",
+      "source_sha256": "d745c901a041edf381524ed9400384c0e068eeadf3285b82ebd12ab956672f34",
+      "export_sha256": "d745c901a041edf381524ed9400384c0e068eeadf3285b82ebd12ab956672f34",
+      "bytes": 86,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "config/teleego_p4.json",
+      "export_path": "benchmark/config/teleego_p4.json",
+      "source_sha256": "48df5b9ec61d23e80e240790b1992212c970cb4b687eff2394b2e388cde3ebf8",
+      "export_sha256": "48df5b9ec61d23e80e240790b1992212c970cb4b687eff2394b2e388cde3ebf8",
+      "bytes": 6019,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "demo.py",
+      "export_path": "benchmark/demo.py",
+      "source_sha256": "fb8b52a8706707a6027af16e857aee6949fa0fecdcc97e81a0a02775e27021b2",
+      "export_sha256": "fb8b52a8706707a6027af16e857aee6949fa0fecdcc97e81a0a02775e27021b2",
+      "bytes": 2067,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "pytest.ini",
+      "export_path": "benchmark/pytest.ini",
+      "source_sha256": "07e12af78809b103a9e003b9bf24f9718928fa263046b37bf3ebc9ebbf802ceb",
+      "export_sha256": "07e12af78809b103a9e003b9bf24f9718928fa263046b37bf3ebc9ebbf802ceb",
+      "bytes": 24,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "requirements-lock.txt",
+      "export_path": "benchmark/requirements-lock.txt",
+      "source_sha256": "16247302518bbcfd8ad12380b85aca30c90cf035be615613424ce5754a7e6fca",
+      "export_sha256": "16247302518bbcfd8ad12380b85aca30c90cf035be615613424ce5754a7e6fca",
+      "bytes": 705,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "requirements.txt",
+      "export_path": "benchmark/requirements.txt",
+      "source_sha256": "563faaa5ed92a7a44b766fdd50b7e78d7cc1b52ebcb1005c372ef0566df2235d",
+      "export_sha256": "563faaa5ed92a7a44b766fdd50b7e78d7cc1b52ebcb1005c372ef0566df2235d",
+      "bytes": 77,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/__init__.py",
+      "export_path": "benchmark/src/__init__.py",
+      "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "export_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/clip_browser/__init__.py",
+      "export_path": "benchmark/src/clip_browser/__init__.py",
+      "source_sha256": "d7fddcf62adbfc435d30c8fe6d6cc0ca94dc924447092452c9cd67e9408f1d43",
+      "export_sha256": "d7fddcf62adbfc435d30c8fe6d6cc0ca94dc924447092452c9cd67e9408f1d43",
+      "bytes": 92,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/clip_manager/__init__.py",
+      "export_path": "benchmark/src/clip_manager/__init__.py",
+      "source_sha256": "270a79f452066dc3341b3ad4bc0a8357a17e447212afa22c68bc3ed3f001fb6f",
+      "export_sha256": "270a79f452066dc3341b3ad4bc0a8357a17e447212afa22c68bc3ed3f001fb6f",
+      "bytes": 2185,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/common.py",
+      "export_path": "benchmark/src/common.py",
+      "source_sha256": "caa60122f09f36ec1d4f09d9eb944dcb1f5457802909b94c82a008345e1f7244",
+      "export_sha256": "caa60122f09f36ec1d4f09d9eb944dcb1f5457802909b94c82a008345e1f7244",
+      "bytes": 1240,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/dataset_adapters/__init__.py",
+      "export_path": "benchmark/src/dataset_adapters/__init__.py",
+      "source_sha256": "538ba4e8f2782d55ad62f47ab265e353b08a605ce93403e46d2beaea68064357",
+      "export_sha256": "538ba4e8f2782d55ad62f47ab265e353b08a605ce93403e46d2beaea68064357",
+      "bytes": 1381,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/persona_builder/__init__.py",
+      "export_path": "benchmark/src/persona_builder/__init__.py",
+      "source_sha256": "efe2126ebcc21ea7e5f7c693777138a8d1c67957b1dd9dc4b45bef665d23688f",
+      "export_sha256": "efe2126ebcc21ea7e5f7c693777138a8d1c67957b1dd9dc4b45bef665d23688f",
+      "bytes": 341,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/qa_generator/__init__.py",
+      "export_path": "benchmark/src/qa_generator/__init__.py",
+      "source_sha256": "a663e4ce72389ae0b02744262327fff4a340815861b0bd703f97ca30647228b9",
+      "export_sha256": "a663e4ce72389ae0b02744262327fff4a340815861b0bd703f97ca30647228b9",
+      "bytes": 2387,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/routine_generator/__init__.py",
+      "export_path": "benchmark/src/routine_generator/__init__.py",
+      "source_sha256": "74a6452a5a033b9212461571a9427611d35968ece3cdbffccf1869c09e4416b6",
+      "export_sha256": "74a6452a5a033b9212461571a9427611d35968ece3cdbffccf1869c09e4416b6",
+      "bytes": 1970,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/stream_generator/__init__.py",
+      "export_path": "benchmark/src/stream_generator/__init__.py",
+      "source_sha256": "1a94a2d2ba0ad68b187b09359a92911e415acc26ea25c2b2fc221ed8d0e3b75f",
+      "export_sha256": "1a94a2d2ba0ad68b187b09359a92911e415acc26ea25c2b2fc221ed8d0e3b75f",
+      "bytes": 4970,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "src/validation/__init__.py",
+      "export_path": "benchmark/src/validation/__init__.py",
+      "source_sha256": "f78b9c46575a779f1db796d832c8f58f8141a38fc1bcaed12d0a028032ba1310",
+      "export_sha256": "f78b9c46575a779f1db796d832c8f58f8141a38fc1bcaed12d0a028032ba1310",
+      "bytes": 3572,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "teleego.py",
+      "export_path": "benchmark/teleego.py",
+      "source_sha256": "8d0c17f94641a5ce18e206569f494fd65243a6547e433ac6c8e940afa4908080",
+      "export_sha256": "8d0c17f94641a5ce18e206569f494fd65243a6547e433ac6c8e940afa4908080",
+      "bytes": 9031,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "tests/test_pipeline.py",
+      "export_path": "benchmark/tests/test_pipeline.py",
+      "source_sha256": "6c6b22ead91299ff04ca80453c2abc1d4e0a7f6a5d1e2021d3022295f5244764",
+      "export_sha256": "6c6b22ead91299ff04ca80453c2abc1d4e0a7f6a5d1e2021d3022295f5244764",
+      "bytes": 4052,
+      "unchanged": true
+    },
+    {
+      "source_project": "video-memory-benchmark",
+      "source_path": "tests/test_teleego.py",
+      "export_path": "benchmark/tests/test_teleego.py",
+      "source_sha256": "fb9384fd060a233a0012920da6cca7b6954a2561dd751663248fc5018305d1ea",
+      "export_sha256": "fb9384fd060a233a0012920da6cca7b6954a2561dd751663248fc5018305d1ea",
+      "bytes": 425,
+      "unchanged": true
+    }
+  ],
+  "exclusions": [
+    "all lifelong_mem content",
+    "videos and audio",
+    "real questions, labels and annotations",
+    "data manifests and generated outputs",
+    "private local configs except path-only Qwen example transformation",
+    "runtime environments, caches, model weights, logs and validation artifacts"
+  ]
+}
